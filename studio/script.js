@@ -7868,7 +7868,7 @@ return flowCommentCard;}
     ['down',u('下へ入る','Enter from below')],['pop',u('ポップ','Pop')],['blur',u('ぼかしから表示','Reveal from blur')],
     ['zoom',u('ズーム','Zoom')],['rotate',u('回転しながら表示','Rotate in')],['ring',u('書店風の円環','Bookstore ring')],['flash',u('閃光','Flash')]
   ];
-  const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')],['handdrawn-focus-screen',u('画面いっぱいの集中線','Full-screen focus rays')]];
+  const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')]];
   const isFrameType=value=>String(value||'').startsWith('handdrawn-');
   function buildFrameStyleControls(scene,onPreview=()=>{}){
     const p=ensurePresentation(scene);p.frame ||= {type:'handdrawn-voice'};
@@ -7878,8 +7878,7 @@ return flowCommentCard;}
       const wrap=document.createElement('label');wrap.className='desktop-live-frame-range';
       const head=document.createElement('span');head.className='desktop-live-frame-range-head';
       const name=document.createElement('strong');name.textContent=label;
-      const format=n=>`${n>0?'+':''}${n}px`;
-      const initial=Math.max(-80,Math.min(180,Math.round(Number(p.frame[key])||0)));
+      const format=n=>`${n>0?'+':''}${n}px`;const initial=Math.max(-80,Math.min(180,Math.round(Number(p.frame[key])||0)));
       const value=document.createElement('output');value.textContent=format(initial);head.append(name,value);
       const input=document.createElement('input');input.type='range';input.min='-80';input.max='180';input.step='1';input.value=String(initial);
       input.addEventListener('input',()=>{p.frame[key]=Number(input.value);value.textContent=format(Number(input.value));scheduleDraftSave(100);onPreview();});
@@ -7899,7 +7898,7 @@ return flowCommentCard;}
     };
     grid.append(makeRange(u('左右の余白','Side padding'),'extraX'),makeRange(u('上下の余白','Vertical padding'),'extraY'));
     const colors=document.createElement('div');colors.className='desktop-live-frame-colors';colors.append(makeColor(u('塗り','Fill'),'fill','#fffdf8'),makeColor(u('線','Line'),'stroke','#171512'));
-    const note=document.createElement('small');note.className='desktop-live-frame-note';note.textContent=u('集中線では余白が文字の周りの空白に、通常の枠では内側の余白になります。','For focus rays, padding widens the clear center; for other frames it increases inner padding.');
+    const note=document.createElement('small');note.className='desktop-live-frame-note';note.textContent=u('余白を増やすと、文字より大きな枠になります。','Increase padding to make the frame larger than the text.');
     card.append(grid,colors,note);return card;
   }
   function buildTextOutlineControls(scene,onPreview=()=>{}){
@@ -7925,7 +7924,6 @@ return flowCommentCard;}
     const note=document.createElement('small');note.className='desktop-live-frame-note';note.textContent=u('0pxで縁取りなし。太さと色はプレビューにすぐ反映されます。','Set width to 0px for no outline. Width and color preview immediately.');card.appendChild(note);
     return card;
   }
-
   function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
   function setFramePositionPreset(p,preset){
     p.text||={};

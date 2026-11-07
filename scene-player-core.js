@@ -5811,8 +5811,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         let tr={left:elementRect.left,top:elementRect.top,right:elementRect.right,bottom:elementRect.bottom,width:elementRect.width,height:elementRect.height};
         let inkRects=[],weightedX=0,weightedY=0,totalWeight=0;
         try{
-          const range=document.createRange();
-          const walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
+          const range=document.createRange(),walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
           const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
           let node;
           while((node=walker.nextNode())){
@@ -5823,22 +5822,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               range.setStart(node,item.index);range.setEnd(node,item.index+item.text.length);
               for(const rect of range.getClientRects()){
                 if(rect.width<=0||rect.height<=0)continue;
-                inkRects.push(rect);
-                const weight=Math.max(1,rect.width*rect.height);
+                inkRects.push(rect);const weight=Math.max(1,rect.width*rect.height);
                 weightedX+=(rect.left+rect.right)*.5*weight;weightedY+=(rect.top+rect.bottom)*.5*weight;totalWeight+=weight;
               }
             }
           }
           range.detach?.();
-          if(!inkRects.length){const fullRange=document.createRange();fullRange.selectNodeContents(text);inkRects=[...fullRange.getClientRects()].filter(r=>r.width>0&&r.height>0);fullRange.detach?.();}
+          if(!inkRects.length){const r=document.createRange();r.selectNodeContents(text);inkRects=[...r.getClientRects()].filter(x=>x.width>0&&x.height>0);r.detach?.();}
           if(inkRects.length){const left=Math.min(...inkRects.map(r=>r.left)),right=Math.max(...inkRects.map(r=>r.right)),top=Math.min(...inkRects.map(r=>r.top)),bottom=Math.max(...inkRects.map(r=>r.bottom));tr={left,right,top,bottom,width:right-left,height:bottom-top};}
         }catch(_){}
         const width=Math.max(1,sr.width),height=Math.max(1,sr.height);
-        const centerClientX=totalWeight?weightedX/totalWeight:tr.left+tr.width/2;
-        const centerClientY=totalWeight?weightedY/totalWeight:tr.top+tr.height/2;
-        const cx=centerClientX-sr.left,cy=centerClientY-sr.top;
-        const halfTextW=Math.max(0,centerClientX-tr.left,tr.right-centerClientX);
-        const halfTextH=Math.max(0,centerClientY-tr.top,tr.bottom-centerClientY);
+        const cx=tr.left+tr.width/2-sr.left,cy=tr.top+tr.height/2-sr.top;
+        const halfTextW=tr.width/2,halfTextH=tr.height/2;
         const extraX=Math.max(-80,Math.min(180,Number(frameOptions.extraX)||0));
         const extraY=Math.max(-80,Math.min(180,Number(frameOptions.extraY)||0));
         // Intersect each ray with one enclosing ellipse. A projected rectangle's
@@ -6965,10 +6960,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const outlineWidth=Math.max(0,Math.min(12,Number(style.outlineWidth)||0));
       if(outlineWidth>0){
         const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-        const outlineColor=String(style.outlineColor|| (darkTheme?'#000000':'#FFFFFF'));
-        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;
-        node.style.paintOrder='stroke fill';
-        node.classList.add('sp-text-outline');
+        const outlineColor=String(style.outlineColor||(darkTheme?'#000000':'#FFFFFF'));
+        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;node.style.paintOrder='stroke fill';node.classList.add('sp-text-outline');
       }else{node.style.webkitTextStroke='';node.style.paintOrder='';node.classList.remove('sp-text-outline');}
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';

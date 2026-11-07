@@ -2691,6 +2691,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._scheduleAuto();
         return true;
       }
+      if(performance.now() < (Number(this._sceneBoundaryGuardUntil)||0))return true;
       this._clearAutoTimer();
 
       // The current Scene's entrance belongs only to its arrival.
@@ -3961,6 +3962,26 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const scenes = this.document.scenes;
       const active = scenes[this.index];
+
+      // Spatial/audio Scene boundary guard.
+      // Commit this synchronously on arrival so a rapid second tap cannot pass
+      // through the exact Scene that starts a panorama/360 background or BGM/Ambient.
+      if(this._audioRenderMode==='advance'){
+        const bg=active?.presentation?.background||{};
+        const audio=Array.isArray(active?.audio)?active.audio:[];
+        const startsPersistentAudio=audio.some(cmd=>{
+          const ch=String(cmd?.channel||'').toLowerCase();
+          const action=String(cmd?.action||'play').toLowerCase();
+          return (ch==='bgm'||ch==='ambient') && Boolean(cmd?.src) &&
+            (action==='play'||action==='start');
+        });
+        const commitsSpatial=Boolean(bg?.src) || bg?.projection==='panorama' || bg?.projection==='360';
+        this._sceneBoundaryGuardUntil=(commitsSpatial||startsPersistentAudio)
+          ?performance.now()+320:0;
+      }else{
+        this._sceneBoundaryGuardUntil=0;
+      }
+
       const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
@@ -4208,16 +4229,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const targetPitch=Math.max(-pitchLimit,Math.min(pitchLimit,pitchDead*pitchGain));
         const pitchFollow=panoLandscapePitch?.22:.09;
         this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*pitchFollow;
-        if(this._isFinitePanorama()){
-          if(!this._panoMotionRenderRAF){
-            this._panoMotionRenderRAF=requestAnimationFrame(()=>{
-              this._panoMotionRenderRAF=0;
-              if(this._isFinitePanorama())this._render360Background();
-            });
-          }
-        }else{
-          this._render360Background();
-        }
+        this._render360Background();
         if(Math.abs(da)>.35 || Math.abs(db)>3.2)this._show360ViewLockControl();
       },{passive:true});
     }
@@ -4300,79 +4312,58 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const grabX=this._is360Background()?(Number(this._panoGrabX)||0):0;
       const panoPortrait=this._isFinitePanorama() &&
         Boolean(global.matchMedia?.('(orientation: portrait)').matches);
-      let panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
-      let panoRenderX=x;
+      const panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
       if(panoPortrait){
-        const layerW=Number(layer.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-        const layerH=Number(layer.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
+        const stageW=Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
+        const stageH=Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
         const src=String(this.backgroundState?.src||'');
-
-        this._panoRatioCache=this._panoRatioCache||new Map();
-        const applyCombinedClamp=(ratio)=>{
-          if(!(ratio>0)||!(layerW>0)||!(layerH>0))return;
-
-          // Portrait panorama CSS: background-size:auto 108%.
-          const renderedW=layerH*1.08*ratio;
-          if(renderedW<=layerW){
-            panoRenderX=50;
-            panoGrabX=0;
+        const applyFiniteBounds=(ratio)=>{
+          if(!(ratio>0)||!(stageW>0)||!(stageH>0))return;
+          const renderedW=stageH*1.08*ratio;
+          if(renderedW<=stageW){
+            this._panoFiniteGrabMin=0;
+            this._panoFiniteGrabMax=0;
             this._panoFiniteGrabX=0;
-            this._panoSensorYaw=0;
             return;
           }
-
-          // CSS percentage positioning:
-          // offset = (container - image) * percentage / 100.
-          // Add TRUE GRAB pixels, then clamp the FINAL composed camera.
-          const minOffset=layerW-renderedW; // right image edge == viewport right
-          const maxOffset=0;                // left image edge == viewport left
-          const baseOffset=(layerW-renderedW)*(panoRenderX/100);
-          const desiredOffset=baseOffset+panoGrabX;
-          const clampedOffset=Math.max(minOffset,Math.min(maxOffset,desiredOffset));
-
-          // Bake only the overflow correction into TRUE GRAB. This means motion
-          // + swipe can never reveal outside the image, and reversing responds
-          // immediately instead of paying back invisible overshoot.
-          const correction=clampedOffset-desiredOffset;
-          if(Math.abs(correction)>.01){
-            panoGrabX+=correction;
-            this._panoFiniteGrabX=panoGrabX;
-
-            // Finite panorama must never accumulate invisible sensor rotation
-            // beyond an image edge. Preserve the visible camera by baking the
-            // current sensor yaw into manual yaw, then reset sensor integration.
-            // Reversing the phone therefore responds immediately and the
-            // available motion range never shrinks after repeated turns.
-            // HOLD the composed camera at the real image edge.
-            // Do not zero/rebase sensorYaw here: doing that while the device is
-            // still physically turned teleports the camera back toward the last
-            // swipe landmark and creates an endless edge->landmark loop.
-            // The final pixel clamp above is the sole edge authority; velocity
-            // is stopped, while sensor orientation remains continuous so
-            // reversing the device moves away from the edge immediately.
-            this._panoYawVelocity=0;
-          }
+          // CSS background-position percentage uses:
+          // offsetX = (containerWidth - imageWidth) * xPercent / 100.
+          // TRUE GRAB adds pixels after that offset. Derive the exact pixel
+          // interval that keeps both image edges touching/covering the viewport.
+          const baseOffset=(stageW-renderedW)*(x/100);
+          this._panoFiniteGrabMin=(stageW-renderedW)-baseOffset;
+          this._panoFiniteGrabMax=-baseOffset;
+          this._panoFiniteGrabX=Math.max(
+            this._panoFiniteGrabMin,
+            Math.min(this._panoFiniteGrabMax,Number(this._panoFiniteGrabX)||0)
+          );
         };
-
-        const cached=Number(this._panoRatioCache.get(src));
-        if(cached>0){
-          applyCombinedClamp(cached);
-        }else if(src && !this._panoRatioCache.has(src)){
-          this._panoRatioCache.set(src,-1);
-          const probe=new Image();
-          probe.onload=()=>{
-            const ratio=(probe.naturalWidth&&probe.naturalHeight)
-              ?probe.naturalWidth/probe.naturalHeight:0;
-            this._panoRatioCache.set(src,ratio||0);
-            if(this.backgroundState?.src===src)this._render360Background();
-          };
-          probe.onerror=()=>this._panoRatioCache.set(src,0);
-          probe.src=src;
+        if(src){
+          this._panoRatioCache=this._panoRatioCache||new Map();
+          const cached=Number(this._panoRatioCache.get(src));
+          if(cached>0){
+            applyFiniteBounds(cached);
+          }else if(!this._panoRatioCache.has(src)){
+            this._panoRatioCache.set(src,-1);
+            const probe=new Image();
+            probe.onload=()=>{
+              if(this.backgroundState?.src!==src)return;
+              const ratio=(probe.naturalWidth&&probe.naturalHeight)
+                ?probe.naturalWidth/probe.naturalHeight:0;
+              this._panoRatioCache.set(src,ratio||0);
+              if(ratio>0){
+                applyFiniteBounds(ratio);
+                this._render360Background();
+              }
+            };
+            probe.onerror=()=>this._panoRatioCache.set(src,0);
+            probe.src=src;
+          }
         }
       }
       const position=this._is360Background()
         ?`calc(${x}% + ${grabX}px) ${y}%`
-        :(panoPortrait?`calc(${panoRenderX}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
+        :(panoPortrait?`calc(${x}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
       // At a finite edge the sensor may continue firing while the visible camera
       // is stationary. Avoid repeating an identical DOM style write.
       if(layer.style.backgroundPosition!==position){
@@ -4386,15 +4377,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         && !this._hasCredits(this.currentScene?.presentation);
       this._on(this.els.stage,'pointerdown',(e)=>{
         if(!this._isSpatialBackground()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
-        if(this._isFinitePanorama()){
-          // Sensor -> finger handoff. Preserve the exact visible camera, then
-          // make that view the new neutral sensor origin before TRUE GRAB starts.
-          this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
-          this._panoSensorYaw=0;
-          this._panoYawVelocity=0;
-          this._motionLastAlpha=null;
-          this._motionBaseBeta=null;
-        }
         drag={
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
@@ -4427,24 +4409,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // True grab: the point under the finger/mouse follows it 1:1.
             this._panoGrabX=drag.grabX+dx;
           }else if(panoPortrait){
-            // ONE shared camera: convert the finger's pixel travel directly into
-            // panoYaw while the finger is moving. There is no temporary pixel
-            // camera to "bake" on release, so release cannot jump.
-            const layer=this._currentBackgroundLayer();
-            const layerW=Number(layer?.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-            const layerH=Number(layer?.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
-            const src=String(this.backgroundState?.src||'');
-            const ratio=Number(this._panoRatioCache?.get(src))||0;
-            const renderedW=(ratio>0&&layerH>0)?layerH*1.08*ratio:0;
-            const travel=renderedW-layerW;
-            if(travel>0){
-              // rawX = 50 + yaw/3.6 and CSS position spans `travel` pixels.
-              // This maps finger dx to exactly dx rendered pixels.
-              this._panoYaw=drag.yaw-(dx/travel)*360;
-              this._panoFiniteGrabX=0;
-            }else{
-              this._panoFiniteGrabX=drag.panoGrabX+dx;
-            }
+            // Finite panorama portrait: TRUE GRAB stays synchronous.
+            // Clamp from the rendered panorama width (auto 108% height).
+            const nextGrab=drag.panoGrabX+dx;
+            const minGrab=Number(this._panoFiniteGrabMin);
+            const maxGrab=Number(this._panoFiniteGrabMax);
+            this._panoFiniteGrabX=(Number.isFinite(minGrab)&&Number.isFinite(maxGrab))
+              ?Math.max(minGrab,Math.min(maxGrab,nextGrab))
+              :nextGrab;
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
@@ -4494,17 +4466,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         try{
           if(this.els.stage.hasPointerCapture?.(drag.id))this.els.stage.releasePointerCapture?.(drag.id);
         }catch(_){}
-        if(this._isFinitePanorama()){
-          // The drag already moved the shared panoYaw camera 1:1.
-          // Release only re-arms the sensor from this exact visible position.
-          this._panoFiniteGrabX=0;
-          this._panoSensorYaw=0;
-          this._panoYawVelocity=0;
-          this._motionLastAlpha=null;
-          this._motionBaseBeta=null;
-        }
         drag=null;
-        if(this._isFinitePanorama())requestAnimationFrame(()=>this._render360Background());
         requestAnimationFrame(()=>{ this._panoSuppressClickUntil=0; });
       };
       this._on(this.els.stage,'pointerup',end,true);
@@ -5811,8 +5773,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         let tr={left:elementRect.left,top:elementRect.top,right:elementRect.right,bottom:elementRect.bottom,width:elementRect.width,height:elementRect.height};
         let inkRects=[],weightedX=0,weightedY=0,totalWeight=0;
         try{
-          const range=document.createRange();
-          const walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
+          const range=document.createRange(),walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
           const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
           let node;
           while((node=walker.nextNode())){
@@ -5823,22 +5784,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               range.setStart(node,item.index);range.setEnd(node,item.index+item.text.length);
               for(const rect of range.getClientRects()){
                 if(rect.width<=0||rect.height<=0)continue;
-                inkRects.push(rect);
-                const weight=Math.max(1,rect.width*rect.height);
+                inkRects.push(rect);const weight=Math.max(1,rect.width*rect.height);
                 weightedX+=(rect.left+rect.right)*.5*weight;weightedY+=(rect.top+rect.bottom)*.5*weight;totalWeight+=weight;
               }
             }
           }
           range.detach?.();
-          if(!inkRects.length){const fullRange=document.createRange();fullRange.selectNodeContents(text);inkRects=[...fullRange.getClientRects()].filter(r=>r.width>0&&r.height>0);fullRange.detach?.();}
+          if(!inkRects.length){const r=document.createRange();r.selectNodeContents(text);inkRects=[...r.getClientRects()].filter(x=>x.width>0&&x.height>0);r.detach?.();}
           if(inkRects.length){const left=Math.min(...inkRects.map(r=>r.left)),right=Math.max(...inkRects.map(r=>r.right)),top=Math.min(...inkRects.map(r=>r.top)),bottom=Math.max(...inkRects.map(r=>r.bottom));tr={left,right,top,bottom,width:right-left,height:bottom-top};}
         }catch(_){}
         const width=Math.max(1,sr.width),height=Math.max(1,sr.height);
-        const centerClientX=totalWeight?weightedX/totalWeight:tr.left+tr.width/2;
-        const centerClientY=totalWeight?weightedY/totalWeight:tr.top+tr.height/2;
-        const cx=centerClientX-sr.left,cy=centerClientY-sr.top;
-        const halfTextW=Math.max(0,centerClientX-tr.left,tr.right-centerClientX);
-        const halfTextH=Math.max(0,centerClientY-tr.top,tr.bottom-centerClientY);
+        const cx=tr.left+tr.width/2-sr.left,cy=tr.top+tr.height/2-sr.top;
+        const halfTextW=tr.width/2,halfTextH=tr.height/2;
         const extraX=Math.max(-80,Math.min(180,Number(frameOptions.extraX)||0));
         const extraY=Math.max(-80,Math.min(180,Number(frameOptions.extraY)||0));
         // Intersect each ray with one enclosing ellipse. A projected rectangle's
@@ -6183,7 +6140,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
-            if(r.kind==='span'&&Number(r.style?.fontSizePx)>0)span.style.fontSize=`${Math.max(8,Math.min(420,Number(r.style.fontSizePx)))}px`; 
             if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
           });
           // AHAKO short-horizontal TCY: preserve readable glyph size and allow
@@ -6965,10 +6921,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const outlineWidth=Math.max(0,Math.min(12,Number(style.outlineWidth)||0));
       if(outlineWidth>0){
         const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-        const outlineColor=String(style.outlineColor|| (darkTheme?'#000000':'#FFFFFF'));
-        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;
-        node.style.paintOrder='stroke fill';
-        node.classList.add('sp-text-outline');
+        const outlineColor=String(style.outlineColor||(darkTheme?'#000000':'#FFFFFF'));
+        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;node.style.paintOrder='stroke fill';node.classList.add('sp-text-outline');
       }else{node.style.webkitTextStroke='';node.style.paintOrder='';node.classList.remove('sp-text-outline');}
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';
@@ -7187,23 +7141,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }, cleanupAfter);
     }
 
-    _playTextEntryDirectionOnce(scene, article) {
-      const direction=scene?.presentation?.text?.entryDirection;
-      if(!direction||direction==='auto'||!article||article.dataset.textEntryDirectionPlayed==='true')return;
-      const vector={top:[0,-1],bottom:[0,1],left:[-1,0],right:[1,0],'top-left':[-1,-1],'top-right':[1,-1],'bottom-left':[-1,1],'bottom-right':[1,1]}[direction];
-      const text=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text');
-      if(!vector||!text||typeof text.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
-      article.dataset.textEntryDirectionPlayed='true';
-      const width=Math.max(1,this.host?.clientWidth||global.innerWidth||360),height=Math.max(1,this.host?.clientHeight||global.innerHeight||640);
-      const dx=Math.round(Math.max(48,Math.min(240,width*.28))*vector[0]);
-      const dy=Math.round(Math.max(48,Math.min(240,height*.18))*vector[1]);
-      const timing=scene.presentation?.effectTiming||{};
-      const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
-      const delay=Math.max(0,Math.min(6000,(Number(timing.delay)||0)*1000));
-      const animation=text.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
-      animation.onfinish=()=>{try{animation.cancel();}catch{}};
-    }
-
     _playSceneImageEffectOnce(scene, article) {
       const image=scene?.presentation?.image;
       const object=article?.querySelector(':scope > .sp-scene-image .sp-scene-image-object')||article?.querySelector('.sp-scene-image-object');
@@ -7243,7 +7180,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article,scene);
       this._playSceneImageEffectOnce(scene, article);
-      this._playTextEntryDirectionOnce(scene,article);
 
       if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
         this._startTyping(scene, textNode, typing);

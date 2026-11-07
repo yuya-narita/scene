@@ -3003,5 +3003,4 @@ html.sp-scene-image-open body{
 /* Frame artwork follows the active Player theme unless a Scene stores custom colors. */
 .sp-core[data-theme="dark"] .sp-handdrawn-frame,.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-handdrawn-frame{--sp-frame-fill:#101116;--sp-frame-stroke:#F5F2FF}
 
-/* Optional bag-letter outline. */
 .sp-text-outline{paint-order:stroke fill;-webkit-text-fill-color:currentColor;}

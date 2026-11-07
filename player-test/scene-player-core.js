@@ -150,7 +150,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioSourceNodes = new Map();
       this.audioTimers = [];
       this.audioFadeFrames = new Map();
+      this.audioFadeStates = new Map();
+      this.audioDuckTimers = { bgm: null, ambient: null };
       this.audioState = { bgm: null, ambient: null };
+      this._audioStopGeneration = { bgm: 0, ambient: 0 };
       this.audioEls = {
         bgm: this._createAudioElement('bgm'),
         ambient: this._createAudioElement('ambient')
@@ -240,7 +243,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         </header>
         <main class="sp-stage" tabindex="0" aria-live="polite">
           <div class="sp-scenes"></div>
-          <button class="sp-pano-view-lock" type="button" aria-label="360°視点を固定" aria-pressed="false" hidden>◎</button>
           <button class="sp-tap-hint" type="button" aria-label="Next scene">TAP</button>
         </main>
         <section class="sp-history" hidden aria-label="Past scenes">
@@ -293,7 +295,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         footer: q('.sp-footer'),
         stage: q('.sp-stage'),
         scenes: q('.sp-scenes'),
-        panoViewLock: q('.sp-pano-view-lock'),
         history: q('.sp-history'),
         historyScroll: q('.sp-history-scroll'),
         historyList: q('.sp-history-list'),
@@ -424,7 +425,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._on(this.els.restart, 'click', (e) => { e.stopPropagation(); this.restart(); });
       if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover(e);});
       this._on(this.els.cover,'click',(e)=>{
-        if(this.els.cover.hidden||this.host.classList.contains('live-edit-enabled'))return;
+        if(this.els.cover.hidden||this.document?.cover?.startTrigger!=='tap'||this.host.classList.contains('live-edit-enabled'))return;
         if(e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
         e.stopPropagation();this._beginFromCover(e);
       });
@@ -437,11 +438,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.toggleAuto();
       });
 
-      if(this.els.panoViewLock)this._on(this.els.panoViewLock,'click',(e)=>{
-        e.preventDefault();e.stopPropagation();e.stopImmediatePropagation?.();
-        if(!this._isSpatialBackground())return;
-        this._set360ViewLocked(!this._panoViewLocked);
-      });
       this._on(this.els.historyClose, 'click', (e) => {
         e.stopPropagation();
         this.closeHistory();
@@ -552,18 +548,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         e.preventDefault();
         e.stopImmediatePropagation();
-        // Reuse the wrapper's own handler to keep VIEW POINT and page bundles in sync.
+        // Reuse the exact handler installed on the image. This keeps VIEW POINT,
+        // first-page fallback, and page-bundle navigation on one code path.
         imageTarget._sceneImageOpen?.(e);
       }, true);
 
       this._on(this.els.stage, 'click', (e) => {
-        // Studio direct-layout mode owns the whole gesture. A resize/rotate release
-        // can synthesize a click after pointer capture; it must never mean Next Scene.
-        if (this.host.classList.contains('sp-direct-layout-editing')) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          return;
-        }
         if (e.target.closest('button')) return;
 
         // V133 — even when a large image physically overlaps this area, tapping
@@ -597,14 +587,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         if (this.host.classList.contains('live-edit-enabled')
             && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
-          return;
-        }
-        // AHAKO_360_PROTO_V1_3 — suppress only the synthetic click emitted
-        // immediately after a panorama drag. A later intentional tap must advance
-        // on the first tap instead of being consumed by a stale boolean flag.
-        if (this._isSpatialBackground?.() && performance.now() < (this._panoSuppressClickUntil || 0)) {
-          e.preventDefault();
-          e.stopPropagation();
           return;
         }
         if (this.suppressNextClick) {
@@ -658,20 +640,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       if (this.options.swipe) {
         this._on(this.els.stage, 'touchstart', (e) => {
-          if (this._isSpatialBackground?.()) { this.touchStartY=null; this.touchStartX=null; return; }
+          if (this._is360Background?.()) { this.touchStartY=null; this.touchStartX=null; return; }
           const t = e.changedTouches[0];
           this.touchStartY = t.clientY;
           this.touchStartX = t.clientX;
         }, { passive: true });
 
         this._on(this.els.stage, 'touchmove', (e) => {
-          if (this._isSpatialBackground?.()) { if(e.cancelable)e.preventDefault(); return; }
+          if (this._is360Background?.()) { if(e.cancelable)e.preventDefault(); return; }
           // Keep the page itself fixed. History has its own native momentum scroller.
           if (e.cancelable) e.preventDefault();
         }, { passive: false });
 
         this._on(this.els.stage, 'touchend', (e) => {
-          if (this._isSpatialBackground?.()) { this.touchStartY=null; this.touchStartX=null; return; }
+          if (this._is360Background?.()) { this.touchStartY=null; this.touchStartX=null; return; }
           if (this.touchStartY == null || this.touchStartX == null) return;
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;
@@ -703,18 +685,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _isCorsWebAudioAsset(src) {
       const value = String(src || '').trim();
-      if (!value) return false;
       try {
         const url = new URL(value, global.location?.href || undefined);
-        // iOS Safari does not reliably honor script-written HTMLMediaElement.volume.
-        // Persistent BGM/Ambient therefore needs a GainNode whenever the source is
-        // safe to feed into Web Audio. This includes packaged .scene assets, which
-        // Local Player/Studio rewrite to blob: URLs, and ordinary same-origin media.
-        // Previously only the public R2 /asset/ URL was accepted here, so iPhone
-        // package playback silently fell back to native element.volume and every
-        // authored fade/volume change became effectively a hard full-volume change.
-        if (url.protocol === 'blob:' || url.protocol === 'data:') return true;
-        if (global.location?.origin && url.origin === global.location.origin) return true;
+        const pageOrigin = global.location?.origin;
+        // Same-origin and package-relative assets are CORS-safe too. Published
+        // .scene files may keep `assets/...` URLs; if these bypass GainNode,
+        // iPhone Safari ignores scripted media.volume changes and the authored
+        // fade becomes an abrupt mute at completion.
+        if (pageOrigin && url.origin === pageOrigin && ['http:', 'https:'].includes(url.protocol)) return true;
+        if (pageOrigin && url.protocol === 'blob:' && url.origin === pageOrigin) return true;
+        // Scene Studio's R2 asset endpoint explicitly returns
+        // Access-Control-Allow-Origin: *. These files can therefore be routed
+        // through Web Audio safely, which is required for programmable volume
+        // and fades on iPhone/iPad Safari (HTMLMediaElement.volume is effectively
+        // system-controlled there). Keep arbitrary external URLs on the native
+        // path so a third-party server without CORS never turns silent.
         return url.hostname === 'scene-studio-api.a-hako.workers.dev'
           && url.pathname.startsWith('/asset/');
       } catch (_) {
@@ -907,6 +892,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         gain.connect(ctx.destination);
         entry.sourceNode = source;
         entry.gainNode = gain;
+        entry._gainLevel = 0;
         entry.useGain = true;
         try { entry.audio.volume = 1; } catch (_) {}
         emit(this.host, 'sceneplayer:iosmediabankgainready', { channel:entry.channel, src:entry.src, contextState:ctx.state });
@@ -1033,6 +1019,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!entry?.audio) { if (done) done(); return; }
       const audio = entry.audio;
       const to = clamp(asNumber(target, entry.targetVolume ?? 1), 0, 1);
+      const previous = entry._volumeFadeState;
+      let from = clamp(asNumber(entry.gainNode ? entry._gainLevel : audio.volume, entry.targetVolume ?? 0), 0, 1);
+      if (previous) {
+        from = this._volumeRampValue(previous);
+        if (previous.frame) cancelAnimationFrame(previous.frame);
+        if (previous.timer) {
+          clearTimeout(previous.timer);
+          const i = this.audioTimers.indexOf(previous.timer);
+          if (i >= 0) this.audioTimers.splice(i, 1);
+        }
+        entry._volumeFadeState = null;
+      }
       entry.targetVolume = to;
       const ms = Math.max(0, asNumber(duration, 0));
 
@@ -1042,56 +1040,57 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // src or issuing a late play().
       const gain = entry.gainNode;
       const ctx = this.audioContext;
+      const ramp = { audio, gain, ctx, from, to, duration: ms, startTime: performance.now(), startContextTime: ctx?.currentTime, frame: null, timer: null };
+      entry._volumeFadeState = ramp;
+      const finish = () => {
+        if (entry._volumeFadeState !== ramp) return;
+        entry._volumeFadeState = null;
+        entry._gainLevel = to;
+        if (gain && ctx) { try { gain.gain.setValueAtTime(to, ctx.currentTime); } catch (_) {} }
+        else try { audio.volume = to; } catch (_) {}
+        if (done) done();
+      };
       if (gain && ctx) {
-        const param = gain.gain;
         const now = ctx.currentTime;
-        const from = clamp(Number.isFinite(param.value) ? param.value : 0, 0, 1);
-        entry.__spGainFadeToken = (entry.__spGainFadeToken || 0) + 1;
-        const token = entry.__spGainFadeToken;
         try {
-          // iPhone Safari can expose AudioParam automation APIs yet still
-          // collapse a STOP ramp to zero immediately. Cancel WebAudio
-          // automation first, then drive the already-authorized GainNode from
-          // requestAnimationFrame. This keeps Scene-authored fadeOut audible.
-          param.cancelScheduledValues(now);
-          param.setValueAtTime(from, now);
-        } catch (_) { try { param.value = from; } catch (_) {} }
-        if (!ms) {
-          try { param.setValueAtTime(to, ctx.currentTime); } catch (_) { try { param.value = to; } catch (_) {} }
-          if (done) done();
-          return;
-        }
-        const started = performance.now();
-        const stepGain = (stamp) => {
-          if (entry.__spGainFadeToken !== token) return;
-          const t = clamp((stamp - started) / ms, 0, 1);
-          const value = from + (to - from) * t;
-          try { param.setValueAtTime(value, ctx.currentTime); } catch (_) { try { param.value = value; } catch (_) {} }
-          if (t < 1) requestAnimationFrame(stepGain);
-          else if (done) done();
-        };
-        requestAnimationFrame(stepGain);
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(from, now);
+          if (ms > 0) gain.gain.linearRampToValueAtTime(to, now + ms / 1000);
+          else gain.gain.setValueAtTime(to, now);
+        } catch (_) { gain.gain.value = to; }
+        if (ms > 0) ramp.timer = this._audioTimeout(finish, ms + 20);
+        else finish();
         return;
       }
 
-      const from = clamp(asNumber(audio.volume, 0), 0, 1);
       if (!ms) {
         try { audio.volume = to; } catch (_) {}
-        if (done) done();
+        finish();
         return;
       }
-      const started = performance.now();
       const step = (now) => {
-        const t = clamp((now - started) / ms, 0, 1);
-        try { audio.volume = from + (to - from) * t; } catch (_) {}
-        if (t < 1) requestAnimationFrame(step);
-        else if (done) done();
+        if (entry._volumeFadeState !== ramp) return;
+        const value = this._volumeRampValue(ramp);
+        try { audio.volume = value; } catch (_) {}
+        if (value < to ? value < to : value > to) ramp.frame = requestAnimationFrame(step);
+        else finish();
       };
-      requestAnimationFrame(step);
+      ramp.frame = requestAnimationFrame(step);
     }
 
     _silenceIOSBankEntry(entry, reset = false) {
       if (!entry?.audio) return;
+      entry._gainLevel = 0;
+      if (entry._volumeFadeState) {
+        const ramp = entry._volumeFadeState;
+        if (ramp.frame) cancelAnimationFrame(ramp.frame);
+        if (ramp.timer) {
+          clearTimeout(ramp.timer);
+          const i = this.audioTimers.indexOf(ramp.timer);
+          if (i >= 0) this.audioTimers.splice(i, 1);
+        }
+        entry._volumeFadeState = null;
+      }
       if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
       entry.__spActivationToken = (entry.__spActivationToken || 0) + 1;
       entry.active = false;
@@ -1286,11 +1285,27 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         fadeOut: Math.max(0, asNumber(command.fadeOut, 0))
       };
       const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
-      if (stopAfter > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
-      else if (command.loop === false) {
+      const fadeOutMs = Math.max(0, asNumber(command.fadeOut, 0));
+      const scheduleStop = (remainingMs) => {
+        if (!(remainingMs > 0) || !entry.active) return;
+        // Start the iOS GainNode ramp before the media endpoint. Waiting until
+        // the exact end lets Safari's native `ended`/media-session handling
+        // silence the element before the authored fade can finish.
+        const fadeMs = Math.min(remainingMs, fadeOutMs);
+        const leadMs = Math.max(0, remainingMs - fadeMs - 35);
+        entry.timer = this._audioTimeout(() => {
+          entry.timer = null;
+          this._stopPersistentChannel(channel, fadeMs);
+        }, leadMs);
+      };
+      if (stopAfter > 0) entry.timer = this._audioTimeout(() => { entry.timer = null; this._stopPersistentChannel(channel, fadeOutMs); }, stopAfter);
+      else if (command.stopAt != null) {
+        const remaining = Math.max(0, (Math.max(0, asNumber(command.stopAt, 0)) - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+        scheduleStop(remaining);
+      } else if (command.loop === false) {
         const schedule = () => {
-          const remain = Math.max(0, (audio.duration - Math.max(0, audio.currentTime || startAt)) * 1000 - 20);
-          if (remain > 0) entry.timer = setTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), remain);
+          const remain = Math.max(0, (audio.duration - Math.max(startAt, asNumber(audio.currentTime, startAt))) * 1000);
+          scheduleStop(remain);
         };
         if (Number.isFinite(audio.duration) && audio.duration > 0) schedule();
         else audio.addEventListener('loadedmetadata', schedule, { once:true });
@@ -1341,13 +1356,30 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const ctx = this.audioContext;
       if (!ctx || !gainNode) return;
       const t = ctx.currentTime;
-      const current = Number.isFinite(gainNode.gain.value) ? gainNode.gain.value : 1;
+      const previous = gainNode.__spVolumeFade;
+      let current = Number.isFinite(gainNode.gain.value) ? gainNode.gain.value : 1;
+      if (previous) {
+        current = this._volumeRampValue(previous);
+        if (previous.timer) {
+          clearTimeout(previous.timer);
+          const i = this.audioTimers.indexOf(previous.timer);
+          if (i >= 0) this.audioTimers.splice(i, 1);
+        }
+        gainNode.__spVolumeFade = null;
+      }
+      const to = clamp(asNumber(target, current), 0, 1);
+      const ms = Math.max(0, asNumber(duration, 0));
+      const ramp = { gain: gainNode, ctx, from: current, to, duration: ms, startTime: performance.now(), startContextTime: t };
       try {
         gainNode.gain.cancelScheduledValues(t);
         gainNode.gain.setValueAtTime(current, t);
-        if (duration > 0) gainNode.gain.linearRampToValueAtTime(target, t + duration / 1000);
-        else gainNode.gain.setValueAtTime(target, t);
-      } catch (_) { gainNode.gain.value = target; }
+        if (ms > 0) gainNode.gain.linearRampToValueAtTime(to, t + ms / 1000);
+        else gainNode.gain.setValueAtTime(to, t);
+      } catch (_) { gainNode.gain.value = to; }
+      if (ms > 0) {
+        gainNode.__spVolumeFade = ramp;
+        ramp.timer = this._audioTimeout(() => { if (gainNode.__spVolumeFade === ramp) { gainNode.__spVolumeFade = null; try { gainNode.gain.setValueAtTime(to, ctx.currentTime); } catch (_) {} } }, ms + 20);
+      }
     }
 
     _playBufferedOneShot(command) {
@@ -1432,6 +1464,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (remain > 0) this._audioTimeout(() => this._stopBufferedPersistent(channel, command.fadeOut || 0), remain);
         }
         this.audioState[channel] = { src:command.src, volume:target, loop:command.loop !== false, startAt, stopAt:command.stopAt ?? null, fadeOut:Math.max(0, asNumber(command.fadeOut,0)) };
+        if (command.loop === false && command.stopAfter <= 0 && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, null, startAt, command.fadeOut || 0, buffer.duration);
         emit(this.host, 'sceneplayer:audioplaystarted', { channel, action:'start', src:command.src, transport:'audio-buffer' });
         emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct, transport:'audio-buffer' });
         return true;
@@ -1550,10 +1583,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _setAudioVolume(audio, value) {
       const target = clamp(asNumber(value, 1), 0, 1);
+      if (audio?.__spVolumeFadeKey != null) this._cancelAudioFade(audio.__spVolumeFadeKey);
       audio.__spGainValue = target;
       const gain = this._ensureAudioNode(audio);
       if (gain && this.audioContext) {
-        try { gain.gain.setValueAtTime(target, this.audioContext.currentTime); } catch (_) { gain.gain.value = target; }
+        try {
+          const now = this.audioContext.currentTime;
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(target, now);
+        } catch (_) { gain.gain.value = target; }
       } else {
         // Native-media transport is deliberate for external HTTP(S) audio.
         // On iOS the system may own final hardware volume, but playback remains
@@ -1563,6 +1601,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _getAudioVolume(audio) {
+      const key = audio?.__spVolumeFadeKey;
+      const ramp = key == null ? null : this.audioFadeStates?.get(key);
+      if (ramp) return this._volumeRampValue(ramp);
       if (Number.isFinite(audio?.__spGainValue)) return audio.__spGainValue;
       return clamp(asNumber(audio?.volume, 1), 0, 1);
     }
@@ -1636,6 +1677,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.audioTimers.length = 0;
       this.audioFadeFrames.forEach((frame) => cancelAnimationFrame(frame));
       this.audioFadeFrames.clear();
+      this.audioFadeStates.forEach((state) => {
+        if (state.gain && this.audioContext) {
+          const now = this.audioContext.currentTime;
+          try { state.gain.gain.cancelScheduledValues(now); } catch (_) {}
+        }
+      });
+      this.audioFadeStates.clear();
+      this.audioDuckTimers = { bgm: null, ambient: null };
     }
 
     _audioTimeout(fn, delay) {
@@ -1648,57 +1697,120 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return timer;
     }
 
+    _cancelAudioDuck(channel) {
+      const timer = this.audioDuckTimers?.[channel];
+      if (!timer) return;
+      clearTimeout(timer);
+      const i = this.audioTimers.indexOf(timer);
+      if (i >= 0) this.audioTimers.splice(i, 1);
+      this.audioDuckTimers[channel] = null;
+    }
+
+    _scheduleAudioDuckRestore(channel, delay, restore) {
+      this._cancelAudioDuck(channel);
+      const timer = this._audioTimeout(() => {
+        if (this.audioDuckTimers[channel] !== timer) return;
+        this.audioDuckTimers[channel] = null;
+        restore();
+      }, delay);
+      this.audioDuckTimers[channel] = timer;
+      return timer;
+    }
+
+    _volumeRampValue(state) {
+      if (!state) return 1;
+      const elapsed = state.ctx && Number.isFinite(state.startContextTime)
+        ? (state.ctx.currentTime - state.startContextTime) * 1000
+        : performance.now() - state.startTime;
+      const t = state.duration > 0 ? clamp(elapsed / state.duration, 0, 1) : 1;
+      return state.from + (state.to - state.from) * t;
+    }
+
+    _cancelAudioFade(key) {
+      const state = this.audioFadeStates.get(key);
+      const frame = this.audioFadeFrames.get(key);
+      if (frame) cancelAnimationFrame(frame);
+      this.audioFadeFrames.delete(key);
+      if (!state) return null;
+      const value = this._volumeRampValue(state);
+      if (state.doneTimer) {
+        clearTimeout(state.doneTimer);
+        const i = this.audioTimers.indexOf(state.doneTimer);
+        if (i >= 0) this.audioTimers.splice(i, 1);
+      }
+      if (state.gain && state.ctx) {
+        const now = state.ctx.currentTime;
+        try {
+          state.gain.gain.cancelScheduledValues(now);
+          state.gain.gain.setValueAtTime(value, now);
+        } catch (_) { try { state.gain.gain.value = value; } catch (_) {} }
+      } else {
+        try { state.audio.volume = value; } catch (_) {}
+      }
+      state.audio.__spGainValue = value;
+      delete state.audio.__spVolumeFadeKey;
+      this.audioFadeStates.delete(key);
+      return value;
+    }
+
     _fadeVolume(audio, target, duration, key, done) {
       target = clamp(asNumber(target, this._getAudioVolume(audio)), 0, 1);
       duration = Math.max(0, asNumber(duration, 0));
-      const previous = this.audioFadeFrames.get(key);
-      if (previous) cancelAnimationFrame(previous);
-
+      const held = this._cancelAudioFade(key);
       const gain = this._ensureAudioNode(audio);
       const ctx = this.audioContext;
-      const from = this._getAudioVolume(audio);
-      audio.__spGainValue = target;
-
-      // Web Audio path: reliable gain automation on iOS/WebKit.
-      if (gain && ctx) {
-        try {
-          const now = ctx.currentTime;
-          if (typeof gain.gain.cancelAndHoldAtTime === 'function') gain.gain.cancelAndHoldAtTime(now);
-          else {
-            gain.gain.cancelScheduledValues(now);
-            gain.gain.setValueAtTime(from, now);
-          }
-          if (!duration) {
-            gain.gain.setValueAtTime(target, now);
-            if (done) done();
-          } else {
-            gain.gain.linearRampToValueAtTime(target, now + duration / 1000);
-            this._audioTimeout(() => { if (done) done(); }, duration);
-          }
-          return;
-        } catch (_) {
-          // Fall through to HTMLMediaElement/rAF fallback.
-        }
-      }
-
+      const from = held == null ? this._getAudioVolume(audio) : held;
+      const state = { audio, gain, ctx, from, to: target, duration, startTime: performance.now(), startContextTime: ctx?.currentTime, doneTimer: null };
+      audio.__spGainValue = from;
+      audio.__spVolumeFadeKey = key;
       if (!duration) {
-        try { audio.volume = target; } catch (_) {}
-        this.audioFadeFrames.delete(key);
+        if (gain && ctx) {
+          const now = ctx.currentTime;
+          try { gain.gain.cancelScheduledValues(now); gain.gain.setValueAtTime(target, now); } catch (_) { gain.gain.value = target; }
+        } else try { audio.volume = target; } catch (_) {}
+        audio.__spGainValue = target;
+        delete audio.__spVolumeFadeKey;
         if (done) done();
         return;
       }
-      const start = performance.now();
-      const step = (now) => {
-        const t = clamp((now - start) / duration, 0, 1);
-        const value = from + (target - from) * t;
-        try { audio.volume = value; } catch (_) {}
-        if (t < 1) this.audioFadeFrames.set(key, requestAnimationFrame(step));
-        else {
-          this.audioFadeFrames.delete(key);
-          if (done) done();
+      this.audioFadeStates.set(key, state);
+      // Web Audio path: hold the actual in-flight level before replacing a ramp.
+      if (gain && ctx) {
+        try {
+          const now = ctx.currentTime;
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(from, now);
+          gain.gain.linearRampToValueAtTime(target, now + duration / 1000);
+        } catch (_) {
+          state.gain = null;
+          try { audio.volume = from; } catch (_) {}
         }
+      }
+      const finish = () => {
+        if (this.audioFadeStates.get(key) !== state) return;
+        this.audioFadeStates.delete(key);
+        this.audioFadeFrames.delete(key);
+        state.doneTimer = null;
+        audio.__spGainValue = target;
+        delete audio.__spVolumeFadeKey;
+        if (state.gain && state.ctx) {
+          try { state.gain.gain.setValueAtTime(target, state.ctx.currentTime); } catch (_) {}
+        } else try { audio.volume = target; } catch (_) {}
+        if (done) done();
       };
-      this.audioFadeFrames.set(key, requestAnimationFrame(step));
+      if (state.gain && ctx) {
+        state.doneTimer = this._audioTimeout(finish, duration + 20);
+      } else {
+        const step = () => {
+          if (this.audioFadeStates.get(key) !== state) return;
+          const value = this._volumeRampValue(state);
+          try { audio.volume = value; } catch (_) {}
+          audio.__spGainValue = value;
+          if (value !== target) this.audioFadeFrames.set(key, requestAnimationFrame(step));
+          else finish();
+        };
+        this.audioFadeFrames.set(key, requestAnimationFrame(step));
+      }
     }
 
     _safePlay(audio, detail, onStarted) {
@@ -1905,19 +2017,47 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return audio;
     }
 
+    _cancelNaturalPersistentFade(channel) {
+      const state = this.audioState?.[channel];
+      const timer = state?._naturalEndTimer;
+      if (!timer) return;
+      clearTimeout(timer);
+      const i = this.audioTimers.indexOf(timer);
+      if (i >= 0) this.audioTimers.splice(i, 1);
+      state._naturalEndTimer = null;
+    }
+
+    _scheduleNaturalPersistentFade(channel, audio, startAt, fadeOut, knownDuration = null) {
+      const state = this.audioState?.[channel];
+      if (!state || state.loop !== false) return;
+      const schedule = () => {
+        if (this.audioState?.[channel] !== state) return;
+        const duration = Number.isFinite(knownDuration) ? knownDuration : Number(audio?.duration);
+        if (!Number.isFinite(duration) || duration <= 0) return;
+        const position = Math.max(Math.max(0, asNumber(startAt, 0)), Math.max(0, asNumber(audio?.currentTime, startAt)));
+        const remaining = Math.max(0, (duration - position) * 1000);
+        const fade = Math.min(remaining, Math.max(0, asNumber(fadeOut, 0)));
+        state._naturalEndTimer = this._audioTimeout(() => {
+          state._naturalEndTimer = null;
+          if (this.audioState?.[channel] === state) this._stopPersistentChannel(channel, fade);
+        }, Math.max(0, remaining - fade));
+      };
+      if (Number.isFinite(knownDuration) && knownDuration > 0) schedule();
+      else if (Number.isFinite(audio?.duration) && audio.duration > 0) schedule();
+      else if (audio?.addEventListener) audio.addEventListener('loadedmetadata', schedule, { once: true });
+    }
+
     _stopPersistentChannel(channel, fadeOut = 0) {
+      if (channel !== 'bgm' && channel !== 'ambient') return;
+      this._cancelAudioDuck(channel);
+      const stopGeneration = this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
+      this._cancelNaturalPersistentFade(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (entry) {
-          const finish = () => { requestAnimationFrame(() => requestAnimationFrame(() => { this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); })); };
-          if (fadeOut > 0) {
-            // Do not trust entry.active alone here. On iPhone the stable media
-            // element can still be audibly playing while bookkeeping has already
-            // flipped during a Scene transition. Ensure a programmable GainNode
-            // exists, then always honor the authored STOP fade before silencing.
-            if (!entry.gainNode) this._ensureIOSBankGain(entry);
-            this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
-          } else finish();
+          const finish = () => { if (this._audioStopGeneration[channel] !== stopGeneration) return; this._silenceIOSBankEntry(entry, true); if (this._iosPersistentEntry[channel] === entry) this._iosPersistentEntry[channel] = null; this.audioState[channel] = null; emit(this.host, 'sceneplayer:audiostop', { channel, transport:'ios-live-media-bank' }); };
+          if (fadeOut > 0 && entry.active) this._setIOSBankEntryVolume(entry, 0, fadeOut, finish);
+          else finish();
         } else this.audioState[channel] = null;
         return;
       }
@@ -1925,6 +2065,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const audio = this.audioEls[channel];
       if (!audio) return;
       const finish = () => {
+        if (this._audioStopGeneration[channel] !== stopGeneration) return;
         audio.pause();
         try { audio.currentTime = 0; } catch (_) {}
         this.audioState[channel] = null;
@@ -1935,6 +2076,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _startPersistentChannel(channel, command, reconstruct = false, forceSeek = false) {
+      if (channel === 'bgm' || channel === 'ambient') {
+        this._cancelAudioDuck(channel);
+        this._audioStopGeneration[channel] = (this._audioStopGeneration[channel] || 0) + 1;
+        this._cancelNaturalPersistentFade(channel);
+        for (const key of [channel, `exit:${channel}`]) {
+          this._cancelAudioFade(key);
+        }
+      }
       if (this._iosStableMediaBank && this._startIOSBankPersistent(channel, command, reconstruct, forceSeek)) return;
       if (this._startBufferedPersistent(channel, command, reconstruct, forceSeek)) return;
       let audio = this.audioEls[channel];
@@ -1992,11 +2141,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (fadeIn > 0) this._fadeVolume(audio, targetVolume, fadeIn, channel);
         const stopAfter = Math.max(0, asNumber(command.stopAfter, 0));
         if (stopAfter > 0) this._audioTimeout(() => this._stopPersistentChannel(channel, command.fadeOut || 0), stopAfter);
+        else if (command.loop === false && command.stopAt == null) this._scheduleNaturalPersistentFade(channel, audio, startAt, command.fadeOut || 0);
       });
       emit(this.host, 'sceneplayer:audiostart', { channel, command, reconstruct });
     }
 
     _volumePersistentChannel(channel, command) {
+      this._cancelAudioDuck(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         if (!entry || !this.audioState[channel]) return;
@@ -2024,6 +2175,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _duckPersistentChannel(channel, command) {
+      this._cancelAudioDuck(channel);
       if (this._iosStableMediaBank) {
         const entry = this._iosPersistentEntry?.[channel];
         const state = this.audioState[channel];
@@ -2033,7 +2185,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const fade = Math.max(0, asNumber(command.fade, 250));
         const hold = Math.max(0, asNumber(command.hold, 1200));
         this._setIOSBankEntryVolume(entry, target, fade);
-        this._audioTimeout(() => this._setIOSBankEntryVolume(entry, this.muted ? 0 : restore, fade), fade + hold);
+        this._scheduleAudioDuckRestore(channel, fade + hold, () => this._setIOSBankEntryVolume(entry, this.muted ? 0 : restore, fade));
         emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'ios-live-media-bank' });
         return;
       }
@@ -2044,7 +2196,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const fade = Math.max(0, asNumber(command.fade, 250));
         const hold = Math.max(0, asNumber(command.hold, 1200));
         this._fadeBufferGain(buffered.gain, target, fade);
-        this._audioTimeout(() => this._fadeBufferGain(buffered.gain, restore, fade), fade + hold);
+        this._scheduleAudioDuckRestore(channel, fade + hold, () => this._fadeBufferGain(buffered.gain, restore, fade));
         emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold, transport:'audio-buffer' });
         return;
       }
@@ -2056,7 +2208,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const fade = Math.max(0, asNumber(command.fade, 250));
       const hold = Math.max(0, asNumber(command.hold, 1200));
       this._fadeVolume(audio, target, fade, channel);
-      this._audioTimeout(() => this._fadeVolume(audio, restore, fade, channel), fade + hold);
+      this._scheduleAudioDuckRestore(channel, fade + hold, () => this._fadeVolume(audio, restore, fade, channel));
       emit(this.host, 'sceneplayer:audioduck', { channel, volume: target, hold });
     }
 
@@ -2544,7 +2696,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         mono: 'var(--sp-font-mono)'
       };
       const coverFamily = families[doc.cover?.fontFamily] || families.serif;
-      this.els.cover.dataset.startTrigger='tap';
+      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(doc.cover?.startTrigger)?doc.cover.startTrigger:'bottom';
       const endingFamily = families[doc.ending?.fontFamily] || families.serif;
       this.host.style.setProperty('--sp-cover-font', coverFamily);
 
@@ -2583,7 +2735,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         [this.els.coverEpisode,'episode'],
         [this.els.coverEpisodeTitle,'episodeTitle']
       ];
-      const coverSizeScale = { small:.78, normal:1, large:1.28, xl:1.6, xxl:2.05, fullscreen:2.65, giant:3.25, breakout:4.0 };
+      const coverSizeScale = { small:.78, normal:1, large:1.28, xl:1.6 };
       const coverFontMap = {
         serif:'var(--sp-font-serif)',
         sans:'var(--sp-font-sans)',
@@ -2600,11 +2752,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const baseSize=parseFloat(getComputedStyle(el).fontSize)||16;
         if (st.color) el.style.setProperty('color',String(st.color),'important');
         if (st.size && st.size !== 'auto') {
-          const rawSize=st.size;
-          const numericSize=typeof rawSize==='number'?Number(rawSize):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(rawSize).trim())?parseFloat(String(rawSize)):NaN);
-          const resolved=Number.isFinite(numericSize)
-            ? numericSize
-            : baseSize*(coverSizeScale[String(rawSize)]||1);
+          const resolved=typeof st.size==='number'
+            ? Number(st.size)
+            : baseSize*(coverSizeScale[String(st.size)]||1);
           if(Number.isFinite(resolved))el.style.setProperty('font-size',`${resolved}px`,'important');
         }
         if (st.fontFamily && st.fontFamily !== 'inherit') {
@@ -2618,13 +2768,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.els.endingTitle.textContent = authoredEndingLabel || this._uiText('player.ending.title');
         this.els.endingTitle.style.setProperty('font-family', endingFamily, 'important');
         const endingStyle=doc.ending?.style||{};
-        const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)',xxl:'clamp(38px,10vw,72px)',fullscreen:'clamp(48px,13vw,96px)',giant:'clamp(60px,16vw,120px)',breakout:'clamp(72px,20vw,160px)'};
+        const sizeMap={small:'clamp(15px,3.5vw,22px)',normal:'clamp(18px,4.6vw,30px)',large:'clamp(24px,6.2vw,42px)',xl:'clamp(30px,8vw,56px)'};
         const fontMap={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};
         this.els.endingTitle.style.removeProperty('color');
         this.els.endingTitle.style.removeProperty('font-size');
         if(endingStyle.color)this.els.endingTitle.style.setProperty('color',String(endingStyle.color),'important');
         if(endingStyle.size&&endingStyle.size!=='auto'){
-          const rawSize=endingStyle.size;const numericSize=typeof rawSize==='number'?Number(rawSize):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(rawSize).trim())?parseFloat(String(rawSize)):NaN);const size=Number.isFinite(numericSize)?`${numericSize}px`:sizeMap[String(rawSize)];
+          const size=typeof endingStyle.size==='number'?`${endingStyle.size}px`:sizeMap[endingStyle.size];
           if(size)this.els.endingTitle.style.setProperty('font-size',size,'important');
         }
         if(endingStyle.fontFamily&&endingStyle.fontFamily!=='inherit'){
@@ -3065,7 +3215,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         } else {
           const text = document.createElement('span');
           text.className = 'sp-history-text';
-          this._appendIOSPresentationSafeText(text, scene.text || '');
+          text.textContent = scene.text || '';
           // History is still a navigator, but typography should identify the
           // actual Scene the author is reviewing.
           this._applyTextStyle(text, scene.presentation?.text || {}, false);
@@ -3074,7 +3224,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (scene.subText) {
             const sub = document.createElement('span');
             sub.className = 'sp-history-subtext';
-            this._appendIOSPresentationSafeText(sub, scene.subText);
+            sub.textContent = scene.subText;
             this._applyTextStyle(sub, scene.presentation?.subText || {}, true);
             body.appendChild(sub);
           }
@@ -3253,7 +3403,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // authored per-field typography here as well. This prevents CSS defaults
       // from restoring the original cover sizes after publication.
       const coverStyles=this.document.cover?.styles||{};
-      const coverSizeScale={small:.78,normal:1,large:1.28,xl:1.6,xxl:2.05,fullscreen:2.65,giant:3.25,breakout:4.0};
+      const coverSizeScale={small:.78,normal:1,large:1.28,xl:1.6};
       const coverFontMap={
         serif:'var(--sp-font-serif)',
         sans:'var(--sp-font-sans)',
@@ -3278,11 +3428,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           el.style.setProperty('color',String(st.color),'important');
         }
         if(st.size && st.size!=='auto'){
-          const rawSize=st.size;
-          const numericSize=typeof rawSize==='number'?Number(rawSize):(/^\d+(?:\.\d+)?(?:px)?$/i.test(String(rawSize).trim())?parseFloat(String(rawSize)):NaN);
-          const resolved=Number.isFinite(numericSize)
-            ? numericSize
-            : baseSize*(coverSizeScale[String(rawSize)]||1);
+          const resolved=typeof st.size==='number'
+            ? Number(st.size)
+            : baseSize*(coverSizeScale[String(st.size)]||1);
           if(Number.isFinite(resolved))el.style.setProperty('font-size',`${resolved}px`,'important');
         }
         if(st.fontFamily && st.fontFamily!=='inherit'){
@@ -3318,7 +3466,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(this.els.coverEpisodeTitle){const epTitle=coverValue('episodeTitle',this.document.metadata?.episodeTitle||this.document.episodeTitle||'');this.els.coverEpisodeTitle.textContent=epTitle;this.els.coverEpisodeTitle.hidden=!coverVisible('episodeTitle',epTitle);}
       if(this.els.coverTitle){const title=coverValue('title',this.document.title||'');this.els.coverTitle.textContent=title;this.els.coverTitle.hidden=Boolean(logoSrc)||!coverVisible('title',title);}
       if(this.els.coverSubtitle){const sub=coverValue('subtitle',this.document.metadata?.subtitle||this.document.subtitle||'');this.els.coverSubtitle.textContent=sub;this.els.coverSubtitle.hidden=!coverVisible('subtitle',sub);}
-      this.els.cover.dataset.startTrigger='tap';
+      this.els.cover.dataset.startTrigger=['center','bottom','tap'].includes(this.document.cover?.startTrigger)?this.document.cover.startTrigger:'bottom';
       this.els.cover.hidden=false;
       this.host.classList.add('sp-cover-open');
       return true;
@@ -3338,10 +3486,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Audio Manager V1: START only preloads future sources. It never play()s them.
       // Each Scene cue owns the first real play() for its source.
       if (this._iosStableMediaBank) this._primeIOSMediaBank();
-      // Keep the opaque Cover in front while Scene 1 is fully rendered.
-      // iPhone Safari otherwise exposes the raw background for one frame before
-      // blur/dim/vignette and the authored transition are installed.
-      const coverToReveal = this.els.cover;
+      this.els.cover.hidden=true;
+      this.host.classList.remove('sp-cover-open');
       // Treat the first render after the cover as a fresh load so Scene 1
       // one-shot SE is queued/played from the same trusted start gesture.
       // `restore` only reconstructs persistent BGM/Ambient and intentionally
@@ -3349,10 +3495,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
       this._render();
-      // Commit the fully styled Scene 1 before removing the opaque Cover.
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{
-        if(coverToReveal){ coverToReveal.hidden=true; this.host.classList.remove('sp-cover-open'); }
-      }));
       // A work may start directly in its comic viewer. Open the first Scene's
       // image from the same trusted cover gesture so iOS Safari keeps the action
       // attached to the user's tap. Works without a usable image fall back to Scene.
@@ -3360,8 +3502,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const firstImage=this.els?.stage?.querySelector('.sp-scene.is-active .sp-scene-image');
         firstImage?._sceneImageOpenForReading?.(startEvent);
       }
-      // V112 — keyboard reading starts immediately after START. Do not require
-      // an extra click on the Scene just to move focus from the Cover controls.
+      // V112 — keyboard reading starts immediately after START. Move focus now
+      // and once more after the frame so mouse and keyboard starts both leave
+      // the Player ready for Enter without an extra Scene click.
       this.els?.stage?.focus?.({preventScroll:true});
       requestAnimationFrame(()=>this.els?.stage?.focus?.({preventScroll:true}));
       emit(this.host,'sceneplayer:coverstart',{document:this.document,index:this.index,at:this.playbackTimelineStartedAt});
@@ -3644,8 +3787,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _framePosition(scene) {
       const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
-      // V7: one normalized text coordinate system across phone/tablet/PC.
-      const source=common;
+      const viewportWidth=Math.max(1,Number(this.host?.clientWidth)||Number(global.innerWidth)||1);
+      const source=viewportWidth>=1100&&common?.pc&&typeof common.pc==='object'?common.pc:common;
       const preset=String(source.preset||'auto');
       const presets={
         'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],
@@ -3654,8 +3797,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       };
       if(preset==='custom'){
         const x=Number(source.x),y=Number(source.y);
-        // Free custom placement for oversized / rotated effect text.
-        return {preset,x:Number.isFinite(x)?Math.max(-.35,Math.min(1.35,x)):.5,y:Number.isFinite(y)?Math.max(-.35,Math.min(1.35,y)):.5};
+        return {preset,x:Number.isFinite(x)?Math.max(0,Math.min(1,x)):.5,y:Number.isFinite(y)?Math.max(0,Math.min(1,y)):.5};
       }
       if(presets[preset])return {preset,x:presets[preset][0],y:presets[preset][1]};
       return {preset:'auto'};
@@ -3665,10 +3807,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const contentWidth=Math.max(1,item.node.clientWidth||item.node.getBoundingClientRect().width);
       const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
       const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
-      // Custom means custom: do not force the glyph box back inside the viewport.
-      // A broad safety bound still keeps a lost element recoverable in Studio.
-      const centerX=Math.max(-stageWidth*.35,Math.min(stageWidth*1.35,stageWidth*position.x));
-      const centerY=Math.max(-stageHeight*.35,Math.min(stageHeight*1.35,stageHeight*position.y));
+      const centerX=width+margin*2>=stageWidth?stageWidth/2:Math.max(width/2+margin,Math.min(stageWidth-width/2-margin,stageWidth*position.x));
+      const centerY=height+margin*2>=stageHeight?stageHeight/2:Math.max(height/2+margin,Math.min(stageHeight-height/2-margin,stageHeight*position.y));
       return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
     }
 
@@ -4134,13 +4274,75 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return { ...cache[target] };
     }
 
-    // AHAKO_360_PROTO_V1_2 — screen-fixed text/UI, yaw-driven horizontal panorama.
+    // AHAKO_360_PROTO_V1 — background-only panorama; text/UI stay screen-fixed.
+
+    _initLoadDiagnostics(){
+      if(this._loadDiag)return;
+      const q=(()=>{try{return new URLSearchParams(location.search)}catch(_){return null}})();
+      const stored=(()=>{try{return localStorage.getItem('ahakoLoadDiag')==='1'}catch(_){return false}})();
+      const enabled=Boolean((q && (q.get('diag')==='1'||q.get('loadDiag')==='1')) || stored);
+      this._loadDiag={
+        enabled, raf:0, last:performance.now(), frames:0, fps:0,
+        bgWrites:0, motionEvents:0, pointerMoves:0, sceneChanges:0,
+        sceneStart:0, lastSceneMs:0, longFrames:0, maxFrame:0,
+        node:null, timer:0
+      };
+      if(!enabled)return;
+      try{localStorage.setItem('ahakoLoadDiag','1')}catch(_){}
+      const n=document.createElement('div');
+      n.className='sp-load-diag';
+      n.setAttribute('aria-hidden','true');
+      Object.assign(n.style,{
+        position:'fixed',left:'max(6px, env(safe-area-inset-left))',
+        top:'max(6px, env(safe-area-inset-top))',zIndex:'2147483646',
+        padding:'6px 8px',borderRadius:'8px',
+        background:'rgba(0,0,0,.72)',color:'#fff',
+        font:'11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace',
+        whiteSpace:'pre',pointerEvents:'none',maxWidth:'calc(100vw - 12px)'
+      });
+      document.body.appendChild(n); this._loadDiag.node=n;
+      const tick=(now)=>{
+        const d=this._loadDiag;if(!d?.enabled)return;
+        const dt=now-d.last; d.frames++;
+        if(dt>34){d.longFrames++; d.maxFrame=Math.max(d.maxFrame,dt)}
+        if(dt>=1000){d.fps=Math.round(d.frames*1000/dt);d.frames=0;d.last=now}
+        d.raf=requestAnimationFrame(tick);
+      };
+      d.raf=requestAnimationFrame(tick);
+      d.timer=setInterval(()=>this._renderLoadDiagnostics(),500);
+      this._renderLoadDiagnostics();
+    }
+
+    _loadDiagCount(key,inc=1){
+      const d=this._loadDiag;if(d?.enabled)d[key]=(Number(d[key])||0)+inc;
+    }
+
+    _renderLoadDiagnostics(){
+      const d=this._loadDiag;if(!d?.enabled||!d.node)return;
+      const mode=this._is360Background?.()?'360':(this._isFinitePanorama?.()?'PANO':'FLAT');
+      const lock=this._panoViewLocked?'LOCK':'LIVE';
+      const mem=performance?.memory?.usedJSHeapSize
+        ? ` MEM ${(performance.memory.usedJSHeapSize/1048576).toFixed(0)}MB`
+        : '';
+      d.node.textContent=
+        `AHAKO LOAD DIAG  ${mode} ${lock}\n`+
+        `FPS ${String(d.fps).padStart(2)}  LONG ${d.longFrames}  MAX ${d.maxFrame.toFixed(0)}ms${mem}\n`+
+        `BG ${d.bgWrites}  MOTION ${d.motionEvents}  MOVE ${d.pointerMoves}\n`+
+        `SCENE ${d.sceneChanges}  LAST ${d.lastSceneMs.toFixed(1)}ms`;
+    }
+
+    _markLoadDiagSceneStart(){
+      const d=this._loadDiag;if(!d?.enabled)return;
+      d.sceneStart=performance.now(); d.sceneChanges++;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(d.sceneStart)d.lastSceneMs=performance.now()-d.sceneStart;
+      }));
+    }
+
     _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
-    _isFinitePanorama(state=this.backgroundState){ return state?.projection === 'panorama'; }
-    _isSpatialBackground(state=this.backgroundState){ return this._is360Background(state)||this._isFinitePanorama(state); }
     _requestMotionPermissionIfNeeded(){
-      const hasSpatial=(this.document?.scenes||[]).some(sc=>['360','panorama'].includes(sc?.presentation?.background?.projection));
-      if(!hasSpatial || this._motionPermissionAsked) return;
+      const has360=(this.document?.scenes||[]).some(sc=>sc?.presentation?.background?.projection==='360');
+      if(!has360 || this._motionPermissionAsked) return;
       this._motionPermissionAsked=true;
       const DOE=global.DeviceOrientationEvent;
       if(DOE && typeof DOE.requestPermission==='function'){
@@ -4150,368 +4352,56 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Motion(){
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
-        if(!this._isSpatialBackground() || !this._motionAllowed || this.backgroundState?.motionSensor===false || this._panoViewLocked)return;
-        const alpha=Number(e.alpha), beta=Number(e.beta);
-        if(!Number.isFinite(alpha)||!Number.isFinite(beta))return;
-        if(this._motionLastAlpha==null){
-          this._motionLastAlpha=alpha; this._motionBaseBeta=beta;
-          this._panoSensorYaw=Number(this._panoSensorYaw)||0;
-          this._panoSensorPitch=Number(this._panoSensorPitch)||0;
-          return;
-        }
-        // alpha is heading/yaw. Use the shortest incremental delta so crossing
-        // 359° -> 0° stays continuous and a chair can rotate through full 360°.
-        let da=alpha-this._motionLastAlpha;
-        if(da>180)da-=360; else if(da<-180)da+=360;
-        this._motionLastAlpha=alpha;
-        // Ignore tiny sensor chatter, then low-pass the intentional rotation.
-        if(Math.abs(da)<.28)da=0;
-        da=Math.max(-8,Math.min(8,da));
-        // Looking right should reveal the right side of the world. Reverse only the
-        // device-orientation yaw; finger dragging keeps its existing grab direction.
-        this._panoYawVelocity=(Number(this._panoYawVelocity)||0)*.58 - da*.42;
-        if(Math.abs(this._panoYawVelocity)<.08)this._panoYawVelocity=0;
-        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
-        if(!panoLandscape){
-          this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
-        }else{
-          this._panoSensorYaw=0;
-          this._panoYawVelocity=0;
-        }
-
-        if(this._isFinitePanorama() && !panoLandscape){
-          // Panorama has real edges. Clamp the CAMERA STATE itself, not only the
-          // rendered backgroundPosition. This prevents invisible sensor rotation
-          // from accumulating beyond an edge and makes reverse rotation respond
-          // immediately.
-          const manualYaw=Number(this._panoYaw)||0;
-          const totalYaw=manualYaw+(Number(this._panoSensorYaw)||0);
-          const clampedYaw=Math.max(-180,Math.min(180,totalYaw));
-          if(clampedYaw!==totalYaw){
-            this._panoSensorYaw=clampedYaw-manualYaw;
-            // Do not keep inertial/smoothed velocity pushing into the hard edge.
-            if((clampedYaw>=180 && this._panoYawVelocity>0) ||
-               (clampedYaw<=-180 && this._panoYawVelocity<0)){
-              this._panoYawVelocity=0;
-            }
-          }
-        }
-
-        const db=beta-(Number(this._motionBaseBeta)||0);
-        const panoLandscapePitch=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
-        // In landscape panorama the visible vertical crop is modest. Use a small
-        // dead-zone and faster response so a small physical tilt reaches it.
-        const pitchDeadZone=panoLandscapePitch?.7:2.6;
-        const pitchDead=Math.abs(db)<pitchDeadZone?0:Math.sign(db)*(Math.abs(db)-pitchDeadZone);
-        const pitchGain=panoLandscapePitch?.82:.32;
-        const pitchLimit=panoLandscapePitch?24:14;
-        const targetPitch=Math.max(-pitchLimit,Math.min(pitchLimit,pitchDead*pitchGain));
-        const pitchFollow=panoLandscapePitch?.22:.09;
-        this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*pitchFollow;
-        if(this._isFinitePanorama()){
-          if(!this._panoMotionRenderRAF){
-            this._panoMotionRenderRAF=requestAnimationFrame(()=>{
-              this._panoMotionRenderRAF=0;
-              if(this._isFinitePanorama())this._render360Background();
-            });
-          }
-        }else{
-          this._render360Background();
-        }
-        if(Math.abs(da)>.35 || Math.abs(db)>3.2)this._show360ViewLockControl();
+        this._loadDiagCount('motionEvents');
+        if(!this._is360Background() || !this._motionAllowed || this.backgroundState?.motionSensor===false)return;
+        if(this._motionBaseGamma==null){this._motionBaseGamma=Number(e.gamma)||0;this._motionBaseBeta=Number(e.beta)||0;}
+        const dg=(Number(e.gamma)||0)-this._motionBaseGamma, db=(Number(e.beta)||0)-this._motionBaseBeta;
+        // 360 V1.1: stronger hand-shake suppression + eased sensor follow.
+        // Tiny wrist noise is ignored; intentional movement still has enough range.
+        const dead=v=>Math.abs(v)<3.2?0:Math.sign(v)*(Math.abs(v)-3.2);
+        const targetYaw=Math.max(-34,Math.min(34,dead(dg)*.82));
+        const targetPitch=Math.max(-16,Math.min(16,dead(db)*.42));
+        const ease=.14;
+        this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+(targetYaw-(Number(this._panoSensorYaw)||0))*ease;
+        this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*ease;
+        this._render360Background();
       },{passive:true});
     }
-    _show360ViewLockControl(){
-      const b=this.els?.panoViewLock;if(!b||!this._isSpatialBackground())return;
-      b.hidden=false;
-      b.classList.toggle('is-locked',Boolean(this._panoViewLocked));
-      b.setAttribute('aria-pressed',this._panoViewLocked?'true':'false');
-      b.setAttribute('aria-label',this._panoViewLocked?'360°視点固定を解除':'360°視点を固定');
-      b.textContent=this._panoViewLocked?'◉':'◎';
-      clearTimeout(this._panoViewLockHideTimer);
-      if(!this._panoViewLocked){
-        this._panoViewLockHideTimer=setTimeout(()=>{
-          if(!this._panoViewLocked && b)b.hidden=true;
-        },2600);
-      }
-    }
-    _set360ViewLocked(locked){
-      locked=Boolean(locked);
-      if(locked===Boolean(this._panoViewLocked)){this._show360ViewLockControl();return;}
-      if(locked){
-        // Bake the live sensor offset into the manual camera so freezing never jumps.
-        this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
-        this._panoPitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
-      }
-      this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
-      this._motionLastAlpha=null;this._motionBaseBeta=null;
-      this._panoViewLocked=locked;
-      this._render360Background();
-      this._show360ViewLockControl();
-    }
-    _reset360Home(){
-      this._panoYaw=Number(this.backgroundState?.homeYaw)||0;
-      this._panoPitch=Number(this.backgroundState?.homePitch)||0;
-      this._motionLastAlpha=null;this._motionBaseBeta=null;
-      this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
-      this._render360Background();
-    }
-    _bindSpatialViewportStability(){
-      if(this._spatialViewportBound)return;
-      this._spatialViewportBound=true;
-      let lastW=global.innerWidth||0,lastH=global.innerHeight||0,timer=0;
-      const settle=()=>{
-        clearTimeout(timer);
-        timer=setTimeout(()=>{
-          const w=global.innerWidth||0,h=global.innerHeight||0;
-          if(w===lastW && h===lastH)return;
-          if(this._isSpatialBackground()){
-            this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
-            this._panoPitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
-            if(this._isFinitePanorama()){
-              this._panoYaw=Math.max(-180,Math.min(180,this._panoYaw));
-              if(w>h)this._panoYaw=0;
-            }
-            this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
-            this._motionLastAlpha=null;this._motionBaseBeta=null;
-            requestAnimationFrame(()=>requestAnimationFrame(()=>{
-              if(this._isSpatialBackground())this._render360Background();
-            }));
-          }
-          lastW=w;lastH=h;
-        },120);
-      };
-      this._on(global,'resize',settle,true);
-      this._on(global,'orientationchange',settle,true);
-    }
-
+    _reset360Home(){this._panoYaw=0;this._panoPitch=Number(this.backgroundState?.homePitch)||0;this._motionBaseGamma=null;this._motionBaseBeta=null;this._panoSensorYaw=0;this._panoSensorPitch=0;this._render360Background();}
     _render360Background(){
-      if(!this._isSpatialBackground())return;
+      this._loadDiagCount('bgWrites');
+      if(!this._is360Background())return;
       const layer=this._currentBackgroundLayer(); if(!layer)return;
       const yaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
-      const pitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
-      // 360° repeats forever; Panorama is finite and stops at the image edges.
-      const rawX=50 + yaw/3.6;
-      const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
-      // A finite panorama that already fits horizontally in landscape should not
-      // make the reader manually re-center it. Keep X centered; pitch/Y remains live.
-      const x=panoLandscape?50:(this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX);
-      const y=Math.max(0,Math.min(100,50 - pitch*.95));
-      const grabX=this._is360Background()?(Number(this._panoGrabX)||0):0;
-      const panoPortrait=this._isFinitePanorama() &&
-        Boolean(global.matchMedia?.('(orientation: portrait)').matches);
-      let panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
-      let panoRenderX=x;
-      if(panoPortrait){
-        const layerW=Number(layer.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-        const layerH=Number(layer.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
-        const src=String(this.backgroundState?.src||'');
-
-        this._panoRatioCache=this._panoRatioCache||new Map();
-        const applyCombinedClamp=(ratio)=>{
-          if(!(ratio>0)||!(layerW>0)||!(layerH>0))return;
-
-          // Portrait panorama CSS: background-size:auto 108%.
-          const renderedW=layerH*1.08*ratio;
-          if(renderedW<=layerW){
-            panoRenderX=50;
-            panoGrabX=0;
-            this._panoFiniteGrabX=0;
-            this._panoSensorYaw=0;
-            return;
-          }
-
-          // CSS percentage positioning:
-          // offset = (container - image) * percentage / 100.
-          // Add TRUE GRAB pixels, then clamp the FINAL composed camera.
-          const minOffset=layerW-renderedW; // right image edge == viewport right
-          const maxOffset=0;                // left image edge == viewport left
-          const baseOffset=(layerW-renderedW)*(panoRenderX/100);
-          const desiredOffset=baseOffset+panoGrabX;
-          const clampedOffset=Math.max(minOffset,Math.min(maxOffset,desiredOffset));
-
-          // Bake only the overflow correction into TRUE GRAB. This means motion
-          // + swipe can never reveal outside the image, and reversing responds
-          // immediately instead of paying back invisible overshoot.
-          const correction=clampedOffset-desiredOffset;
-          if(Math.abs(correction)>.01){
-            panoGrabX+=correction;
-            this._panoFiniteGrabX=panoGrabX;
-
-            // Finite panorama must never accumulate invisible sensor rotation
-            // beyond an image edge. Preserve the visible camera by baking the
-            // current sensor yaw into manual yaw, then reset sensor integration.
-            // Reversing the phone therefore responds immediately and the
-            // available motion range never shrinks after repeated turns.
-            // HOLD the composed camera at the real image edge.
-            // Do not zero/rebase sensorYaw here: doing that while the device is
-            // still physically turned teleports the camera back toward the last
-            // swipe landmark and creates an endless edge->landmark loop.
-            // The final pixel clamp above is the sole edge authority; velocity
-            // is stopped, while sensor orientation remains continuous so
-            // reversing the device moves away from the edge immediately.
-            this._panoYawVelocity=0;
-          }
-        };
-
-        const cached=Number(this._panoRatioCache.get(src));
-        if(cached>0){
-          applyCombinedClamp(cached);
-        }else if(src && !this._panoRatioCache.has(src)){
-          this._panoRatioCache.set(src,-1);
-          const probe=new Image();
-          probe.onload=()=>{
-            const ratio=(probe.naturalWidth&&probe.naturalHeight)
-              ?probe.naturalWidth/probe.naturalHeight:0;
-            this._panoRatioCache.set(src,ratio||0);
-            if(this.backgroundState?.src===src)this._render360Background();
-          };
-          probe.onerror=()=>this._panoRatioCache.set(src,0);
-          probe.src=src;
-        }
-      }
-      const position=this._is360Background()
-        ?`calc(${x}% + ${grabX}px) ${y}%`
-        :(panoPortrait?`calc(${panoRenderX}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
-      // At a finite edge the sensor may continue firing while the visible camera
-      // is stationary. Avoid repeating an identical DOM style write.
-      if(layer.style.backgroundPosition!==position){
-        layer.style.backgroundPosition=position;
-      }
+      const pitch=Math.max(-35,Math.min(35,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
+      const x=50 + yaw/3.6; const y=50 - pitch*.72;
+      layer.style.backgroundPosition=`${x}% ${y}%`;
     }
     _bind360Gestures(){
+      this._initLoadDiagnostics();
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
-      const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
-        && !this._hasCredits(this.currentScene?.presentation);
       this._on(this.els.stage,'pointerdown',(e)=>{
-        if(!this._isSpatialBackground()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
-        if(this._isFinitePanorama()){
-          // Sensor -> finger handoff. Preserve the exact visible camera, then
-          // make that view the new neutral sensor origin before TRUE GRAB starts.
-          this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
-          this._panoSensorYaw=0;
-          this._panoYawVelocity=0;
-          this._motionLastAlpha=null;
-          this._motionBaseBeta=null;
-        }
-        drag={
-          x:e.clientX,y:e.clientY,
-          yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
-          grabX:Number(this._panoGrabX)||0,
-          panoGrabX:Number(this._panoFiniteGrabX)||0,
-          moved:false,id:e.pointerId,startedAt:performance.now()
-        };
-        try{this.els.stage.setPointerCapture?.(e.pointerId);}catch(_){}
+        if(!this._is360Background()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        drag={x:e.clientX,y:e.clientY,yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,moved:false,id:e.pointerId};
       },true);
       this._on(this.els.stage,'pointermove',(e)=>{
-        if(!drag||!this._isSpatialBackground())return;
+        if(!drag||!this._is360Background())return;
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-        const distance=Math.hypot(dx,dy);
-        if(distance>5)drag.moved=true;
+        if(Math.hypot(dx,dy)>3)drag.moved=true;
         if(!drag.moved)return;
+        // Claim the gesture before the Player's normal swipe/PAST handlers see it.
         if(e.cancelable)e.preventDefault();
         e.stopPropagation?.();e.stopImmediatePropagation?.();
-
-        // V1.5: every ordinary drag belongs to the panorama while the finger is
-        // down. A fast, long flick in the established PAST direction is decided
-        // only on release, so slow exploration remains predictable.
-        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
-        if(!panoLandscape){
-          // 360° landscape needs a larger visual turn per finger travel than the
-          // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
-          const is360=this._is360Background();
-          const panoPortrait=this._isFinitePanorama() &&
-            Boolean(global.matchMedia?.('(orientation: portrait)').matches);
-          if(is360){
-            // True grab: the point under the finger/mouse follows it 1:1.
-            this._panoGrabX=drag.grabX+dx;
-          }else if(panoPortrait){
-            // ONE shared camera: convert the finger's pixel travel directly into
-            // panoYaw while the finger is moving. There is no temporary pixel
-            // camera to "bake" on release, so release cannot jump.
-            const layer=this._currentBackgroundLayer();
-            const layerW=Number(layer?.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-            const layerH=Number(layer?.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
-            const src=String(this.backgroundState?.src||'');
-            const ratio=Number(this._panoRatioCache?.get(src))||0;
-            const renderedW=(ratio>0&&layerH>0)?layerH*1.08*ratio:0;
-            const travel=renderedW-layerW;
-            if(travel>0){
-              // rawX = 50 + yaw/3.6 and CSS position spans `travel` pixels.
-              // This maps finger dx to exactly dx rendered pixels.
-              this._panoYaw=drag.yaw-(dx/travel)*360;
-              this._panoFiniteGrabX=0;
-            }else{
-              this._panoFiniteGrabX=drag.panoGrabX+dx;
-            }
-          }else{
-            this._panoYaw=this._isFinitePanorama()
-              ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
-              :(drag.yaw-dx*.46);
-          }
-        }else{
-          this._panoYaw=0;
-        }
-        // Landscape finite panorama only exposes the small vertical crop created
-        // by cover, so make pitch follow the finger much more directly. PAST
-        // thresholds/direction remain untouched.
-        const pitchDragGain=panoLandscape?.62:.20;
-        this._panoPitch=Math.max(-40,Math.min(40,drag.pitch+dy*pitchDragGain));
+        this.suppressNextClick=true;
+        // Natural grab. Vertical direction: finger up = look up, finger down = look down.
+        // Keep the first pixels deliberately gentle so the panorama never 'jumps'.
+        this._panoYaw=drag.yaw-dx*.115;
+        this._panoPitch=Math.max(-35,Math.min(35,drag.pitch+dy*.085));
         this._render360Background();
-        this._show360ViewLockControl();
       },true);
-      const end=(e)=>{
-        if(!drag)return;
-        const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-        const elapsed=Math.max(1,performance.now()-drag.startedAt);
-        const horizontal=isHorizontalPast();
-        const amount=horizontal?-dx:dy;
-        const directional=horizontal
-          ? (dx<0 && Math.abs(dx)>Math.abs(dy)*1.15)
-          : (dy>0 && Math.abs(dy)>Math.abs(dx)*1.15);
-        // Keep PAST intentional: it must be both a meaningful travel distance
-        // and a flick. This preserves the same direction on every Scene without
-        // stealing ordinary slow panorama drags.
-        const pastDistance=Math.max(60,Number(this.options.swipeThreshold)||0);
-        const velocity=amount/elapsed; // CSS px per ms in the PAST direction.
-        // PAST is an intentional flick gesture, independent of whether a finite
-        // panorama camera has already reached its image edge.
-        const pastGesture=Boolean(drag.moved && this.options.allowPrevious
-          && directional && amount>=pastDistance && velocity>=.42);
-        if(drag.moved){
-          this._panoSuppressClickUntil=performance.now()+90;
-          e.preventDefault?.();e.stopPropagation?.();e.stopImmediatePropagation?.();
-          if(pastGesture){
-            // PAST is navigation, not a camera move. Undo the temporary panorama
-            // travel made while judging the gesture before opening History.
-            this._panoYaw=drag.yaw;
-            this._panoPitch=drag.pitch;
-            this._render360Background();
-            this.openHistory({dragDistance:amount});
-          }
-        }
-        try{
-          if(this.els.stage.hasPointerCapture?.(drag.id))this.els.stage.releasePointerCapture?.(drag.id);
-        }catch(_){}
-        if(this._isFinitePanorama()){
-          // The drag already moved the shared panoYaw camera 1:1.
-          // Release only re-arms the sensor from this exact visible position.
-          this._panoFiniteGrabX=0;
-          this._panoSensorYaw=0;
-          this._panoYawVelocity=0;
-          this._motionLastAlpha=null;
-          this._motionBaseBeta=null;
-        }
-        drag=null;
-        if(this._isFinitePanorama())requestAnimationFrame(()=>this._render360Background());
-        requestAnimationFrame(()=>{ this._panoSuppressClickUntil=0; });
-      };
-      this._on(this.els.stage,'pointerup',end,true);
-      this._on(this.els.stage,'pointercancel',end,true);
-      // iPhone Safari can lose pointerup when a Scene transition swaps visual
-      // layers. Clear stale drag state so the following Scene always accepts swipe.
-      this._on(global,'blur',()=>{drag=null;},true);
+      const end=(e)=>{if(!drag)return;if(drag.moved){this.suppressNextClick=true;e.preventDefault?.();e.stopPropagation?.();}drag=null;};
+      this._on(this.els.stage,'pointerup',end,true);this._on(this.els.stage,'pointercancel',end,true);
     }
 
     _applyBackgroundForIndex(index) {
@@ -4531,19 +4421,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
+      this._markLoadDiagSceneStart();
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
-      this.host.classList.toggle('sp-bg-panorama-active', this._isFinitePanorama(next));
-      if(this._isSpatialBackground(next)){
-        // Reader gaze carries only between consecutive Scenes of the same spatial mode.
-        const enteringSpatial=previous?.projection!==next?.projection;
-        if(this._panoYaw==null || enteringSpatial)this._reset360Home();
-        this._bind360Gestures(); this._bind360Motion(); this._bindSpatialViewportStability();
-      } else {
-        this._motionLastAlpha=null; this._panoYawVelocity=0;
-        this._panoViewLocked=false;
-        clearTimeout(this._panoViewLockHideTimer);
-        if(this.els?.panoViewLock)this.els.panoViewLock.hidden=true;
-      }
+      if(this._is360Background(next)){ if(this._panoYaw==null)this._reset360Home(); this._bind360Gestures(); this._bind360Motion(); }
       const leavingBackground = Boolean(previous?.src) && !next.src && srcChanged;
       // Keep the outgoing layer drawable until its exit animation completes.
       this.host.classList.toggle('sp-has-background', Boolean(next.src) || leavingBackground);
@@ -4551,9 +4431,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (srcChanged) this._swapBackground(next, transition, exit, motionPhase, leavingBackground);
       else this._styleCurrentBackground(next, Boolean(sceneBg?.motion), motionPhase);
 
-      if(this._isSpatialBackground(next)){
-        requestAnimationFrame(()=>{ if(this._isSpatialBackground())this._render360Background(); });
-      }
       this._applyBackgroundOverlays(next);
       this._runBackgroundReveal(sceneBg?.reveal, transition);
       emit(this.host, 'sceneplayer:backgroundchange', { index, scene: this.currentScene, background: { ...next }, srcChanged });
@@ -4610,8 +4487,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
-      if(state.projection==='360'){layer.style.backgroundSize='auto 138%';layer.style.backgroundRepeat='repeat-x';}
-      else if(state.projection==='panorama'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='no-repeat';}
+      if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
       else layer.style.backgroundRepeat='no-repeat';
       {
         const filters = [];
@@ -4628,20 +4504,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const layer = this._currentBackgroundLayer();
       if (!layer) return;
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
-      // V1.4: a continuing 360° background owns its live backgroundPosition.
-      // Resetting it to center here caused a one-frame flash/jump when advancing
-      // after the reader had looked around. Flat backgrounds keep legacy behavior.
-      if(state.projection==='360'){
-        layer.style.backgroundSize='auto 138%';
-        layer.style.backgroundRepeat='repeat-x';
-      }else if(state.projection==='panorama'){
-        layer.style.backgroundSize='auto 108%';
-        layer.style.backgroundRepeat='no-repeat';
-        this._render360Background();
-      }else{
-        layer.style.backgroundPosition = state.position || 'center center';
-        layer.style.backgroundRepeat='no-repeat';
-      }
+      layer.style.backgroundPosition = state.position || 'center center';
+      if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
+      else layer.style.backgroundRepeat='no-repeat';
       {
         const filters = [];
         const blur = Math.max(0, asNumber(state.blur, 0));
@@ -4651,7 +4516,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         layer.style.filter = filters.join(' ');
       }
       if (resetMotion) this._applyBackgroundMotion(layer, state.motion, motionPhase);
-      if(state.projection==='360')this._render360Background();
     }
 
     _applyBackgroundExit(layer, exit, duration) {
@@ -4971,6 +4835,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const totalDy=t.clientY-viewState.touchStartY;
             if(Math.hypot(totalDx,totalDy)>10)viewState.moved=true;
 
+            // Follow the finger while turning a page. The current sheet slides
+            // away and exposes the adjacent page underneath; release decides
+            // whether the turn completes or springs back.
             const activePages=viewer._scenePages||[];
             const activeIndex=viewer._scenePageIndex||0;
             if(viewState.scale<=1.01 && activePages.length>1 && Math.abs(totalDx)>12 && Math.abs(totalDx)>Math.abs(totalDy)*1.15){
@@ -4979,15 +4846,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               const target=activeIndex+(advances?1:-1);
               if(target>=0&&target<activePages.length){
                 if(!viewState.pageDrag){
-                  const underlay=document.createElement('img');underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
+                  const underlay=document.createElement('img');
+                  underlay.className='sp-scene-image-page-follow-underlay';
+                  underlay.src=activePages[target].src;underlay.alt='';underlay.setAttribute('aria-hidden','true');
                   const rect=img.getBoundingClientRect(),frameRect=frame.getBoundingClientRect();
                   underlay.style.position='absolute';underlay.style.left=`${rect.left-frameRect.left}px`;underlay.style.top=`${rect.top-frameRect.top}px`;
-                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
+                  underlay.style.width=`${rect.width}px`;underlay.style.height=`${rect.height}px`;underlay.style.objectFit='contain';
+                  underlay.style.maxWidth='none';underlay.style.maxHeight='none';underlay.style.margin='0';underlay.style.pointerEvents='none';underlay.style.zIndex='1';
                   frame.insertBefore(underlay,img);img.style.zIndex='2';img.style.willChange='translate';
-                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
+                  const left=rect.left-frameRect.left,sign=totalDx<0?1:-1,startOffset=sign>0?frame.clientWidth-left:-(left+rect.width);
+                  viewState.pageDrag={underlay,target,sign,startOffset,width:Math.max(frame.clientWidth,rect.width)};
                 }
-                const drag=viewState.pageDrag;if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
-                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));img.style.translate=`${dx}px 0`;drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;event.preventDefault();
+                const drag=viewState.pageDrag;
+                if(drag.target!==target){drag.target=target;drag.underlay.src=activePages[target].src;drag.sign=totalDx<0?1:-1;const r=img.getBoundingClientRect(),fr=frame.getBoundingClientRect(),left=r.left-fr.left;drag.startOffset=drag.sign>0?frame.clientWidth-left:-(left+r.width);}
+                const dx=Math.max(-drag.width,Math.min(drag.width,totalDx));
+                img.style.translate=`${dx}px 0`;
+                drag.underlay.style.translate=`${drag.startOffset+dx}px 0`;
+                event.preventDefault();
               }
             }
 
@@ -5015,18 +4890,33 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             viewState.dragging=false;
 
             // Horizontal swipes turn pages only at fit scale; zoomed manga remains pannable.
-            const activePages=viewer._scenePages||[],activeIndex=viewer._scenePageIndex||0,draggedPage=viewState.pageDrag;
+            const activePages=viewer._scenePages||[];
+            const activeIndex=viewer._scenePageIndex||0;
+            const draggedPage=viewState.pageDrag;
             if(draggedPage){
-              const dx=x-viewState.touchStartX,commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32))&&Math.abs(dx)>Math.abs(vertical)*1.2&&duration<900;
+              const dx=x-viewState.touchStartX;
+              const commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32)) && Math.abs(dx)>Math.abs(vertical)*1.2 && duration<900;
               draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
-                if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}}else img.style.translate='';}
-              else img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
-              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;viewState.multiTouch=false;return;
+              if(commit){
+                const direction=viewer._scenePageDirection==='rtl'?'rtl':'ltr';
+                const advances=direction==='rtl'?dx>0:dx<0;
+                const target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
+                if(target!==activeIndex){
+                  if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}
+                  else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}
+                }else img.style.translate='';
+              }else{
+                img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
+              }
+              clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
+              viewState.multiTouch=false;return;
             }
             if(!viewState.multiTouch && viewState.scale<=1.01 && activePages.length>1 && Math.abs(x-viewState.touchStartX)>78 && Math.abs(x-viewState.touchStartX)>Math.abs(vertical)*1.2 && duration<700){
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;
-              const dx=x-viewState.touchStartX,advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
-              const targetPage=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));
+              const dx=x-viewState.touchStartX;
+              const advances=(viewer._scenePageDirection==='rtl'?dx>0:dx<0);
+              const requested=activeIndex+(advances?1:-1);
+              const targetPage=Math.max(0,Math.min(activePages.length-1,requested));
               if(targetPage!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange)viewer._sceneOnPageChange(targetPage);else{viewer._sceneShowPage?.(targetPage);viewer._sceneOnPageChange?.(targetPage);}}
               viewState.multiTouch=false;
               return;
@@ -5061,6 +4951,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               }
             }
 
+            // VIEW POINT owns the image transform. Resetting the manual zoom state
+            // on iPhone touchend briefly writes FIT between two authored points.
             if(viewState.scale<=1.01 && !frame.classList.contains('is-view-rec-playing')) resetView();
             viewState.multiTouch=false;
           }else if(event.touches.length===1 && viewState.scale>1.01){
@@ -5239,7 +5131,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       })();
       const pages=(Array.isArray(options?.pages)?options.pages:[]).filter(page=>page&&typeof page.src==='string'&&page.src);
       let pageIndex=Math.max(0,Math.min(pages.length-1,Number(options?.pageIndex)||0));
-      viewer._scenePages=pages;viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';viewer._scenePageIndex=pageIndex;
+      viewer._scenePages=pages;
+      viewer._scenePageDirection=options?.direction==='rtl'?'rtl':'ltr';
       viewer._sceneOnPageChange=options?.onPageChange;
       const pageControls=viewer.querySelector('.sp-scene-image-viewer-pages');
       const oldRestart=pageControls?.querySelector('.sp-image-reading-restart');if(oldRestart)oldRestart.hidden=!options?.readingResumeKey;
@@ -5289,6 +5182,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           img.src=nextSrc;
         }else frame?._fitSceneImageFrame?.();
       };
+      viewer._scenePageIndex=pageIndex;
       viewer._sceneShowPage=showPage;
       const prevButton=pageControls?.querySelector('.sp-scene-image-viewer-page-prev');
       const nextButton=pageControls?.querySelector('.sp-scene-image-viewer-page-next');
@@ -5362,10 +5256,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       const fallbackPageChange=(pageIndex)=>{
-        const pages=Array.isArray(image.pages)?image.pages:[],page=pages[pageIndex];if(!page?.src)return;
+        const pages=Array.isArray(image.pages)?image.pages:[];
+        const page=pages[pageIndex];if(!page?.src)return;
         const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
-        if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
-        else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
+        if((pagePoints?.points||[]).length){
+          this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
+        }else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
       };
       const onPageChange=typeof image.onPageChange==='function'?image.onPageChange:fallbackPageChange;
       const startAtAuthoredPoint=image.startAtAuthoredPoint===true||(Number(image.pageIndex)||0)>0||Number(image.resumePoint)>0||!!pageGhost;
@@ -5522,7 +5418,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // not need an extra fullscreen click before keyboard/tap progression begins.
           // Let the V110 pickup transition finish, then move straight to point 1.
           if(index<0&&points.length){
-            if(startAtAuthoredPoint){index=0;apply(coords(points[0]));initializing=false;img.style.visibility='';return;}
+            if(startAtAuthoredPoint){
+              index=Math.max(0,Math.min(points.length-1,Number(image.resumePoint)||0));apply(coords(points[index]));initializing=false;img.style.visibility='';rememberPoint();finishPageHandoff();
+              return;
+            }
             // Wait for the V110 pickup animation, then establish point 1 as a real
             // settled state. Only after that may Enter/tap advance to point 2.
             setTimeout(()=>{
@@ -5811,8 +5710,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         let tr={left:elementRect.left,top:elementRect.top,right:elementRect.right,bottom:elementRect.bottom,width:elementRect.width,height:elementRect.height};
         let inkRects=[],weightedX=0,weightedY=0,totalWeight=0;
         try{
-          const range=document.createRange();
-          const walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
+          const range=document.createRange(),walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
           const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
           let node;
           while((node=walker.nextNode())){
@@ -5823,22 +5721,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               range.setStart(node,item.index);range.setEnd(node,item.index+item.text.length);
               for(const rect of range.getClientRects()){
                 if(rect.width<=0||rect.height<=0)continue;
-                inkRects.push(rect);
-                const weight=Math.max(1,rect.width*rect.height);
+                inkRects.push(rect);const weight=Math.max(1,rect.width*rect.height);
                 weightedX+=(rect.left+rect.right)*.5*weight;weightedY+=(rect.top+rect.bottom)*.5*weight;totalWeight+=weight;
               }
             }
           }
           range.detach?.();
-          if(!inkRects.length){const fullRange=document.createRange();fullRange.selectNodeContents(text);inkRects=[...fullRange.getClientRects()].filter(r=>r.width>0&&r.height>0);fullRange.detach?.();}
+          if(!inkRects.length){const r=document.createRange();r.selectNodeContents(text);inkRects=[...r.getClientRects()].filter(x=>x.width>0&&x.height>0);r.detach?.();}
           if(inkRects.length){const left=Math.min(...inkRects.map(r=>r.left)),right=Math.max(...inkRects.map(r=>r.right)),top=Math.min(...inkRects.map(r=>r.top)),bottom=Math.max(...inkRects.map(r=>r.bottom));tr={left,right,top,bottom,width:right-left,height:bottom-top};}
         }catch(_){}
         const width=Math.max(1,sr.width),height=Math.max(1,sr.height);
-        const centerClientX=totalWeight?weightedX/totalWeight:tr.left+tr.width/2;
-        const centerClientY=totalWeight?weightedY/totalWeight:tr.top+tr.height/2;
-        const cx=centerClientX-sr.left,cy=centerClientY-sr.top;
-        const halfTextW=Math.max(0,centerClientX-tr.left,tr.right-centerClientX);
-        const halfTextH=Math.max(0,centerClientY-tr.top,tr.bottom-centerClientY);
+        const cx=tr.left+tr.width/2-sr.left,cy=tr.top+tr.height/2-sr.top;
+        const halfTextW=tr.width/2,halfTextH=tr.height/2;
         const extraX=Math.max(-80,Math.min(180,Number(frameOptions.extraX)||0));
         const extraY=Math.max(-80,Math.min(180,Number(frameOptions.extraY)||0));
         // Intersect each ray with one enclosing ellipse. A projected rectangle's
@@ -6069,106 +5963,149 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
-    _isIOSPresentationGuard() {
+    _normalizeRichTextRanges(source, ranges) {
+      if (!Array.isArray(ranges) || !ranges.length) return [];
+      const codepoints = Array.from(source);
+      const cpToUtf16 = [0];
+      for (const ch of codepoints) cpToUtf16.push(cpToUtf16[cpToUtf16.length - 1] + ch.length);
+      const boundaries = new Set(cpToUtf16);
+      const offsets = ranges.flatMap((r) => [Number(r?.start), Number(r?.end)]).filter(Number.isFinite);
+      const hasSplitSurrogate = offsets.some((i) => Number.isInteger(i) && i > 0 && i < source.length && !boundaries.has(i));
+      // Some imported Scenes count Unicode code points. Player slicing uses
+      // UTF-16 offsets, so detect the telltale split-surrogate boundary and
+      // convert every range consistently before rendering any span.
+      const mapped = hasSplitSurrogate ? ranges.map((r) => {
+        const map = (value) => {
+          const i = Math.max(0, Math.min(codepoints.length, Math.trunc(Number(value) || 0)));
+          return cpToUtf16[i];
+        };
+        return { ...r, start: map(r?.start), end: map(r?.end) };
+      }) : ranges;
+      if (typeof Intl?.Segmenter !== 'function') return mapped;
+      const graphemeBounds = new Set([0, source.length]);
+      for (const part of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(source)) {
+        graphemeBounds.add(part.index);
+        graphemeBounds.add(part.index + part.segment.length);
+      }
+      const sorted = [...graphemeBounds].sort((a, b) => a - b);
+      const floorBoundary = (value) => { let result = 0; for (const i of sorted) { if (i > value) break; result = i; } return result; };
+      const ceilBoundary = (value) => sorted.find((i) => i >= value) ?? source.length;
+      return mapped.map((r) => {
+        if (r?.kind === 'table' || r?.kind === 'linkCard') return r;
+        const start = Math.max(0, Math.min(source.length, Math.trunc(Number(r?.start) || 0)));
+        const end = Math.max(start, Math.min(source.length, Math.trunc(Number(r?.end) || 0)));
+        // If an old Scene splits a grapheme cluster, leave that cluster
+        // unformatted instead of splitting a surrogate or variation sequence.
+        return { ...r, start: graphemeBounds.has(start) ? start : ceilBoundary(start), end: graphemeBounds.has(end) ? end : floorBoundary(end) };
+      }).filter((r) => r?.kind === 'table' || r?.kind === 'linkCard' || r.end > r.start);
+    }
+
+    _isVerticalEmojiCluster(text) {
       try {
-        return /AppleWebKit/i.test(navigator.userAgent||'') &&
-          navigator.platform==='MacIntel' && (navigator.maxTouchPoints||0)>1;
-      } catch (_) { return false; }
+        if (new RegExp('\\p{Extended_Pictographic}', 'u').test(text)) return true;
+      } catch (_) {}
+      // Supplementary-plane glyphs (including decorative Phoenician letters
+      // used in emoji-style laughter such as 𐤔) should remain upright too.
+      if (Array.from(text).some((ch) => ch.codePointAt(0) > 0xFFFF)) return true;
+      return /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u00A9\u00AE\u203C\u2049\u2122\u2139]/u.test(text);
     }
 
-    _isTextDefaultEmojiCapable(text) {
-      if(!text || text.includes('\uFE0F') || text.includes('\uFE0E')) return false;
-      try { return /\p{Emoji}/u.test(text) && !/\p{Emoji_Presentation}/u.test(text); }
-      catch (_) { return false; }
+    _isVerticalWriting(node, scene) {
+      return node?.dataset?.writingMode === 'vertical-rl' || node?.style?.writingMode === 'vertical-rl' || scene?.presentation?.text?.writingMode === 'vertical-rl';
     }
 
-    _appendIOSPresentationSafeText(parent,value) {
-      const source=String(value??'');
-      if(!this._isIOSPresentationGuard()){ parent.textContent=source; return; }
-      try{
-        const seg=new Intl.Segmenter(undefined,{granularity:'grapheme'});
-        for(const part of seg.segment(source)){
-          const g=part.segment;
-          if(this._isTextDefaultEmojiCapable(g)){
-            const span=document.createElement('span');
-            span.className='sp-ios-text-default';
-            if(g==='\u2708') span.classList.add('sp-ios-text-default-airplane');
-            span.textContent=g;
-            parent.appendChild(span);
-          }else parent.appendChild(document.createTextNode(g));
-        }
-      }catch(_){ parent.textContent=source; }
+    _verticalGlyphUnits(text) {
+      const parts = typeof Intl?.Segmenter === 'function'
+        ? [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map((part) => part.segment)
+        : Array.from(text);
+      const units = [];
+      for (let i = 0; i < parts.length; i++) {
+        // Japanese laughter notation is a single visual unit: keep the
+        // ideographic わらい marker attached to the following emoji.
+        if (parts[i] === 'ꉂ' && i + 1 < parts.length && this._isVerticalEmojiCluster(parts[i + 1])) {
+          let unit = parts[i] + parts[++i];
+          if (parts[i + 1] === '𐤔') unit += parts[++i];
+          units.push(unit);
+        } else units.push(parts[i]);
+      }
+      return units;
+    }
+
+    _styleVerticalEmoji(span) {
+      span.classList.add('sp-emoji-upright');
+      span.style.setProperty('-webkit-text-orientation', 'upright', 'important');
+      span.style.setProperty('text-orientation', 'upright', 'important');
+      // Preserve VS16 emoji presentation (especially ‼️ and ⁉️). Combining
+      // text in WebKit can force a monochrome glyph; an atomic horizontal inline
+      // box keeps a grouped expression together while preserving the emoji.
+      span.style.setProperty('-webkit-text-combine', 'none', 'important');
+      span.style.setProperty('-webkit-text-combine-upright', 'none', 'important');
+      span.style.setProperty('text-combine-upright', 'none', 'important');
+      span.style.setProperty('-webkit-writing-mode', 'horizontal-tb', 'important');
+      span.style.setProperty('writing-mode', 'horizontal-tb', 'important');
+      span.style.setProperty('white-space', 'nowrap', 'important');
+      span.style.setProperty('display', 'inline-block', 'important');
+      span.style.setProperty('line-height', '1', 'important');
+    }
+
+    _appendVerticalEmojiAwareText(node, text) {
+      let plain = '';
+      const flush = () => { if (plain) { node.appendChild(document.createTextNode(plain)); plain = ''; } };
+      for (const unit of this._verticalGlyphUnits(text)) {
+        if (this._isVerticalEmojiCluster(unit)) {
+          flush();
+          const span = document.createElement('span');
+          this._styleVerticalEmoji(span);
+          span.textContent = unit;
+          node.appendChild(span);
+        } else plain += unit;
+      }
+      flush();
     }
 
     _renderRichText(node, scene, displayText = null) {
       const source = String(displayText ?? scene?.text ?? '');
-      const ranges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const rawRanges = Array.isArray(scene?.richText?.ranges) ? scene.richText.ranges : [];
+      const ranges = this._normalizeRichTextRanges(source, rawRanges);
       const content = Array.isArray(scene?.content) ? scene.content.filter(x => x?.type === 'table' || x?.type === 'linkCard') : [];
-      const tables = content.filter(x => x?.type === 'table');
-      const linkCards = content.filter(x => x?.type === 'linkCard');
       node.classList.remove('sp-has-ruby');
-      if (!ranges.length && !content.length) { node.textContent = source; return false; }
+      if (!ranges.length && !content.length) {
+        if (this._isVerticalWriting(node, scene)) this._appendVerticalEmojiAwareText(node, source);
+        else node.textContent = source;
+        return false;
+      }
       node.textContent = '';
-      const tableById = new Map(tables.map(t => [String(t.id||''), t]));
-      const cardById = new Map(linkCards.map(card => [String(card.id||''), card]));
-      const blockRanges = ranges.filter(r =>
-        (r?.kind === 'table' && tableById.has(String(r.tableId||''))) ||
-        (r?.kind === 'linkCard' && cardById.has(String(r.cardId||'')))
-      ).map(r => ({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)}))
+      const tableById = new Map(content.filter(t=>t.type==='table').map(t => [String(t.id||''), t]));
+      const cardById = new Map(content.filter(t=>t.type==='linkCard').map(t => [String(t.id||''), t]));
+      const blockRanges = ranges.filter(r => (r?.kind === 'table' && tableById.has(String(r.tableId||''))) || (r?.kind === 'linkCard' && cardById.has(String(r.cardId||''))))
+        .map(r => ({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)}))
         .sort((a,b)=>a.start-b.start);
-      const rangedCardIds = new Set(blockRanges.filter(r=>r.kind==='linkCard').map(r=>String(r.cardId||'')));
-      linkCards.forEach(card=>{const id=String(card.id||'');if(id&&!rangedCardIds.has(id))blockRanges.push({kind:'linkCard',cardId:id,start:source.length,end:source.length});});
-      blockRanges.sort((a,b)=>a.start-b.start);
       const normal = ranges.filter(r => r?.kind !== 'table' && r?.kind !== 'linkCard').map(r=>({...r,start:Math.max(0,Number(r.start)||0),end:Math.min(source.length,Number(r.end)||0)})).filter(r=>r.end>r.start);
       const rubies=normal.filter(r=>r.kind==='ruby'&&String(r.reading||'').trim()&&!source.slice(r.start,r.end).includes('\n')).sort((a,b)=>a.start-b.start);
-      // AHAKO TCY: adjacent TCY ranges are one visual short-horizontal run.
-      // This keeps things such as ꉂ🤣𐤔 together even when Studio stored the
-      // emoji/surrogate pieces as neighbouring ranges.
-      const mergedTcy=normal.filter(r=>r.kind==='orientation'&&r.orientation==='tcy').sort((a,b)=>a.start-b.start).reduce((out,r)=>{
-        const last=out[out.length-1];
-        if(last&&r.start<=last.end){last.end=Math.max(last.end,r.end);}
-        else out.push({start:r.start,end:r.end});
-        return out;
-      },[]);
       node.classList.toggle('sp-has-ruby',rubies.length>0);
       const appendTextRange=(from,to)=>{
         const rubyNodes=new Map();
         if(to<=from)return;
         const cuts=new Set([from,to]);
-        normal.forEach(r=>{
-          if(r.end>from&&r.start<to&&!(r.kind==='orientation'&&r.orientation==='tcy')){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}
-        });
-        mergedTcy.forEach(r=>{if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));}});
-        // Split color emoji at grapheme boundaries (UTF-16 offsets) only when
-        // they are not inside an explicit TCY run. Emoji outside TCY still get
-        // automatic upright rendering on iPhone.
-        // emoji glyph gets the iPhone vertical-orientation workaround.
-        try {
-          const slice=source.slice(from,to);
-          const seg=(typeof Intl!=='undefined'&&Intl.Segmenter)?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
-          if(seg){ for(const part of seg.segment(slice)){
-            const _g=part.segment;
-            const _vs15=_g.includes('\uFE0E');
-            const _vs16=_g.includes('\uFE0F');
-            const _iosTextDefault=this._isIOSPresentationGuard()&&this._isTextDefaultEmojiCapable(_g);
-            const _emojiPresentation=!_vs15&&(_vs16||/\p{Emoji_Presentation}/u.test(_g)||/\p{Regional_Indicator}/u.test(_g)||_g.includes('\u20E3'));
-            const _airplaneText=(_g==='\u2708\uFE0E'||_g==='\u2708');
-            if(_emojiPresentation||_airplaneText||_iosTextDefault){
-              const ga=from+part.index, gb=ga+part.segment.length;
-              const inTcy=mergedTcy.some(r=>r.start<=ga&&r.end>=gb);
-              if(!inTcy){cuts.add(ga);cuts.add(gb);}
+        normal.forEach(r=>{ if(r.end>from&&r.start<to){cuts.add(Math.max(from,r.start));cuts.add(Math.min(to,r.end));} });
+        if (this._isVerticalWriting(node, scene) && typeof Intl?.Segmenter === 'function') {
+          const fragment = source.slice(from, to);
+          let unitOffset = 0;
+          for (const unit of this._verticalGlyphUnits(fragment)) {
+            if (this._isVerticalEmojiCluster(unit)) {
+              cuts.add(from + unitOffset);
+              cuts.add(from + unitOffset + unit.length);
             }
-          } }
-        } catch (_) {}
+            unitOffset += unit.length;
+          }
+        }
         const points=[...cuts].sort((a,b)=>a-b);
         for(let i=0;i<points.length-1;i++){
           const a=points[i],b=points[i+1]; if(b<=a)continue;
           const span=document.createElement('span');
           const active=normal.filter(r=>r.start<=a&&r.end>=b);
-          const visualTcy=mergedTcy.find(r=>r.start<=a&&r.end>=b);
           const segmentText=source.slice(a,b);
-          const _iosTextDefaultSegment=this._isIOSPresentationGuard()&&this._isTextDefaultEmojiCapable(segmentText);
-          if(_iosTextDefaultSegment){span.classList.add('sp-ios-text-default');if(segmentText==='\u2708')span.classList.add('sp-ios-text-default-airplane');}
+          const emojiCluster = this._isVerticalWriting(node, scene) && this._isVerticalEmojiCluster(segmentText);
           // Rich Text Player v0.18: list markers live in canonical Scene text.
           // Never synthesize a bullet from semantic ranges; that can decorate an
           // unrelated repeated word when offsets were re-anchored fuzzily.
@@ -6183,41 +6120,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&r.style?.color)span.style.color=String(r.style.color);
             if(r.kind==='span'&&r.style?.fontFamily){const richFonts={serif:'var(--sp-font-serif)',sans:'var(--sp-font-sans)',mono:'var(--sp-font-mono)'};span.style.fontFamily=richFonts[String(r.style.fontFamily)]||String(r.style.fontFamily);}
             if(r.kind==='span'&&Number(r.style?.fontScale)>0)span.style.fontSize=`${Number(r.style.fontScale)}em`;
-            if(r.kind==='span'&&Number(r.style?.fontSizePx)>0)span.style.fontSize=`${Math.max(8,Math.min(420,Number(r.style.fontSizePx)))}px`; 
-            if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
+            if(r.kind==='orientation'){
+              span.dataset.spTextOrientation=r.orientation;
+              if(r.orientation==='tcy' && !emojiCluster){
+                span.style.setProperty('-webkit-text-combine','horizontal','important');
+                span.style.setProperty('-webkit-text-combine-upright','all','important');
+                span.style.setProperty('text-combine-upright','all','important');
+              }else if(r.orientation==='sideways'||r.orientation==='upright'){
+                span.style.setProperty('-webkit-text-orientation',r.orientation,'important');
+                span.style.setProperty('text-orientation',r.orientation,'important');
+              }
+            }
           });
-          // AHAKO short-horizontal TCY: preserve readable glyph size and allow
-          // a little horizontal overflow instead of crushing 3-4 characters
-          // into one vertical-cell width. 1-2 chars stay natural; 3-4 chars
-          // are gently condensed, never miniaturised.
-          // AHAKO V14: keep TCY inside the native vertical inline flow.
-          // Do NOT switch the span itself to horizontal writing-mode: doing so
-          // gives the run its own block-axis box and visibly shifts it left.
-          // text-combine-upright keeps the glyph run centered on the same
-          // vertical column as ordinary Japanese glyphs.
-          if(visualTcy){
-            const glyphs=Array.from(segmentText).length;
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
-            span.style.whiteSpace='nowrap';
-            span.style.transformOrigin='center center';
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
-          }
-          // Emoji outside an explicit TCY range also stay in the native
-          // vertical inline flow; combining the single grapheme makes its
-          // center identical to the surrounding Japanese column.
-          if(!_iosTextDefaultSegment&&(!segmentText.includes('\uFE0E'))&&(segmentText.includes('\uFE0F')||/\p{Emoji_Presentation}/u.test(segmentText)||/\p{Regional_Indicator}/u.test(segmentText)||segmentText.includes('\u20E3'))){
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
+          if (emojiCluster) {
+            this._styleVerticalEmoji(span);
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
-          const content=span.className||span.getAttribute('style')?span:document.createTextNode(segmentText);
+          const content=span.className||span.getAttribute('style')||span.hasAttribute('data-sp-text-orientation')?span:document.createTextNode(segmentText);
           const annotation=rubies.find(r=>r.start<=a&&r.end>=b&&r.start>=from&&r.end<=to);
           if(annotation){
             let group=rubyNodes.get(annotation);
@@ -6236,15 +6156,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         appendTextRange(cursor,r.start);
         if(r.kind==='table'){
           const table=tableById.get(String(r.tableId||''));
-          const tableCard=document.createElement('div');tableCard.className='sp-rich-table-card';tableCard.dataset.tableId=String(table?.id||r.tableId||'');
-          const wrap=document.createElement('div');wrap.className='sp-rich-table-scroll';
-          wrap.appendChild(this._buildRichTable(table));tableCard.appendChild(wrap);
-          tableCard.addEventListener('click',e=>e.stopPropagation());
-          node.appendChild(tableCard);
+          const card=document.createElement('div'); card.className='sp-rich-table-card';
+          const wrap=document.createElement('div'); wrap.className='sp-rich-table-scroll';
+          wrap.appendChild(this._buildRichTable(table)); card.appendChild(wrap);
+          card.addEventListener('click',(e)=>{e.stopPropagation();});
+          node.appendChild(card);
         }else{
           const data=cardById.get(String(r.cardId||''));
           const href=(()=>{try{const u=new URL(String(data?.url||''));return /^https?:$/.test(u.protocol)&&!u.username&&!u.password?u.href:'';}catch(_){return '';}})();
-          const card=document.createElement('a');card.className='sp-rich-link-card';card.dataset.cardId=String(data?.id||r.cardId||'');card.href=href||'#';card.target='_blank';card.rel='noopener noreferrer';card.setAttribute('aria-label',String(data?.title||'外部リンク'));
+          const card=document.createElement('a');card.className='sp-rich-link-card';card.dataset.cardId=String(data?.id||'');card.href=href||'#';card.target='_blank';card.rel='noopener noreferrer';card.setAttribute('aria-label',String(data?.title||'外部リンク'));
           const copy=document.createElement('span');copy.className='sp-rich-link-card-copy';
           const title=document.createElement('strong');title.textContent=String(data?.title||href||'リンク');
           const description=document.createElement('span');description.className='sp-rich-link-card-description';description.textContent=String(data?.description||'');
@@ -6900,7 +6820,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (typeof scene.subText === 'string' && scene.subText.length) {
           const sub = document.createElement('div');
           sub.className = 'sp-subtext';
-          this._appendIOSPresentationSafeText(sub, scene.subText);
+          sub.textContent = scene.subText;
           this._applyTextStyle(sub, presentation.subText || {}, true);
           article.appendChild(sub);
         }
@@ -6965,29 +6885,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const outlineWidth=Math.max(0,Math.min(12,Number(style.outlineWidth)||0));
       if(outlineWidth>0){
         const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-        const outlineColor=String(style.outlineColor|| (darkTheme?'#000000':'#FFFFFF'));
-        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;
-        node.style.paintOrder='stroke fill';
-        node.classList.add('sp-text-outline');
+        const outlineColor=String(style.outlineColor||(darkTheme?'#000000':'#FFFFFF'));
+        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;node.style.paintOrder='stroke fill';node.classList.add('sp-text-outline');
       }else{node.style.webkitTextStroke='';node.style.paintOrder='';node.classList.remove('sp-text-outline');}
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
-      if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';
-      if (Number.isFinite(Number(style.angle)) && Math.abs(Number(style.angle)) > 0.01) {
-        node.style.rotate = `${Math.max(-180,Math.min(180,Number(style.angle)))}deg`;
-        // Keep the rotation pivot stable while entrance effects are running.
-        // Some effects used to change transform-origin (e.g. scream/stretch),
-        // which made angled text visibly jump when the animation finished.
-        node.style.transformOrigin = '50% 50%';
-      } else {
-        node.style.rotate = '';
-        node.style.transformOrigin = '';
-      }
-      // Reflection is independent from entrance-effect transforms and text angle.
-      // Use the individual scale property so effect animations can keep owning transform.
-      if (style.flip === 'horizontal') node.style.scale = '-1 1';
-      else if (style.flip === 'vertical') node.style.scale = '1 -1';
-      else if (style.flip === 'both') node.style.scale = '-1 -1';
-      else node.style.scale = '';
       const shadows={
         none:'none',
         soft:'0 1px 4px rgba(0,0,0,.48)',
@@ -7009,32 +6910,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.dataset.spSizeMode = size == null || size === '' || size === 'auto' || size === 'normal' ? 'auto' : 'fixed';
       const landscapeSizes = isSubText
         ? { small: 9, normal: 11, large: 13, xl: 15 }
-        : { small:16, normal:19, large:24, xl:30, xxl:40, fullscreen:54, giant:72, breakout:132 };
+        : { small: 16, normal: 19, large: 24, xl: 30 };
       const landscapeSize = typeof size === 'number' && Number.isFinite(size) && size > 0
         ? size * .75 : (landscapeSizes[size] || (isSubText ? 11 : 19));
       node.style.setProperty('--sp-landscape-font', `${landscapeSize}px`);
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
-        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)', xxl:'clamp(42px,10cqw,72px)', fullscreen:'clamp(58px,15cqw,108px)', giant:'clamp(78px,21cqw,150px)', breakout:'clamp(150px,42cqw,320px)' };
+        : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)' };
       if (typeof size === 'number' && Number.isFinite(size) && size > 0) node.style.fontSize = `${size}px`;
       else if (typeof size === 'string' && size !== 'auto' && tokenSizes[size]) node.style.fontSize = tokenSizes[size];
-
-      // Breakout deliberately ignores the normal readable-text box. It may exceed the viewport.
-      if (!isSubText && size === 'breakout') {
-        node.dataset.textBreakout = 'true';
-        node.style.width = 'max-content';
-        node.style.maxWidth = 'none';
-        node.style.whiteSpace = 'nowrap';
-        node.style.overflow = 'visible';
-        node.style.overflowWrap = 'normal';
-      } else {
-        delete node.dataset.textBreakout;
-        node.style.width = '';
-        node.style.maxWidth = '';
-        node.style.whiteSpace = style.wrap === 'nowrap' ? 'nowrap' : '';
-        node.style.overflow = '';
-        node.style.overflowWrap = style.wrap === 'nowrap' ? 'normal' : '';
-      }
 
       if (style.wrap === 'nowrap') {
         node.style.whiteSpace = 'nowrap';
@@ -7066,7 +6950,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.marginLeft='';
         node.style.marginRight='';
       }
-      if (size !== 'breakout' && style.writingMode !== 'vertical-rl' && Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
+      if (style.writingMode !== 'vertical-rl' && Number.isFinite(Number(style.sideMargin)) && Number(style.sideMargin) > 0) {
         const margin=Math.max(0,Math.min(40,Number(style.sideMargin)));
         node.style.width=`calc(100% - ${margin*2}%)`;
         node.style.maxWidth=`calc(100% - ${margin*2}%)`;
@@ -7187,23 +7071,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }, cleanupAfter);
     }
 
-    _playTextEntryDirectionOnce(scene, article) {
-      const direction=scene?.presentation?.text?.entryDirection;
-      if(!direction||direction==='auto'||!article||article.dataset.textEntryDirectionPlayed==='true')return;
-      const vector={top:[0,-1],bottom:[0,1],left:[-1,0],right:[1,0],'top-left':[-1,-1],'top-right':[1,-1],'bottom-left':[-1,1],'bottom-right':[1,1]}[direction];
-      const text=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text');
-      if(!vector||!text||typeof text.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
-      article.dataset.textEntryDirectionPlayed='true';
-      const width=Math.max(1,this.host?.clientWidth||global.innerWidth||360),height=Math.max(1,this.host?.clientHeight||global.innerHeight||640);
-      const dx=Math.round(Math.max(48,Math.min(240,width*.28))*vector[0]);
-      const dy=Math.round(Math.max(48,Math.min(240,height*.18))*vector[1]);
-      const timing=scene.presentation?.effectTiming||{};
-      const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
-      const delay=Math.max(0,Math.min(6000,(Number(timing.delay)||0)*1000));
-      const animation=text.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
-      animation.onfinish=()=>{try{animation.cancel();}catch{}};
-    }
-
     _playSceneImageEffectOnce(scene, article) {
       const image=scene?.presentation?.image;
       const object=article?.querySelector(':scope > .sp-scene-image .sp-scene-image-object')||article?.querySelector('.sp-scene-image-object');
@@ -7243,7 +7110,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article,scene);
       this._playSceneImageEffectOnce(scene, article);
-      this._playTextEntryDirectionOnce(scene,article);
 
       if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
         this._startTyping(scene, textNode, typing);

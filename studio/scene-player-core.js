@@ -104,6 +104,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.auto = false;
       this.ended = false;
       this.autoTimer = null;
+      // Monotonic zero point for authored absolute Scene cues. It begins with
+      // Scene 1/audio, never with a later per-Scene timeout.
       this.playbackTimelineStartedAt = 0;
       this.touchStartY = null;
       this.touchStartX = null;
@@ -199,7 +201,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._buildShell();
       this._initAudioDiagnosticOverlay();
       this._bindControls();
-      this._bindLandscapeImmersion();
     }
 
     _buildShell() {
@@ -229,7 +230,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           </div>
           <button class="sp-cover-start" type="button">はじめる</button>
         </section>
-        <button class="sp-immersive-toggle" type="button" aria-label="操作を表示" aria-expanded="false">⋯</button>
         <header class="sp-header">
           <button class="sp-button sp-prev" type="button" aria-label="Previous scene">‹</button>
           <div class="sp-meta">
@@ -362,29 +362,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
-    _bindLandscapeImmersion() {
-      if(typeof global.matchMedia!=='function')return;
-      const mq=global.matchMedia('(orientation: landscape) and (max-height: 600px) and (any-pointer: coarse)');
-      const button=this.host.querySelector('.sp-immersive-toggle');
-      const updateLabel=()=>{const shown=this.host.classList.contains('sp-immersive-controls'),en=this.uiLanguage==='en';button.setAttribute('aria-expanded',String(shown));button.setAttribute('aria-label',shown?(en?'Hide controls':'操作を隠す'):(en?'Show controls':'操作を表示'));button.textContent=shown?'×':'⋯';};
-      const reflow=()=>{
-        if(this.destroyed||!this.document||!this.els.stage?.clientHeight)return;
-        const nodes=Array.from(this.els.scenes.children),entries=nodes.map(node=>({scene:this.document.scenes.find(sc=>sc.id===node.dataset.sceneId)}));
-        if(!nodes.length||entries.some(e=>!e.scene))return;
-        nodes.forEach(node=>node.querySelectorAll('.sp-text[data-writing-mode="vertical-rl"],.sp-subtext[data-writing-mode="vertical-rl"]').forEach(text=>this._syncVerticalTextHeight(text)));
-        if(this.host.dataset.display==='overlay')this._positionOverlayNodes(nodes,entries);else this._positionSceneNodes(nodes,entries,0);
-        // Existing viewers/rolls keep their timeline; no Scene/audio replay on rotation.
-        this.els.scenes.querySelectorAll('.sp-credits-viewport').forEach(v=>v.dispatchEvent(new Event('sceneplayer:reflow')));
-      };
-      const scheduleReflow=()=>{if(this._immersiveRaf)cancelAnimationFrame(this._immersiveRaf);this._immersiveRaf=requestAnimationFrame(()=>{this._immersiveRaf=0;reflow();});};
-      const orientationChanged=()=>{this.host.classList.toggle('sp-immersive',mq.matches);this.host.classList.remove('sp-immersive-controls');updateLabel();scheduleReflow();};
-      this._on(mq,'change',orientationChanged);
-      this._on(global,'resize',scheduleReflow,{passive:true});
-      if(global.visualViewport)this._on(global.visualViewport,'resize',scheduleReflow,{passive:true});
-      this._on(button,'click',e=>{e.preventDefault();e.stopPropagation();this.host.classList.toggle('sp-immersive-controls');updateLabel();});
-      orientationChanged();
-    }
-
     _bindControls() {
       // iOS/WebKit: the reading gesture unlocks Web Audio and arms playback.
       const pressPaper = () => {
@@ -407,7 +384,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const target = e?.target;
         const isControl = target?.closest?.('button, a, .sp-scene-image.is-zoomable, .sp-scene-image.is-view-rec');
         const isEditableText = this.host.classList.contains('live-edit-enabled')
-          && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext');
+          && target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext, .sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-notification-text');
         const atLastScene = !!this.document && !this.ended
           && this.index >= Math.max(0, (this.document.scenes?.length || 1) - 1);
         if (this._iosStableMediaBank && atLastScene && !isControl && !isEditableText
@@ -518,43 +495,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this.next();
       });
 
-      // V129 — Public Player can place visual/tap layers above the foreground image.
-      // On iPhone Safari that means event.target is not always the .sp-scene-image
-      // even though the user's finger is physically inside the image. Studio does
-      // not have that shell-layer mismatch. Route the tap geometrically in capture
-      // phase so VIEW POINT owns the gesture before generic Scene advance can run.
-      this._on(this.els.stage, 'click', (e) => {
-        if (this.historyOpen || e.defaultPrevented) return;
-        // TAP safe zone always belongs to generic Scene advance, never image open.
-        if (isTapAdvanceSafeZone(e)) return;
-        const currentScene = this.document?.scenes?.[this.index];
-        const sceneImage = currentScene?.presentation?.image;
-        const pages = Array.isArray(sceneImage?.pages)
-          ? sceneImage.pages.filter(page => page && typeof page.src === 'string' && page.src)
-          : [];
-        // Bundles may store the first page only in pages[0], with no legacy src
-        // on the parent image. Resolve the same first page as _appendSceneImage.
-        const firstImage = pages[0] || sceneImage;
-        const hasViewPoints = pages.some(page => (page.viewPoints?.points || page.viewRec?.points || []).length) || (sceneImage?.viewPoints?.points || sceneImage?.viewRec?.points || []).length > 0;
-        const action = sceneImage?.tapAction || (hasViewPoints ? 'viewRec' : pages.length > 1 ? 'fullscreen' : sceneImage?.fullscreen === false ? 'none' : 'fullscreen');
-        if (!firstImage?.src || action === 'none') return;
-
-        const activeScene = this.els.stage.querySelector('.sp-scene.is-active');
-        const imageTarget = activeScene?.querySelector('.sp-scene-image');
-        if (!imageTarget) return;
-        // The media is rotated independently of its layout wrapper. Hit-test its
-        // painted bounds so taps near the visible corners still open the image.
-        const rect = (imageTarget.querySelector('.sp-scene-image-media') || imageTarget).getBoundingClientRect();
-        const x = Number(e.clientX);
-        const y = Number(e.clientY);
-        if (!Number.isFinite(x) || !Number.isFinite(y)
-            || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
-
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        // Reuse the wrapper's own handler to keep VIEW POINT and page bundles in sync.
-        imageTarget._sceneImageOpen?.(e);
-      }, true);
+      // Live Editor desktop selection guard. A drag that starts on editable text can
+      // finish outside the text node; browsers may then synthesize a stage click.
+      // Remember that gesture from pointerdown so releasing a text selection never
+      // means "next Scene".
+      let liveEditTextPointerGesture = false;
+      const rememberLiveEditTextGesture = (e) => {
+        liveEditTextPointerGesture = !!(this.host.classList.contains('live-edit-enabled')
+          && e?.target?.closest?.('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext, .sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-notification-text'));
+      };
+      if ('PointerEvent' in global) this._on(this.els.stage, 'pointerdown', rememberLiveEditTextGesture, true);
+      else this._on(this.els.stage, 'mousedown', rememberLiveEditTextGesture, true);
 
       this._on(this.els.stage, 'click', (e) => {
         // Studio direct-layout mode owns the whole gesture. A resize/rotate release
@@ -565,14 +516,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           return;
         }
         if (e.target.closest('button')) return;
+        if (liveEditTextPointerGesture) {
+          liveEditTextPointerGesture = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
 
-        // V133 — even when a large image physically overlaps this area, tapping
-        // around the visible TAP hint must fall through to this handler's next().
+        // Foreground Scene images are interactive content, not the stage's
+        // generic "next Scene" tap surface. Handle them here at the same level
+        // as navigation so Studio and the public Player behave identically.
+        // V96 — Scene images must never fall through to the generic stage tap.
+        // Do not depend on decoration classes (is-view-rec / is-zoomable): those
+        // classes are presentation hints and can lag behind live Studio data.
+        // The Scene document is the single source of truth for the tap action.
         const inTapAdvanceSafeZone = isTapAdvanceSafeZone(e);
-
-        // V128 — match Studio's proven V96 image routing exactly.
-        // Never depend on decoration classes (`is-view-rec` / `is-zoomable`):
-        // the Scene document is the source of truth for the tap action.
         const imageTarget = e.target.closest('.sp-scene-image');
         if (imageTarget && !inTapAdvanceSafeZone) {
           const currentScene = this.document?.scenes?.[this.index];
@@ -583,8 +541,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             e.stopPropagation();
             if (sceneImage?.src) {
               if (action === 'viewRec') {
-                // VIEW POINT owns this tap even if its authored point data is
-                // empty/malformed; it must never become a generic Scene advance.
+                // VIEW REC owns this tap even if a malformed/empty recording is
+                // encountered. Never reinterpret it as "next Scene".
                 if ((sceneImage.viewPoints?.points||sceneImage.viewRec?.points)?.length > 0) this._openSceneImageViewRec(sceneImage, imageTarget);
                 else this._openSceneImage(sceneImage.src, sceneImage.alt || '', {sourceEl:imageTarget});
               } else if (action === 'fullscreen') {
@@ -596,7 +554,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
 
         if (this.host.classList.contains('live-edit-enabled')
-            && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext')) {
+            && e.target.closest('.sp-scene.is-active .sp-text, .sp-scene.is-active .sp-subtext, .sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-notification-text')) {
           return;
         }
         // AHAKO_360_PROTO_V1_3 — suppress only the synthetic click emitted
@@ -658,20 +616,54 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       if (this.options.swipe) {
         this._on(this.els.stage, 'touchstart', (e) => {
-          if (this._isSpatialBackground?.()) { this.touchStartY=null; this.touchStartX=null; return; }
+          // 360° Scenes own their touch gestures. Background drag and text-only
+          // PAST are resolved by the panorama pointer handler below, so the legacy
+          // Player swipe navigation must not also advance/open PAST.
+          if (this._isSpatialBackground?.()) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            return;
+          }
+          // Studio direct-layout editor owns every touch gesture. Do not arm
+          // Player swipe navigation while text is being moved or a slider is dragged.
+          if (this.host.classList.contains('sp-direct-layout-editing')) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
           const t = e.changedTouches[0];
           this.touchStartY = t.clientY;
           this.touchStartX = t.clientX;
         }, { passive: true });
 
         this._on(this.els.stage, 'touchmove', (e) => {
-          if (this._isSpatialBackground?.()) { if(e.cancelable)e.preventDefault(); return; }
+          if (this._is360Background?.()) return;
+          if (this.host.classList.contains('sp-direct-layout-editing')) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
           // Keep the page itself fixed. History has its own native momentum scroller.
           if (e.cancelable) e.preventDefault();
         }, { passive: false });
 
         this._on(this.els.stage, 'touchend', (e) => {
-          if (this._isSpatialBackground?.()) { this.touchStartY=null; this.touchStartX=null; return; }
+          if (this._isSpatialBackground?.()) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            return;
+          }
+          // iPhone emits touchend independently of the pointer-captured editor control.
+          // Never reinterpret that release as a Scene swipe while direct layout is open.
+          if (this.host.classList.contains('sp-direct-layout-editing')) {
+            this.touchStartY = null;
+            this.touchStartX = null;
+            this.suppressNextClick = true;
+            if (e.cancelable) e.preventDefault();
+            return;
+          }
           if (this.touchStartY == null || this.touchStartX == null) return;
           const t = e.changedTouches[0];
           const dy = t.clientY - this.touchStartY;
@@ -1317,6 +1309,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           } catch (e) { reject(e); }
         }))
         .then((buffer) => {
+          if(this.destroyed)return null;
           this._bufferAudioCache.set(key, buffer);
           emit(this.host, 'sceneplayer:audiobufferready', { src: key, duration: buffer?.duration || 0 });
           return buffer;
@@ -2691,6 +2684,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._scheduleAuto();
         return true;
       }
+      if(performance.now() < (Number(this._sceneBoundaryGuardUntil)||0))return true;
       this._clearAutoTimer();
 
       // The current Scene's entrance belongs only to its arrival.
@@ -3534,11 +3528,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!this.auto || this.ended || !this.currentScene || this.typingState) return;
       this._clearAutoTimer();
       const cue=asNumber(this.currentScene.cueAt,NaN);
-      if(!this.playbackTimelineStartedAt)this.playbackTimelineStartedAt=performance.now()-(Number.isFinite(cue)?Math.max(0,cue):0);
+      if(!this.playbackTimelineStartedAt){
+        this.playbackTimelineStartedAt=performance.now()-(Number.isFinite(cue)?Math.max(0,cue):0);
+      }
       const nextCue=asNumber(this.document?.scenes?.[this.index+1]?.cueAt,NaN);
       const pause=Math.max(0,asNumber(this.currentScene.pause,this.options.autoDelay));
-      const targetElapsed=Number.isFinite(nextCue)?Math.max(0,nextCue):(Number.isFinite(cue)?Math.max(0,cue)+pause:NaN);
-      const delay=Number.isFinite(targetElapsed)?Math.max(0,(this.playbackTimelineStartedAt+targetElapsed)-performance.now()):pause;
+      const targetElapsed=Number.isFinite(nextCue)
+        ? Math.max(0,nextCue)
+        : (Number.isFinite(cue)?Math.max(0,cue)+pause:NaN);
+      // New recordings use one absolute monotonic deadline, so render/layout
+      // cost cannot accumulate over dozens of Scenes. Legacy pause-only works
+      // retain the established relative timer behavior.
+      const delay=Number.isFinite(targetElapsed)
+        ? Math.max(0,(this.playbackTimelineStartedAt+targetElapsed)-performance.now())
+        : pause;
       this.autoTimer = setTimeout(() => {
         this.autoTimer = null;
         if (this.index >= this.document.scenes.length - 1) {
@@ -3592,9 +3595,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.classList.add('sp-layout-measuring');
       const nodeRect=this._logicalRect(node.getBoundingClientRect());
       const boxHeight=Math.max(1,nodeRect.height);
+      const creditsViewport=node.querySelector(':scope > .sp-credits > .sp-credits-viewport');
       const text=node.querySelector('.sp-text');
       const frame=node.querySelector('.sp-handdrawn-frame');
-      const vertical=text?.dataset?.writingMode==='vertical-rl';
+      const vertical=!creditsViewport&&text?.dataset?.writingMode==='vertical-rl';
       let inkLeft=0,inkRight=Math.max(1,nodeRect.width),inkTop=0,inkBottom=boxHeight;
       const contentRects=[];
       const addElementRect=(element)=>{
@@ -3618,7 +3622,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // images could occupy the landing space reserved for the next Scene.
       const boardPost=node.querySelector(':scope > .sp-web-board-post');
       const chatRow=node.querySelector(':scope > .sp-chat-row');
-      if(boardPost){
+      if(creditsViewport){
+        // Roll text (including the author-only empty body) can be outside its
+        // clipped window. Anchor the stable viewport, never the moving text.
+        addElementRect(creditsViewport);
+      }else if(boardPost){
         // Board text is nested inside the post. Measure the complete post so
         // long responses reserve their real height before the next Scene lands.
         addElementRect(boardPost);
@@ -3642,16 +3650,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return {height,inkLeft,inkRight,inkTop,inkBottom,inkCenterX:(inkLeft+inkRight)/2,inkCenterY:(inkTop+inkBottom)/2};
     }
 
+    _viewportWidth() {
+      // Studio device previews are visually scaled inside a desktop page.
+      // Use the selected logical device width for layout/position decisions;
+      // otherwise a phone preview can accidentally pick PC-specific positions.
+      const preview=this.host?.closest?.('.preview-device-phone, .preview-device-tablet, .preview-device-pc');
+      if(preview?.classList?.contains('preview-device-phone')) return 390;
+      if(preview?.classList?.contains('preview-device-tablet')) return 768;
+      if(preview?.classList?.contains('preview-device-pc')) return 1440;
+      return Math.max(1, Number(this.host?.clientWidth) || Number(global.innerWidth) || 1);
+    }
+
     _framePosition(scene) {
       const common=scene?.presentation?.text?.position||scene?.presentation?.frame?.position||{};
-      // V7: one normalized text coordinate system across phone/tablet/PC.
+      // V7: direct text placement is one normalized coordinate system for every preview size.
+      // Never resurrect the legacy PC-only branch when switching device previews.
       const source=common;
       const preset=String(source.preset||'auto');
-      const presets={
-        'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],
-        left:[.18,.5],center:[.5,.5],right:[.82,.5],
-        'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]
-      };
+      const presets={'top-left':[.18,.18],top:[.5,.18],'top-right':[.82,.18],left:[.18,.5],center:[.5,.5],right:[.82,.5],'bottom-left':[.18,.82],bottom:[.5,.82],'bottom-right':[.82,.82]};
       if(preset==='custom'){
         const x=Number(source.x),y=Number(source.y);
         // Free custom placement for oversized / rotated effect text.
@@ -3662,7 +3678,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _customPositionTransform(item, position, stageWidth, stageHeight, margin) {
-      const contentWidth=Math.max(1,item.node.clientWidth||item.node.getBoundingClientRect().width);
+      const contentWidth=Math.max(1,item.node.clientWidth);
       const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
       const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
       // Custom means custom: do not force the glyph box back inside the viewport.
@@ -3676,20 +3692,48 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const margin=stageWidth<=600?10:16;
       const positions=metrics.map(item=>{
         const position=this._framePosition(item.scene);
-        let x=0,y=focusY-item.inkCenterY-(item.scene.type==='dialogue'?12:0);
+        let x=0;
+        let y=focusY-item.inkCenterY-(item.scene.type==='dialogue'?12:0);
         if(position.preset!=='auto'){
           ({x,y}=this._customPositionTransform(item,position,stageWidth,stageHeight,margin));
         }
         return {x,y};
       });
+
+      // An overlay Scene is attached to the group immediately before it.  Its
+      // own adjusted coordinate remains relative to that group, so advancing to
+      // the next normal Scene moves every attached balloon as one piece.
       const groups=[];
-      metrics.forEach((item,i)=>{const attach=i>0&&(item.scene?.presentation?.display||'stack')==='overlay';if(attach&&groups.length)groups[groups.length-1].push(i);else groups.push([i]);});
-      const bounds=indices=>{const left=Math.min(...indices.map(i=>positions[i].x+metrics[i].inkLeft)),right=Math.max(...indices.map(i=>positions[i].x+metrics[i].inkRight)),top=Math.min(...indices.map(i=>positions[i].y+metrics[i].inkTop)),bottom=Math.max(...indices.map(i=>positions[i].y+metrics[i].inkBottom));return {left,right,top,bottom,centerX:(left+right)/2,centerY:(top+bottom)/2};};
+      metrics.forEach((item,i)=>{
+        const attach=i>0&&(item.scene?.presentation?.display||'stack')==='overlay';
+        if(attach&&groups.length)groups[groups.length-1].push(i);
+        else groups.push([i]);
+      });
+      const bounds=indices=>{
+        const left=Math.min(...indices.map(i=>positions[i].x+metrics[i].inkLeft));
+        const right=Math.max(...indices.map(i=>positions[i].x+metrics[i].inkRight));
+        const top=Math.min(...indices.map(i=>positions[i].y+metrics[i].inkTop));
+        const bottom=Math.max(...indices.map(i=>positions[i].y+metrics[i].inkBottom));
+        return {left,right,top,bottom,centerX:(left+right)/2,centerY:(top+bottom)/2};
+      };
       for(let g=groups.length-2;g>=0;g-=1){
-        const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next),currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]],flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
+        const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next);
+        const currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]];
+        const flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         let dx=0,dy=0;
-        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
-        else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=0;dy=nextBounds.top-gap-currentBounds.bottom;}
+        if(flow==='horizontal'){
+          const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap;
+          const verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';
+          dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;
+          dy=nextBounds.centerY-currentBounds.centerY;
+        }else{
+          const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';
+          const gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;
+          // Vertical flow owns Y only. A newly placed Scene on the left/right
+          // must not drag older fixed text diagonally toward its own X.
+          dx=0;
+          dy=nextBounds.top-gap-currentBounds.bottom;
+        }
         current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
       }
       metrics.forEach((item,i)=>{item.node.style.visibility='';item.node.style.zIndex=String(20+i);});
@@ -3699,9 +3743,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _measureScenePositions(nodes, sceneEntries, extraGap = 0) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const stageHeight = Math.max(1,this.els.stage.clientHeight||stageRect.height/this._layoutScale());
-      const stageWidth = Math.max(1,this.els.stage.clientWidth||stageRect.width);
-      const focusRatio = stageWidth <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
+      const stageHeight = Math.max(1,this.els.stage.clientHeight);
+      const stageWidth = Math.max(1,this.els.stage.clientWidth);
+      const focusRatio = this._viewportWidth() <= 600 ? this.options.focusYMobile : this.options.focusYDesktop;
       const focusY = stageHeight * focusRatio;
 
       const metrics = nodes.map((node, i) => ({
@@ -3712,6 +3756,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }));
       metrics.forEach(item=>{item.node.style.visibility='';item.node.style.zIndex='';});
 
+      // A completed overlay pair stays welded together when a later Scene
+      // resumes normal stack flow. This is what lets two adjusted speech
+      // balloons overlap, then leave upward without their overlap collapsing.
       if(metrics.some((item,i)=>i>0&&(item.scene?.presentation?.display||'stack')==='overlay')){
         return this._measureCarriedOverlayPositions(metrics,sceneEntries,stageWidth,stageHeight,focusY,extraGap);
       }
@@ -3732,17 +3779,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(flow==='horizontal'){
           const gap=Math.max(this._sceneGap(current.scene,next.scene),stageWidth*.09)+extraGap;
           const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
-          positions[i]={
-            x:verticalReading
-              ? nextPosition.x+next.inkRight+gap-current.inkLeft
-              : nextPosition.x+next.inkLeft-gap-current.inkRight,
-            y:nextPosition.y+next.inkCenterY-current.inkCenterY
-          };
+          positions[i]={x:verticalReading?nextPosition.x+next.inkRight+gap-current.inkLeft:nextPosition.x+next.inkLeft-gap-current.inkRight,y:nextPosition.y+next.inkCenterY-current.inkCenterY};
         }else{
           const verticalGap=eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0;
           const gap=this._sceneGap(current.scene,next.scene)+verticalGap+extraGap;
           const ownPosition=this._framePosition(current.scene);
-          const ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,stageWidth<=600?10:16).x;
+          const ownX=ownPosition.preset==='auto'?0:this._customPositionTransform(current,ownPosition,stageWidth,stageHeight,this._viewportWidth()<=600?10:16).x;
           positions[i]={x:ownX,y:nextPosition.y+next.inkTop-gap-current.inkBottom};
         }
       }
@@ -3750,63 +3792,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const currentFrame=newest.node.querySelector('.sp-handdrawn-frame');
       if(currentFrame&&metrics.length>1)metrics.slice(0,-2).forEach(item=>{item.node.style.visibility='hidden';});
       if(currentFrame&&metrics.length>1&&this._framePosition(newest.scene).preset==='auto'){
-        const previous=metrics[metrics.length-2];
-        const previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
-        if(previousFrame){
-          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
-          const gap=stageWidth<=600?14:24;
-          const currentWidth=newest.inkRight-newest.inkLeft;
-          const previousWidth=previous.inkRight-previous.inkLeft;
-          const currentHeight=newest.inkBottom-newest.inkTop;
-          const previousHeight=previous.inkBottom-previous.inkTop;
-          const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale());
-          const availableHeight=stageHeight*.86;
-          const margin=stageWidth<=600?10:16;
-          previous.node.style.visibility='';
-          previous.node.style.zIndex='20';
-          newest.node.style.zIndex='30';
-          if(flow==='horizontal'){
-            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl';
-            const fits=currentWidth+previousWidth+gap<=availableWidth-margin*2;
-            const groupWidth=currentWidth+previousWidth+gap;
-            const groupLeft=(availableWidth-groupWidth)/2;
-            const currentLeft=fits?(verticalReading?groupLeft:groupLeft+previousWidth+gap):(verticalReading?margin:availableWidth-margin-currentWidth);
-            const previousLeft=fits?(verticalReading?groupLeft+currentWidth+gap:groupLeft):(verticalReading?availableWidth-margin-previousWidth:margin);
-            const centerY=stageHeight*.48;
-            positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};
-            positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};
-          }else{
-            const fits=currentHeight+previousHeight+gap<=availableHeight;
-            const groupHeight=currentHeight+previousHeight+gap;
-            const groupTop=(stageHeight-groupHeight)/2;
-            const previousTop=fits?groupTop:margin;
-            const currentTop=fits?groupTop+previousHeight+gap:stageHeight-margin-currentHeight;
-            positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:previousTop-previous.inkTop};
-            positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:currentTop-newest.inkTop};
-          }
-        }
-      }
-
-      metrics.forEach((item,i)=>{
-        if(i!==metrics.length-1)return;
-        if(!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;
-        const position=this._framePosition(item.scene);
-        if(position.preset==='auto')return;
-        const margin=stageWidth<=600?10:16;
-        positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,margin);
-      });
-
-      if(currentFrame&&metrics.length>1){
         const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');
-        previous.node.style.zIndex='20';newest.node.style.zIndex='30';
-        if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){
-          const availableWidth=Math.max(1,newest.node.clientWidth||newest.node.getBoundingClientRect().width/this._layoutScale()),margin=stageWidth<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
-          if(flow==='horizontal'){
-            const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;
-            positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};
-          }else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};
+        if(previousFrame){
+          const flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical',gap=this._viewportWidth()<=600?14:24,currentWidth=newest.inkRight-newest.inkLeft,previousWidth=previous.inkRight-previous.inkLeft,currentHeight=newest.inkBottom-newest.inkTop,previousHeight=previous.inkBottom-previous.inkTop,availableWidth=Math.max(1,newest.node.clientWidth),availableHeight=stageHeight*.86,margin=this._viewportWidth()<=600?10:16;
+          previous.node.style.visibility='';previous.node.style.zIndex='20';newest.node.style.zIndex='30';
+          if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',fits=currentWidth+previousWidth+gap<=availableWidth-margin*2,groupWidth=currentWidth+previousWidth+gap,groupLeft=(availableWidth-groupWidth)/2,currentLeft=fits?(verticalReading?groupLeft:groupLeft+previousWidth+gap):(verticalReading?margin:availableWidth-margin-currentWidth),previousLeft=fits?(verticalReading?groupLeft+currentWidth+gap:groupLeft):(verticalReading?availableWidth-margin-previousWidth:margin),centerY=stageHeight*.48;positions[metrics.length-1]={x:currentLeft-newest.inkLeft,y:centerY-newest.inkCenterY};positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:centerY-previous.inkCenterY};}
+          else{const fits=currentHeight+previousHeight+gap<=availableHeight,groupHeight=currentHeight+previousHeight+gap,groupTop=(stageHeight-groupHeight)/2,previousTop=fits?groupTop:margin,currentTop=fits?groupTop+previousHeight+gap:stageHeight-margin-currentHeight;positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:previousTop-previous.inkTop};positions[metrics.length-1]={x:availableWidth/2-newest.inkCenterX,y:currentTop-newest.inkTop};}
         }
       }
+
+      metrics.forEach((item,i)=>{if(i!==metrics.length-1||!item.node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame'))return;const position=this._framePosition(item.scene);if(position.preset==='auto')return;positions[i]=this._customPositionTransform(item,position,stageWidth,stageHeight,this._viewportWidth()<=600?10:16);});
+      if(currentFrame&&metrics.length>1){const previous=metrics[metrics.length-2],previousFrame=previous.node.querySelector('.sp-handdrawn-frame');previous.node.style.zIndex='20';newest.node.style.zIndex='30';if(previousFrame&&this._framePosition(newest.scene).preset!=='auto'&&this._framePosition(previous.scene).preset==='auto'){const availableWidth=Math.max(1,newest.node.clientWidth),margin=this._viewportWidth()<=600?10:16,flow=newest.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';if(flow==='horizontal'){const verticalReading=newest.scene?.presentation?.text?.writingMode==='vertical-rl',previousWidth=previous.inkRight-previous.inkLeft,previousLeft=verticalReading?availableWidth-margin-previousWidth:margin;positions[metrics.length-2]={x:previousLeft-previous.inkLeft,y:positions[metrics.length-1].y+newest.inkCenterY-previous.inkCenterY};}else positions[metrics.length-2]={x:availableWidth/2-previous.inkCenterX,y:margin-previous.inkTop};}}
 
       return metrics.map((item, i) => ({ ...item, ...positions[i] }));
     }
@@ -3822,15 +3818,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _positionOverlayNodes(nodes, sceneEntries) {
       if (!nodes.length) return [];
       const stageRect = this.els.stage.getBoundingClientRect();
-      const stageWidth=Math.max(1,this.els.stage.clientWidth||stageRect.width),stageHeight=Math.max(1,this.els.stage.clientHeight||stageRect.height);
+      const stageHeight=Math.max(1,this.els.stage.clientHeight),stageWidth=Math.max(1,this.els.stage.clientWidth);
       const focusY = stageHeight * (stageWidth <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
-        const geometry=this._measureSceneGeometry(node,stageRect);
-        const position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
-        let x=0,y=focusY-geometry.height/2;
-        if(position.preset!=='auto'){
-          ({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,stageWidth<=600?10:16));
-        }
+        const geometry=this._measureSceneGeometry(node,stageRect),position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
+        let x=0,y=focusY-Math.max(1,node.offsetHeight)/2;
+        if(position.preset!=='auto')({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,this._viewportWidth()<=600?10:16));
         node.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
         node.style.zIndex = String(20 + i);
         return { node, scene: sceneEntries[i]?.scene, x, y, height: geometry.height };
@@ -3845,6 +3838,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.dataset.chatContinuation = String(i>0 && this._chatContinues(sceneEntries[i-1]?.scene, sceneEntries[i]?.scene));
         node.classList.toggle('is-active', distance === 0);
         if (distance > 0) node.classList.add('is-visible');
+      });
+    }
+
+    _disposeSceneNodeObservers(node) {
+      if (!node) return;
+      const scenes = node.matches?.('.sp-scene') ? [node] : [...(node.querySelectorAll?.('.sp-scene') || [])];
+      scenes.forEach((scene) => {
+        (scene._spResizeObservers || []).forEach((observer) => observer.disconnect?.());
+        delete scene._spResizeObservers;
       });
     }
 
@@ -3871,7 +3873,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       oldById.forEach((node) => {
         node.classList.add('sp-layout-leaving');
-        this._layoutTimeout(() => node.remove(), 430);
+        this._layoutTimeout(() => {
+          this._disposeSceneNodeObservers(node);
+          node.remove();
+        }, 430);
       });
 
       this._updateSceneAges(nodes, visible);
@@ -3961,6 +3966,26 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const scenes = this.document.scenes;
       const active = scenes[this.index];
+
+      // Spatial/audio Scene boundary guard.
+      // Commit this synchronously on arrival so a rapid second tap cannot pass
+      // through the exact Scene that starts a panorama/360 background or BGM/Ambient.
+      if(this._audioRenderMode==='advance'){
+        const bg=active?.presentation?.background||{};
+        const audio=Array.isArray(active?.audio)?active.audio:[];
+        const startsPersistentAudio=audio.some(cmd=>{
+          const ch=String(cmd?.channel||'').toLowerCase();
+          const action=String(cmd?.action||'play').toLowerCase();
+          return (ch==='bgm'||ch==='ambient') && Boolean(cmd?.src) &&
+            (action==='play'||action==='start');
+        });
+        const commitsSpatial=Boolean(bg?.src) || bg?.projection==='panorama' || bg?.projection==='360';
+        this._sceneBoundaryGuardUntil=(commitsSpatial||startsPersistentAudio)
+          ?performance.now()+320:0;
+      }else{
+        this._sceneBoundaryGuardUntil=0;
+      }
+
       const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
@@ -3969,6 +3994,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._renderStackWithBreathing(visible, active);
       } else {
         // Restore/load/history jumps should be immediate and deterministic.
+        this._disposeSceneNodeObservers(this.els.scenes);
         this.els.scenes.innerHTML = '';
         const nodes = [];
         const stillNodes = [];
@@ -4135,9 +4161,48 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     // AHAKO_360_PROTO_V1_2 — screen-fixed text/UI, yaw-driven horizontal panorama.
+
+    _initLoadDiagnostics(){
+      // Developer-only overlay: never show it in normal Studio.
+      document.querySelectorAll('.sp-load-diag').forEach(node=>node.remove());
+      this._loadDiag=null;
+    }
+
+    _loadDiagCount(key,inc=1){
+      const d=this._loadDiag;if(d?.enabled)d[key]=(Number(d[key])||0)+inc;
+    }
+
+    _renderLoadDiagnostics(){
+      const d=this._loadDiag;if(!d?.enabled||!d.node)return;
+      const mode=this._is360Background?.()?'360':(this._isFinitePanorama?.()?'PANO':'FLAT');
+      const lock=this._panoViewLocked?'LOCK':'LIVE';
+      const mem=performance?.memory?.usedJSHeapSize
+        ? ` MEM ${(performance.memory.usedJSHeapSize/1048576).toFixed(0)}MB`
+        : '';
+      d.node.textContent=
+        `AHAKO LOAD DIAG  ${mode} ${lock}\n`+
+        `FPS ${String(d.fps).padStart(2)}  LONG ${d.longFrames}  MAX ${d.maxFrame.toFixed(0)}ms${mem}\n`+
+        `BG ${d.bgWrites}  MOTION ${d.motionEvents}  MOVE ${d.pointerMoves}\n`+
+        `SCENE ${d.sceneChanges}  LAST ${d.lastSceneMs.toFixed(1)}ms`;
+    }
+
+    _markLoadDiagSceneStart(){
+      const d=this._loadDiag;if(!d?.enabled)return;
+      d.sceneStart=performance.now(); d.sceneChanges++;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(d.sceneStart)d.lastSceneMs=performance.now()-d.sceneStart;
+      }));
+    }
+
     _is360Background(state=this.backgroundState){ return state?.projection === '360'; }
     _isFinitePanorama(state=this.backgroundState){ return state?.projection === 'panorama'; }
     _isSpatialBackground(state=this.backgroundState){ return this._is360Background(state)||this._isFinitePanorama(state); }
+    _isFinitePanoramaLandscape(){
+      if(!this._isFinitePanorama())return false;
+      const r=this.els?.stage?.getBoundingClientRect?.();
+      if(r && r.width>0 && r.height>0)return r.width>r.height;
+      return (global.innerWidth||0)>(global.innerHeight||0);
+    }
     _requestMotionPermissionIfNeeded(){
       const hasSpatial=(this.document?.scenes||[]).some(sc=>['360','panorama'].includes(sc?.presentation?.background?.projection));
       if(!hasSpatial || this._motionPermissionAsked) return;
@@ -4150,6 +4215,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _bind360Motion(){
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
+        this._loadDiagCount('motionEvents');
         if(!this._isSpatialBackground() || !this._motionAllowed || this.backgroundState?.motionSensor===false || this._panoViewLocked)return;
         const alpha=Number(e.alpha), beta=Number(e.beta);
         if(!Number.isFinite(alpha)||!Number.isFinite(beta))return;
@@ -4171,7 +4237,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // device-orientation yaw; finger dragging keeps its existing grab direction.
         this._panoYawVelocity=(Number(this._panoYawVelocity)||0)*.58 - da*.42;
         if(Math.abs(this._panoYawVelocity)<.08)this._panoYawVelocity=0;
-        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        const panoLandscape=this._isFinitePanoramaLandscape();
         if(!panoLandscape){
           this._panoSensorYaw=(Number(this._panoSensorYaw)||0)+this._panoYawVelocity*.72;
         }else{
@@ -4198,7 +4264,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
 
         const db=beta-(Number(this._motionBaseBeta)||0);
-        const panoLandscapePitch=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        const panoLandscapePitch=this._isFinitePanoramaLandscape();
         // In landscape panorama the visible vertical crop is modest. Use a small
         // dead-zone and faster response so a small physical tilt reaches it.
         const pitchDeadZone=panoLandscapePitch?.7:2.6;
@@ -4208,16 +4274,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const targetPitch=Math.max(-pitchLimit,Math.min(pitchLimit,pitchDead*pitchGain));
         const pitchFollow=panoLandscapePitch?.22:.09;
         this._panoSensorPitch=(Number(this._panoSensorPitch)||0)+(targetPitch-(Number(this._panoSensorPitch)||0))*pitchFollow;
-        if(this._isFinitePanorama()){
-          if(!this._panoMotionRenderRAF){
-            this._panoMotionRenderRAF=requestAnimationFrame(()=>{
-              this._panoMotionRenderRAF=0;
-              if(this._isFinitePanorama())this._render360Background();
-            });
-          }
-        }else{
-          this._render360Background();
-        }
+        this._render360Background();
         if(Math.abs(da)>.35 || Math.abs(db)>3.2)this._show360ViewLockControl();
       },{passive:true});
     }
@@ -4286,13 +4343,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _render360Background(){
+      this._loadDiagCount('bgWrites');
       if(!this._isSpatialBackground())return;
       const layer=this._currentBackgroundLayer(); if(!layer)return;
       const yaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
       const pitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
       // 360° repeats forever; Panorama is finite and stops at the image edges.
       const rawX=50 + yaw/3.6;
-      const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+      const panoLandscape=this._isFinitePanoramaLandscape();
       // A finite panorama that already fits horizontally in landscape should not
       // make the reader manually re-center it. Keep X centered; pitch/Y remains live.
       const x=panoLandscape?50:(this._isFinitePanorama()?Math.max(0,Math.min(100,rawX)):rawX);
@@ -4300,79 +4358,58 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const grabX=this._is360Background()?(Number(this._panoGrabX)||0):0;
       const panoPortrait=this._isFinitePanorama() &&
         Boolean(global.matchMedia?.('(orientation: portrait)').matches);
-      let panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
-      let panoRenderX=x;
+      const panoGrabX=panoPortrait?(Number(this._panoFiniteGrabX)||0):0;
       if(panoPortrait){
-        const layerW=Number(layer.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-        const layerH=Number(layer.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
+        const stageW=Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
+        const stageH=Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
         const src=String(this.backgroundState?.src||'');
-
-        this._panoRatioCache=this._panoRatioCache||new Map();
-        const applyCombinedClamp=(ratio)=>{
-          if(!(ratio>0)||!(layerW>0)||!(layerH>0))return;
-
-          // Portrait panorama CSS: background-size:auto 108%.
-          const renderedW=layerH*1.08*ratio;
-          if(renderedW<=layerW){
-            panoRenderX=50;
-            panoGrabX=0;
+        const applyFiniteBounds=(ratio)=>{
+          if(!(ratio>0)||!(stageW>0)||!(stageH>0))return;
+          const renderedW=stageH*1.08*ratio;
+          if(renderedW<=stageW){
+            this._panoFiniteGrabMin=0;
+            this._panoFiniteGrabMax=0;
             this._panoFiniteGrabX=0;
-            this._panoSensorYaw=0;
             return;
           }
-
-          // CSS percentage positioning:
-          // offset = (container - image) * percentage / 100.
-          // Add TRUE GRAB pixels, then clamp the FINAL composed camera.
-          const minOffset=layerW-renderedW; // right image edge == viewport right
-          const maxOffset=0;                // left image edge == viewport left
-          const baseOffset=(layerW-renderedW)*(panoRenderX/100);
-          const desiredOffset=baseOffset+panoGrabX;
-          const clampedOffset=Math.max(minOffset,Math.min(maxOffset,desiredOffset));
-
-          // Bake only the overflow correction into TRUE GRAB. This means motion
-          // + swipe can never reveal outside the image, and reversing responds
-          // immediately instead of paying back invisible overshoot.
-          const correction=clampedOffset-desiredOffset;
-          if(Math.abs(correction)>.01){
-            panoGrabX+=correction;
-            this._panoFiniteGrabX=panoGrabX;
-
-            // Finite panorama must never accumulate invisible sensor rotation
-            // beyond an image edge. Preserve the visible camera by baking the
-            // current sensor yaw into manual yaw, then reset sensor integration.
-            // Reversing the phone therefore responds immediately and the
-            // available motion range never shrinks after repeated turns.
-            // HOLD the composed camera at the real image edge.
-            // Do not zero/rebase sensorYaw here: doing that while the device is
-            // still physically turned teleports the camera back toward the last
-            // swipe landmark and creates an endless edge->landmark loop.
-            // The final pixel clamp above is the sole edge authority; velocity
-            // is stopped, while sensor orientation remains continuous so
-            // reversing the device moves away from the edge immediately.
-            this._panoYawVelocity=0;
-          }
+          // CSS background-position percentage uses:
+          // offsetX = (containerWidth - imageWidth) * xPercent / 100.
+          // TRUE GRAB adds pixels after that offset. Derive the exact pixel
+          // interval that keeps both image edges touching/covering the viewport.
+          const baseOffset=(stageW-renderedW)*(x/100);
+          this._panoFiniteGrabMin=(stageW-renderedW)-baseOffset;
+          this._panoFiniteGrabMax=-baseOffset;
+          this._panoFiniteGrabX=Math.max(
+            this._panoFiniteGrabMin,
+            Math.min(this._panoFiniteGrabMax,Number(this._panoFiniteGrabX)||0)
+          );
         };
-
-        const cached=Number(this._panoRatioCache.get(src));
-        if(cached>0){
-          applyCombinedClamp(cached);
-        }else if(src && !this._panoRatioCache.has(src)){
-          this._panoRatioCache.set(src,-1);
-          const probe=new Image();
-          probe.onload=()=>{
-            const ratio=(probe.naturalWidth&&probe.naturalHeight)
-              ?probe.naturalWidth/probe.naturalHeight:0;
-            this._panoRatioCache.set(src,ratio||0);
-            if(this.backgroundState?.src===src)this._render360Background();
-          };
-          probe.onerror=()=>this._panoRatioCache.set(src,0);
-          probe.src=src;
+        if(src){
+          this._panoRatioCache=this._panoRatioCache||new Map();
+          const cached=Number(this._panoRatioCache.get(src));
+          if(cached>0){
+            applyFiniteBounds(cached);
+          }else if(!this._panoRatioCache.has(src)){
+            this._panoRatioCache.set(src,-1);
+            const probe=new Image();
+            probe.onload=()=>{
+              if(this.backgroundState?.src!==src)return;
+              const ratio=(probe.naturalWidth&&probe.naturalHeight)
+                ?probe.naturalWidth/probe.naturalHeight:0;
+              this._panoRatioCache.set(src,ratio||0);
+              if(ratio>0){
+                applyFiniteBounds(ratio);
+                this._render360Background();
+              }
+            };
+            probe.onerror=()=>this._panoRatioCache.set(src,0);
+            probe.src=src;
+          }
         }
       }
       const position=this._is360Background()
         ?`calc(${x}% + ${grabX}px) ${y}%`
-        :(panoPortrait?`calc(${panoRenderX}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
+        :(panoPortrait?`calc(${x}% + ${panoGrabX}px) ${y}%`:`${x}% ${y}%`);
       // At a finite edge the sensor may continue firing while the visible camera
       // is stationary. Avoid repeating an identical DOM style write.
       if(layer.style.backgroundPosition!==position){
@@ -4380,21 +4417,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
     }
     _bind360Gestures(){
+      this._initLoadDiagnostics();
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
       let drag=null;
       const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
         && !this._hasCredits(this.currentScene?.presentation);
       this._on(this.els.stage,'pointerdown',(e)=>{
         if(!this._isSpatialBackground()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
-        if(this._isFinitePanorama()){
-          // Sensor -> finger handoff. Preserve the exact visible camera, then
-          // make that view the new neutral sensor origin before TRUE GRAB starts.
-          this._panoYaw=(Number(this._panoYaw)||0)+(Number(this._panoSensorYaw)||0);
-          this._panoSensorYaw=0;
-          this._panoYawVelocity=0;
-          this._motionLastAlpha=null;
-          this._motionBaseBeta=null;
-        }
         drag={
           x:e.clientX,y:e.clientY,
           yaw:Number(this._panoYaw)||0,pitch:Number(this._panoPitch)||0,
@@ -4406,6 +4435,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       },true);
       this._on(this.els.stage,'pointermove',(e)=>{
         if(!drag||!this._isSpatialBackground())return;
+        this._loadDiagCount('pointerMoves');
         const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
         const distance=Math.hypot(dx,dy);
         if(distance>5)drag.moved=true;
@@ -4416,7 +4446,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         // V1.5: every ordinary drag belongs to the panorama while the finger is
         // down. A fast, long flick in the established PAST direction is decided
         // only on release, so slow exploration remains predictable.
-        const panoLandscape=this._isFinitePanorama() && (global.innerWidth||0)>(global.innerHeight||0);
+        const panoLandscape=this._isFinitePanoramaLandscape();
         if(!panoLandscape){
           // 360° landscape needs a larger visual turn per finger travel than the
           // portrait/default grab. Motion-sensor sensitivity is intentionally unchanged.
@@ -4427,24 +4457,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             // True grab: the point under the finger/mouse follows it 1:1.
             this._panoGrabX=drag.grabX+dx;
           }else if(panoPortrait){
-            // ONE shared camera: convert the finger's pixel travel directly into
-            // panoYaw while the finger is moving. There is no temporary pixel
-            // camera to "bake" on release, so release cannot jump.
-            const layer=this._currentBackgroundLayer();
-            const layerW=Number(layer?.clientWidth)||Number(this.els?.stage?.clientWidth)||Number(global.innerWidth)||0;
-            const layerH=Number(layer?.clientHeight)||Number(this.els?.stage?.clientHeight)||Number(global.innerHeight)||0;
-            const src=String(this.backgroundState?.src||'');
-            const ratio=Number(this._panoRatioCache?.get(src))||0;
-            const renderedW=(ratio>0&&layerH>0)?layerH*1.08*ratio:0;
-            const travel=renderedW-layerW;
-            if(travel>0){
-              // rawX = 50 + yaw/3.6 and CSS position spans `travel` pixels.
-              // This maps finger dx to exactly dx rendered pixels.
-              this._panoYaw=drag.yaw-(dx/travel)*360;
-              this._panoFiniteGrabX=0;
-            }else{
-              this._panoFiniteGrabX=drag.panoGrabX+dx;
-            }
+            // Finite panorama portrait: TRUE GRAB stays synchronous.
+            // Clamp from the rendered panorama width (auto 108% height).
+            const nextGrab=drag.panoGrabX+dx;
+            const minGrab=Number(this._panoFiniteGrabMin);
+            const maxGrab=Number(this._panoFiniteGrabMax);
+            this._panoFiniteGrabX=(Number.isFinite(minGrab)&&Number.isFinite(maxGrab))
+              ?Math.max(minGrab,Math.min(maxGrab,nextGrab))
+              :nextGrab;
           }else{
             this._panoYaw=this._isFinitePanorama()
               ?Math.max(-180,Math.min(180,drag.yaw-dx*.46))
@@ -4494,17 +4514,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         try{
           if(this.els.stage.hasPointerCapture?.(drag.id))this.els.stage.releasePointerCapture?.(drag.id);
         }catch(_){}
-        if(this._isFinitePanorama()){
-          // The drag already moved the shared panoYaw camera 1:1.
-          // Release only re-arms the sensor from this exact visible position.
-          this._panoFiniteGrabX=0;
-          this._panoSensorYaw=0;
-          this._panoYawVelocity=0;
-          this._motionLastAlpha=null;
-          this._motionBaseBeta=null;
-        }
         drag=null;
-        if(this._isFinitePanorama())requestAnimationFrame(()=>this._render360Background());
         requestAnimationFrame(()=>{ this._panoSuppressClickUntil=0; });
       };
       this._on(this.els.stage,'pointerup',end,true);
@@ -4531,6 +4541,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       this._resetBackgroundRuntime();
       this.backgroundState = next;
+      this._markLoadDiagSceneStart();
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
       this.host.classList.toggle('sp-bg-panorama-active', this._isFinitePanorama(next));
       if(this._isSpatialBackground(next)){
@@ -5019,7 +5030,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(draggedPage){
               const dx=x-viewState.touchStartX,commit=Math.abs(dx)>Math.max(72,Math.min(240,draggedPage.width*.32))&&Math.abs(dx)>Math.abs(vertical)*1.2&&duration<900;
               draggedPage.underlay.remove();viewState.pageDrag=null;img.style.willChange='';img.style.zIndex='';
-                if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}}else img.style.translate='';}
+              if(commit){const advances=viewer._scenePageDirection==='rtl'?dx>0:dx<0,target=Math.max(0,Math.min(activePages.length-1,activeIndex+(advances?1:-1)));if(target!==activeIndex){if(frame.classList.contains('is-view-rec-playing')&&viewer._sceneOnPageChange){img.style.translate='';viewer._sceneOnPageChange(target);}else{viewer._scenePageIncomingOffset=draggedPage.startOffset+dx;viewer._sceneShowPage?.(target);img.style.translate='';viewer._sceneOnPageChange?.(target);}}else img.style.translate='';}
               else img.animate?.([{translate:`${dx}px 0`},{translate:'0 0'}],{duration:260,easing:'cubic-bezier(.22,1.28,.36,1)'}).finished.catch(()=>{}).then(()=>{img.style.translate='';});
               clearTimeout(frame._viewPointTapTimer);frame._viewPointSuppressClickUntil=now+500;viewState.multiTouch=false;return;
             }
@@ -5361,8 +5372,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         return;
       }
 
+      const pages=Array.isArray(image.pages)?image.pages:[];
       const fallbackPageChange=(pageIndex)=>{
-        const pages=Array.isArray(image.pages)?image.pages:[],page=pages[pageIndex];if(!page?.src)return;
+        const page=pages[pageIndex];if(!page?.src)return;
         const pagePoints=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
         if((pagePoints?.points||[]).length)this._openSceneImageViewRec({...image,...page,src:page.src,alt:page.alt??image.alt??'',viewPoints:pagePoints,pageIndex,resumePoint:0,onPageChange:fallbackPageChange,animatePageEntry:false},null);
         else this._openSceneImage(page.src,page.alt??image.alt??'',{pages,pageIndex,onPageChange:fallbackPageChange,direction:image.pageDirection||'ltr'});
@@ -5554,7 +5566,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       wrap.dataset.showPageCount=image.showPageCount===false?'false':'true';
       if(pages.length>1||image?.cover?.src){wrap.dataset.pageCount=String(Math.max(1,pages.length));wrap.classList.add('has-page-stack');}
       wrap.dataset.imageRounded=image.rounded===false?'false':'true';
-      wrap.dataset.imageSize = ['small','large'].includes(image.size)
+      wrap.dataset.imageSize = ['small','large','custom'].includes(image.size)
         ? image.size
         : ((presentation?.view==='chat') ? 'small' : 'large');
       const customImageWidth=Math.max(40,Math.min(2000,Number(image.customWidth)||320));
@@ -5569,8 +5581,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
       const media = document.createElement(history ? 'span' : 'div');
       media.className = history ? 'sp-history-scene-image-media' : 'sp-scene-image-media';
-      // V125 — keep public Player Scene-image object styling in sync with Studio.
-      // Rotation is intentionally clamped to the same authoring range used by Studio.
       const rotation = Math.max(-20, Math.min(20, Number(image.rotation) || 0));
       media.style.setProperty('--sp-scene-image-rotation', `${rotation}deg`);
       if (image.shadow === true) media.classList.add('has-object-shadow');
@@ -5637,9 +5647,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
       media.appendChild(img);
 
+      // V88 — keep the image and its caption in one vertical object.
+      // The Scene row remains responsible only for left/center/right placement.
       const object = document.createElement(history ? 'span' : 'div');
       object.className = history ? 'sp-history-scene-image-object' : 'sp-scene-image-object';
       object.appendChild(media);
+
+      // The existing image description remains the accessible alt text.
+      // Authors may additionally expose that same description as a visible caption.
       let caption = null;
       const captionText=String(firstImage.alt||image.alt||'').trim();
       if (image.caption === true && captionText) {
@@ -5667,6 +5682,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (typeof ResizeObserver !== 'undefined' && caption) {
         const captionResizeObserver = new ResizeObserver(updateCaptionClearance);
         captionResizeObserver.observe(media);
+        const ownerScene = wrap.closest('.sp-scene') || container.closest?.('.sp-scene');
+        if (ownerScene) (ownerScene._spResizeObservers ||= []).push(captionResizeObserver);
       }
       requestAnimationFrame(updateCaptionClearance);
 
@@ -5734,50 +5751,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _handdrawnSeed(source) {
       let hash=2166136261;
       const value=String(source||'');
-      for(let i=0;i<value.length;i++){
-        hash^=value.charCodeAt(i);
-        hash=Math.imul(hash,16777619);
-      }
+      for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619);}
       return hash>>>0;
     }
 
     _handdrawnRandom(seed) {
       let state=seed>>>0;
-      return ()=>{
-        state=(Math.imul(state,1664525)+1013904223)>>>0;
-        return state/4294967296;
-      };
+      return ()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};
     }
 
     _handdrawnPath(width,height,seed,trace=0,shapeLevel=0,frameType='handdrawn-voice') {
       const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0);
-      const inset=5.5+trace*.35;
-      const rx=Math.max(8,(width-inset*2)/2);
-      const ry=Math.max(8,(height-inset*2)/2);
-      const cx=width/2+(random()-.5)*1.8;
-      const cy=height/2+(random()-.5)*1.8;
-      const count=32;
-      const phase=random()*Math.PI*2;
-      const points=[];
+      const inset=5.5+trace*.35,rx=Math.max(8,(width-inset*2)/2),ry=Math.max(8,(height-inset*2)/2);
+      const cx=width/2+(random()-.5)*1.8,cy=height/2+(random()-.5)*1.8,count=32,phase=random()*Math.PI*2,points=[];
       for(let i=0;i<count;i++){
-        const angle=(Math.PI*2*i/count)-Math.PI/2;
-        const ca=Math.cos(angle),sa=Math.sin(angle);
-        const n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel'].includes(frameType)?4.7:8.5);
-        const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx;
-        const baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
-        const harmonic=Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006;
-        const grain=(random()-.5)*.018;
-        const wobble=1+harmonic+grain+(trace-1)*.0025;
+        const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel'].includes(frameType)?4.7:8.5);
+        const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
+        const wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;
         points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});
       }
       let d=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
       for(let i=0;i<count;i++){
         const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];
-        const c1x=p1.x+(p2.x-p0.x)/6;
-        const c1y=p1.y+(p2.y-p0.y)/6;
-        const c2x=p2.x-(p3.x-p1.x)/6;
-        const c2y=p2.y-(p3.y-p1.y)/6;
-        d+=` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+        d+=` C ${(p1.x+(p2.x-p0.x)/6).toFixed(2)} ${(p1.y+(p2.y-p0.y)/6).toFixed(2)} ${(p2.x-(p3.x-p1.x)/6).toFixed(2)} ${(p2.y-(p3.y-p1.y)/6).toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
       }
       return `${d} Z`;
     }
@@ -5811,8 +5807,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         let tr={left:elementRect.left,top:elementRect.top,right:elementRect.right,bottom:elementRect.bottom,width:elementRect.width,height:elementRect.height};
         let inkRects=[],weightedX=0,weightedY=0,totalWeight=0;
         try{
-          const range=document.createRange();
-          const walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
+          const range=document.createRange(),walker=document.createTreeWalker(text,NodeFilter.SHOW_TEXT);
           const segmenter=typeof Intl!=='undefined'&&Intl.Segmenter?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
           let node;
           while((node=walker.nextNode())){
@@ -5823,22 +5818,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               range.setStart(node,item.index);range.setEnd(node,item.index+item.text.length);
               for(const rect of range.getClientRects()){
                 if(rect.width<=0||rect.height<=0)continue;
-                inkRects.push(rect);
-                const weight=Math.max(1,rect.width*rect.height);
+                inkRects.push(rect);const weight=Math.max(1,rect.width*rect.height);
                 weightedX+=(rect.left+rect.right)*.5*weight;weightedY+=(rect.top+rect.bottom)*.5*weight;totalWeight+=weight;
               }
             }
           }
           range.detach?.();
-          if(!inkRects.length){const fullRange=document.createRange();fullRange.selectNodeContents(text);inkRects=[...fullRange.getClientRects()].filter(r=>r.width>0&&r.height>0);fullRange.detach?.();}
+          if(!inkRects.length){const r=document.createRange();r.selectNodeContents(text);inkRects=[...r.getClientRects()].filter(x=>x.width>0&&x.height>0);r.detach?.();}
           if(inkRects.length){const left=Math.min(...inkRects.map(r=>r.left)),right=Math.max(...inkRects.map(r=>r.right)),top=Math.min(...inkRects.map(r=>r.top)),bottom=Math.max(...inkRects.map(r=>r.bottom));tr={left,right,top,bottom,width:right-left,height:bottom-top};}
         }catch(_){}
         const width=Math.max(1,sr.width),height=Math.max(1,sr.height);
-        const centerClientX=totalWeight?weightedX/totalWeight:tr.left+tr.width/2;
-        const centerClientY=totalWeight?weightedY/totalWeight:tr.top+tr.height/2;
-        const cx=centerClientX-sr.left,cy=centerClientY-sr.top;
-        const halfTextW=Math.max(0,centerClientX-tr.left,tr.right-centerClientX);
-        const halfTextH=Math.max(0,centerClientY-tr.top,tr.bottom-centerClientY);
+        const cx=tr.left+tr.width/2-sr.left,cy=tr.top+tr.height/2-sr.top;
+        const halfTextW=tr.width/2,halfTextH=tr.height/2;
         const extraX=Math.max(-80,Math.min(180,Number(frameOptions.extraX)||0));
         const extraY=Math.max(-80,Math.min(180,Number(frameOptions.extraY)||0));
         // Intersect each ray with one enclosing ellipse. A projected rectangle's
@@ -5962,25 +5953,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const defaultFrameStroke=!savedFrameStroke||['#171512','#000','#000000','black','#f5f2ff','#fff','#ffffff','white'].includes(savedFrameStroke);
       if(!defaultFill)frame.style.setProperty('--sp-frame-fill',String(frameOptions.fill));
       if(!defaultFrameStroke)frame.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke));
-      const ns='http://www.w3.org/2000/svg';
-      const svg=document.createElementNS(ns,'svg');
-      svg.classList.add('sp-handdrawn-frame-svg');
-      svg.setAttribute('aria-hidden','true');
-      svg.setAttribute('preserveAspectRatio','none');
-      const defs=document.createElementNS(ns,'defs');
-      const filter=document.createElementNS(ns,'filter');
+      const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+      svg.classList.add('sp-handdrawn-frame-svg');svg.setAttribute('aria-hidden','true');svg.setAttribute('preserveAspectRatio','none');
+      const defs=document.createElementNS(ns,'defs'),filter=document.createElementNS(ns,'filter');
       const filterId=`sp-ink-bleed-${String(scene.id||'scene').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24)}-${this._handdrawnSeed(scene.text)&65535}`;
-      filter.id=filterId;
-      filter.setAttribute('x','-5%');filter.setAttribute('y','-5%');filter.setAttribute('width','110%');filter.setAttribute('height','110%');
-      const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');
-      filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
-      const makePath=(className)=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;};
-      const fill=makePath('sp-handdrawn-fill');
-      const bleed=makePath('sp-handdrawn-bleed');bleed.setAttribute('filter',`url(#${filterId})`);
-      const ghost=makePath('sp-handdrawn-ghost');
-      const ink=makePath('sp-handdrawn-ink');
-      const scuff=makePath('sp-handdrawn-scuff');
-      frame.prepend(svg);
+      filter.id=filterId;filter.setAttribute('x','-5%');filter.setAttribute('y','-5%');filter.setAttribute('width','110%');filter.setAttribute('height','110%');
+      const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
+      const makePath=className=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;};
+      const fill=makePath('sp-handdrawn-fill'),bleed=makePath('sp-handdrawn-bleed'),ghost=makePath('sp-handdrawn-ghost'),ink=makePath('sp-handdrawn-ink'),scuff=makePath('sp-handdrawn-scuff');
+      bleed.setAttribute('filter',`url(#${filterId})`);frame.prepend(svg);
       let lastWidth=0,lastHeight=0;
       const draw=()=>{
         if(!frame.isConnected)return;
@@ -5988,84 +5969,30 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         let fitted=false;
         frame.classList.add('sp-frame-measuring');
         if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){
-          text.style.maxWidth='none';
-          text.style.width='max-content';
-          const measureRects=()=>{try{
-            const range=document.createRange();
-            range.selectNodeContents(text);
-            const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0);
-            range.detach?.();
-            return measured.map(rect=>this._logicalRect(rect));
-          }catch(_){return [];}};
-          let rects=measureRects();
-          const initialTextRect=this._logicalRect(text.getBoundingClientRect());
-          let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left;
-          let inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
-          const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);
-          text.style.width=`${fittedWidth}px`;
-          rects=measureRects();
-          const fittedTextRect=this._logicalRect(text.getBoundingClientRect());
-          inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;
-          inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
-          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top;
-          const inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom;
-          const columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1;
-          const charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length;
-          const shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58)));
-          const mobile=(this.host.clientWidth||global.innerWidth)<=600;
-          const padX=(mobile?27:34)+shapeLevel*(mobile?8:12);
-          const padY=(mobile?30:38)+shapeLevel*(mobile?13:18);
-          const inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
-          text.style.position='absolute';
-          text.style.margin='0';
-          text.style.height=`${Math.ceil(fittedTextRect.height)}px`;
-          text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;
-          text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
-          frame.style.padding='0';
-          frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;
-          frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;
-          frame.dataset.shapeLevel=String(shapeLevel);
-          frame.dataset.inkFitted='true';
-          fitted=true;
+          const scale=this._layoutScale();
+          const logicalRect=element=>{const rect=element.getBoundingClientRect();return {left:rect.left/scale,right:rect.right/scale,top:rect.top/scale,bottom:rect.bottom/scale,width:rect.width/scale,height:rect.height/scale};};
+          text.style.maxWidth='none';text.style.width='max-content';
+          const measureRects=()=>{try{const range=document.createRange();range.selectNodeContents(text);const measured=[...range.getClientRects()].filter(item=>item.width>0&&item.height>0).map(item=>({left:item.left/scale,right:item.right/scale,top:item.top/scale,bottom:item.bottom/scale,width:item.width/scale,height:item.height/scale}));range.detach?.();return measured;}catch(_){return [];}};
+          let rects=measureRects();const initialTextRect=logicalRect(text);
+          let inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):initialTextRect.left,inkRight=rects.length?Math.max(...rects.map(item=>item.right)):initialTextRect.right;
+          const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;
+          rects=measureRects();const fittedTextRect=logicalRect(text);
+          inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
+          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
+          text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
+          frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;
         }
         frame.classList.remove('sp-frame-measuring');
-        const rect=this._logicalRect(frame.getBoundingClientRect());
-        const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
+        const rect=frame.getBoundingClientRect(),scale=this._layoutScale(),width=Math.max(24,Math.round(rect.width/scale*10)/10),height=Math.max(24,Math.round(rect.height/scale*10)/10);
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
-        lastWidth=width;lastHeight=height;
-        svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
-        const frameType=frame.dataset.frameType||'handdrawn-voice';
-        const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`);
-        const shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0));
-        const primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);
-        fill.setAttribute('d',primary);ink.setAttribute('d',primary);
-        bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));
-        ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));
-        scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));
-        const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);
-        scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);
-        scuff.setAttribute('stroke-dashoffset',String(seed%29));
-        const article=frame.closest('.sp-scene');
-        if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{
-          if(!frame.isConnected||!this.document)return;
-          const active=this.document.scenes?.[this.index];
-          const display=active?.presentation?.display||'stack';
-          const entries=this._visibleScenes(display);
-          const byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node]));
-          const present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node);
-          const presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);
-          if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);
-          else this._positionSceneNodes(presentNodes,presentEntries,0);
-        });
+        lastWidth=width;lastHeight=height;svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
+        const frameType=frame.dataset.frameType||'handdrawn-voice',seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);
+        fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));
+        const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));
+        const article=frame.closest('.sp-scene');if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this.index],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});
       };
       requestAnimationFrame(draw);
-      if(typeof ResizeObserver==='function'){
-        const observer=new ResizeObserver(()=>{
-          if(!frame.isConnected){observer.disconnect();return;}
-          draw();
-        });
-        observer.observe(frame);
-      }
+      if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);const ownerScene=frame.closest('.sp-scene');if(ownerScene)(ownerScene._spResizeObservers ||= []).push(observer);}
     }
 
 
@@ -6186,34 +6113,71 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             if(r.kind==='span'&&Number(r.style?.fontSizePx)>0)span.style.fontSize=`${Math.max(8,Math.min(420,Number(r.style.fontSizePx)))}px`; 
             if(r.kind==='orientation'&&(r.orientation==='sideways'||r.orientation==='upright'))span.style.textOrientation=r.orientation;
           });
-          // AHAKO short-horizontal TCY: preserve readable glyph size and allow
-          // a little horizontal overflow instead of crushing 3-4 characters
-          // into one vertical-cell width. 1-2 chars stay natural; 3-4 chars
-          // are gently condensed, never miniaturised.
-          // AHAKO V14: keep TCY inside the native vertical inline flow.
-          // Do NOT switch the span itself to horizontal writing-mode: doing so
-          // gives the run its own block-axis box and visibly shifts it left.
-          // text-combine-upright keeps the glyph run centered on the same
-          // vertical column as ordinary Japanese glyphs.
+          // AHAKO V27: TCY has two paths.
+          // 1-2 glyphs use the browser's native tate-chu-yoko (stable for AI etc.).
+          // 3+ glyphs use a one-cell anchor with a centered horizontal child.
+          // This keeps the vertical line position/height unchanged while letting
+          // 2020 / NASA occupy about 1.8 glyph widths instead of being crushed.
           if(visualTcy){
             const glyphs=Array.from(segmentText).length;
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
             span.style.whiteSpace='nowrap';
-            span.style.transformOrigin='center center';
-            if(glyphs===3) span.style.transform='scaleX(.86)';
-            else if(glyphs>=4) span.style.transform='scaleX(.68)';
+            if(glyphs<=2){
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+            }else{
+              span.classList.add('sp-rich-tcy-wide');
+              span.style.display='inline-block';
+              span.style.position='relative';
+              span.style.inlineSize='1em';
+              span.style.blockSize='1em';
+              span.style.width='1em';
+              span.style.height='1em';
+              span.style.textCombineUpright='none';
+              span.style.webkitTextCombine='none';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+              span.textContent='';
+              const wide=document.createElement('span');
+              wide.className='sp-rich-tcy-wide-inner';
+              wide.textContent=segmentText;
+              wide.style.position='absolute';
+              wide.style.left='50%';
+              wide.style.top='50%';
+              wide.style.width='1.55em';
+              wide.style.height='1em';
+              wide.style.writingMode='horizontal-tb';
+              wide.style.webkitWritingMode='horizontal-tb';
+              wide.style.textOrientation='mixed';
+              wide.style.webkitTextOrientation='mixed';
+              wide.style.whiteSpace='nowrap';
+              wide.style.textAlign='center';
+              wide.style.lineHeight='1em';
+              wide.style.letterSpacing=glyphs>=4?'-.08em':'-.03em';
+              wide.style.transform='translate(-50%,-50%)';
+              wide.style.transformOrigin='center center';
+              span.appendChild(wide);
+            }
           }
-          // Emoji outside an explicit TCY range also stay in the native
-          // vertical inline flow; combining the single grapheme makes its
-          // center identical to the surrounding Japanese column.
-          if(!_iosTextDefaultSegment&&(!segmentText.includes('\uFE0E'))&&(segmentText.includes('\uFE0F')||/\p{Emoji_Presentation}/u.test(segmentText)||/\p{Regional_Indicator}/u.test(segmentText)||segmentText.includes('\u20E3'))){
-            span.style.textCombineUpright='all';
-            span.style.webkitTextCombine='horizontal';
-            span.style.textOrientation='upright';
-            span.style.webkitTextOrientation='upright';
+          // Emoji graphemes outside explicit TCY remain one visual unit.
+          // VS16 explicitly requests emoji presentation; on Apple/WebKit force
+          // the color-emoji font so sequences such as ‼️ do not fall back to ‼︎.
+          {
+            const _vs15=segmentText.includes('\uFE0E');
+            const _vs16=segmentText.includes('\uFE0F');
+            const _emojiPresentation=!_vs15&&(_vs16||/\p{Emoji_Presentation}/u.test(segmentText)||/\p{Regional_Indicator}/u.test(segmentText)||segmentText.includes('\u20E3'));
+            const _airplaneText=(segmentText==='\u2708\uFE0E'||segmentText==='\u2708');
+            if(_emojiPresentation&&!_iosTextDefaultSegment){
+              span.style.textCombineUpright='all';
+              span.style.webkitTextCombine='horizontal';
+              span.style.textOrientation='upright';
+              span.style.webkitTextOrientation='upright';
+              span.style.fontFamily='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+              span.style.fontVariantEmoji='emoji';
+            }else if(_airplaneText){
+              span.classList.add('sp-airplane-text-native');
+            }
           }
           // Keep undecorated text in text nodes. Fragmented inline spans plus
           // ruby and pretty wrapping can produce short lines on WebKit.
@@ -6301,8 +6265,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const delay=Math.max(0,Number(r.delay)||0)*1000,duration=Math.max(.05,Number(r.duration)||3)*1000;
       const curve=r.curve||'burst';
       const begin=()=>{
+        if(!node.isConnected)return;
         const t0=performance.now();
         const tick=now=>{
+          // A Scene refresh replaces its DOM. Stop the counter immediately when
+          // its node is detached instead of keeping an animation frame alive
+          // against an abandoned Scene for the remainder of its duration.
+          if(!node.isConnected)return;
           let x=Math.min(1,(now-t0)/duration),y=x;
           if(curve==='ease')y=x*x;
           else if(curve==='burst')y=x<.28?.18*(x/.28):.18+.82*(1-Math.pow(1-(x-.28)/.72,3));
@@ -6332,7 +6301,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         };
         requestAnimationFrame(tick);
       };
-      if(delay)setTimeout(begin,delay);else begin();
+      if(delay)this._presentationTimeout(begin,delay);else begin();
     }
 
 
@@ -6381,7 +6350,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         Object.assign(el.style,{position:'absolute',left:'100%',top:`${top}%`,whiteSpace:'nowrap',fontSize:`${size}px`,fontWeight:'700',lineHeight:'1.15',color:String(raw.color||'#FFFFFF'),textShadow:'0 2px 4px rgba(0,0,0,.98),0 0 7px rgba(0,0,0,.9),0 0 14px rgba(0,0,0,.62)',willChange:'transform',opacity:'0'});
         layer.appendChild(el);
         const start=()=>{if(!el.isConnected)return;el.style.opacity='1';const distance=(layer.clientWidth||window.innerWidth||800)+(el.offsetWidth||200)+64;const anim=el.animate([{transform:'translateX(0)'},{transform:`translateX(-${distance}px)`}],{duration:durationSec*1000,easing:'linear',fill:'forwards'});anim.onfinish=()=>{el.style.opacity='0';};};
-        setTimeout(start,startAt);
+        // Scene refreshes already cancel presentation timers. Use that lifecycle
+        // so delayed comments from removed Scenes do not retain their DOM nodes.
+        this._presentationTimeout(start,startAt);
       });
       stage.appendChild(layer);
     }
@@ -6578,6 +6549,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       wrap.dataset.creditsMode=m.mode||'card';
       wrap.dataset.endMode=m.endMode==='hold'?'hold':'exit';wrap.style.setProperty('--credits-delay',`${Math.max(0,Math.min(60,Number(m.startDelay)||0))}s`);
       wrap.dataset.surface=m.surface==='none'?'none':'card';wrap.dataset.columns=Number(m.columns)===2?'2':'1';
+      const stageHeight=Number(this.els?.stage?.clientHeight);if(stageHeight>0){wrap.style.setProperty('--credits-viewport-height',`${stageHeight*.5}px`);wrap.style.setProperty('--credits-max-height',`${stageHeight*.55}px`);}
       wrap.style.setProperty('--credits-size',`${Math.max(12,Math.min(48,Number(m.fontSize)||22))}px`);
       wrap.style.setProperty('--credits-gap',`${Math.max(8,Math.min(80,Number(m.gap)||28))}px`);
       wrap.style.setProperty('--credits-duration',`${Math.max(5,Math.min(600,Number(m.duration)||30))}s`);
@@ -6640,7 +6612,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         };
         requestAnimationFrame(configureRoll);
         viewport.addEventListener('click',()=>requestAnimationFrame(configureRoll));
-        viewport.addEventListener('sceneplayer:reflow',configureRoll);
         list.querySelectorAll('img').forEach(img=>img.addEventListener('load',configureRoll,{once:true}));
         document.fonts?.ready.then(()=>{if(ready)configureRoll();});
       }
@@ -6881,19 +6852,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           this._renderRichText(text, scene);
           this._applyTextStyle(text, presentation.text || {}, false);
           if(String(presentation.frame?.type||'').startsWith('handdrawn-')){
-            const frame=document.createElement('div');
-            frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;
+            const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;
             frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
-            const align=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
-            frame.dataset.frameAlign=align;
-            const inkColor=String(presentation.text?.color||'').trim().toLowerCase();
-            const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
+            frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
+            const inkColor=String(presentation.text?.color||'').trim().toLowerCase();const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
             const themeDefaultInk=!inkColor||['white','#fff','#ffffff','#171512','#000','#000000','black'].includes(inkColor);
             if(themeDefaultInk)text.style.color=darkTheme?'#F5F2FF':'#171512';
-            frame.appendChild(text);
-            article.appendChild(frame);
-            article.dataset.frame=presentation.frame.type;
-            this._mountHanddrawnFrame(frame,scene,presentation);
+            frame.appendChild(text);article.appendChild(frame);article.dataset.frame=presentation.frame.type;this._mountHanddrawnFrame(frame,scene,presentation);
           }else article.appendChild(text);
         }
 
@@ -6926,6 +6891,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const chars = Array.from(text).length;
       const lines = text ? text.split('\n').length : 0;
       const verticalFrame=textStyle?.writingMode==='vertical-rl' && String(scene?.presentation?.frame?.type||'').startsWith('handdrawn-');
+      // A vertical balloon has both a height and a column-width limit. Plain
+      // character thresholds made medium passages stay at the normal size and
+      // let their final columns escape the frame. Auto must become stricter
+      // for this geometry—the author can still explicitly choose any size.
       if(verticalFrame){
         if(chars>=74 || lines>=8)return 'tight';
         if(chars>=44 || lines>=6)return 'compact';
@@ -6951,24 +6920,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return 'fadeRise';
     }
 
-    _syncVerticalTextHeight(node) {
-      const chars = Math.max(4, Math.min(22, Number(node.dataset.verticalMaxChars) || 4));
-      const screenHeight = Math.max(1, this.host.clientHeight || global.innerHeight) * .52;
-      node.style.setProperty('--sp-vertical-screen-height', `${screenHeight}px`);
-      node.style.setProperty('--sp-vertical-content-height', `${chars * 1.15}em`);
-      node.style.height = `min(${screenHeight}px, ${chars * 1.15}em)`;
-    }
-
     _applyTextStyle(node, style, isSubText) {
       if (!style || typeof style !== 'object') style = {};
       if (style.color) node.style.color = String(style.color);
       const outlineWidth=Math.max(0,Math.min(12,Number(style.outlineWidth)||0));
       if(outlineWidth>0){
         const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-        const outlineColor=String(style.outlineColor|| (darkTheme?'#000000':'#FFFFFF'));
-        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;
-        node.style.paintOrder='stroke fill';
-        node.classList.add('sp-text-outline');
+        const outlineColor=String(style.outlineColor||(darkTheme?'#000000':'#FFFFFF'));
+        node.style.webkitTextStroke=`${outlineWidth}px ${outlineColor}`;node.style.paintOrder='stroke fill';node.classList.add('sp-text-outline');
       }else{node.style.webkitTextStroke='';node.style.paintOrder='';node.classList.remove('sp-text-outline');}
       if (Number.isFinite(Number(style.fontWeight))) node.style.fontWeight = String(Math.max(100, Math.min(900, Math.round(Number(style.fontWeight) / 100) * 100)));
       if (style.fontStyle === 'italic') node.style.fontStyle = 'italic';
@@ -7004,15 +6963,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.style.fontFamily = families[family] || families.serif;
 
       const size = style.size;
-      // Flag auto/normal sizes so landscape immersion can tune only defaults;
-      // explicit author-selected sizes remain untouched.
-      node.dataset.spSizeMode = size == null || size === '' || size === 'auto' || size === 'normal' ? 'auto' : 'fixed';
-      const landscapeSizes = isSubText
-        ? { small: 9, normal: 11, large: 13, xl: 15 }
-        : { small:16, normal:19, large:24, xl:30, xxl:40, fullscreen:54, giant:72, breakout:132 };
-      const landscapeSize = typeof size === 'number' && Number.isFinite(size) && size > 0
-        ? size * .75 : (landscapeSizes[size] || (isSubText ? 11 : 19));
-      node.style.setProperty('--sp-landscape-font', `${landscapeSize}px`);
       const tokenSizes = isSubText
         ? { small: '11px', normal: '14px', large: '17px', xl: '20px' }
         : { small: 'clamp(17px,3.8cqw,24px)', normal: 'clamp(21px,4.8cqw,34px)', large: 'clamp(26px,5.8cqw,42px)', xl: 'clamp(32px,7cqw,54px)', xxl:'clamp(42px,10cqw,72px)', fullscreen:'clamp(58px,15cqw,108px)', giant:'clamp(78px,21cqw,150px)', breakout:'clamp(150px,42cqw,320px)' };
@@ -7049,8 +6999,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.dataset.writingMode='vertical-rl';
         node.style.writingMode='vertical-rl';
         node.style.textOrientation='mixed';
-        node.dataset.verticalMaxChars=String(longest+1);
-        this._syncVerticalTextHeight(node);
+        node.style.height=`min(${Math.max(1,this.host.clientHeight||global.innerHeight)*.52}px, ${Math.max(4,Math.min(22,longest+1))*1.15}em)`;
         node.style.textAlign='start';
         const blockAlign=style.align==='left'||style.align==='right'?style.align:'center';
         node.dataset.verticalBlockAlign=blockAlign;
@@ -7062,7 +7011,6 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.textOrientation='';
         node.style.height='';
         delete node.dataset.verticalBlockAlign;
-        delete node.dataset.verticalMaxChars;
         node.style.marginLeft='';
         node.style.marginRight='';
       }
@@ -7344,12 +7292,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     destroy(options = {}) {
       if (this.destroyed) return;
+      this.destroyed = true;
       const preserveHost = options?.preserveHost === true;
-      if(this._immersiveRaf)cancelAnimationFrame(this._immersiveRaf);this._immersiveRaf=0;
       this.stopAuto();
       this._resetPresentationRuntime();
+      this._resetChatReadRuntime();
       this._resetBackgroundRuntime();
+      this._clearLayoutTimers();
+      this._disposeSceneNodeObservers(this.els?.scenes);
+      this.host.querySelectorAll('.sp-scene-image-viewer').forEach(viewer=>viewer._imageBoundedRO?.disconnect?.());
+      if(this.historyScrollRaf)cancelAnimationFrame(this.historyScrollRaf);
+      this.historyScrollRaf=0;
+      this.historyMetrics=null;
+      this.historyDepthItems.clear();
       this._stopAllAudio(true);
+      Object.values(this.audioEls||{}).forEach(audio=>this._disposeAudioElement(audio));
       if (this.endingAudio) {
         try { this.endingAudio.pause(); } catch (_) {}
         try { this.endingAudio.removeAttribute('src'); this.endingAudio.load(); } catch (_) {}
@@ -7360,7 +7317,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (this._bufferOneShots) this._bufferOneShots.clear();
       this._disposeIOSMediaBank();
       if (this.audioContext && typeof this.audioContext.close === 'function') {
-        try { this.audioContext.close(); } catch (_) {}
+        try { this.audioContext.close()?.catch?.(()=>{}); } catch (_) {}
       }
       (this.oneshotPool || []).forEach((audio) => this._disposeAudioElement(audio));
       this.oneshotPool = [];
@@ -7376,13 +7333,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // shared host, otherwise its delayed destroy wipes out the second read.
       if (!preserveHost) {
         this.host.innerHTML = '';
-        this.host.classList.remove('sp-core','sp-immersive','sp-immersive-controls');
+        this.host.classList.remove('sp-core');
       }
       if (this._chatIconPreloadTimer) clearTimeout(this._chatIconPreloadTimer);
       this._chatIconPreloadTimer = 0;
       this._chatIconCache?.clear();
       this._pendingChatIconImages?.clear();
-      this.destroyed = true;
+      this._backgroundStateCache=[];
+      this._backgroundStateCacheDocument=null;
+      this.document=null;
     }
   }
 
