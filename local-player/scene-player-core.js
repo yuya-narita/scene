@@ -6867,9 +6867,58 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       });
     }
 
-    _playEntranceEffectOnce(article) {
+    _bookstoreRingKeyframes() {
+      // Match the bookstore's first-view ring math: 27 degrees per slot,
+      // the same focal depth/scale/brightness curves, and its opening easing.
+      // A Scene item uses the first-view minimum travel (5.5 slots) because it
+      // has one authored object instead of a catalogue of covers.
+      const width=Math.max(1,this.els?.stage?.clientWidth||this.host?.clientWidth||global.innerWidth||360);
+      const radius=Math.min(430,Math.max(320,width*.52));
+      const travel=5.5,frames=[],samples=40;
+      for(let i=0;i<=samples;i++){
+        const t=i/samples;
+        const progress=1-Math.pow(1-t,4.6);
+        const approach=1-Math.pow(1-t,1.72);
+        const introDepth=.10+.90*approach;
+        const slot=travel*(1-progress),angle=slot*27,rad=angle*Math.PI/180;
+        const x=Math.sin(rad)*radius*introDepth;
+        const depth=1-Math.cos(rad);
+        const focus=Math.exp(-Math.pow(Math.abs(angle)/23,2));
+        const z=-55+focus*190-depth*145-(1-introDepth)*250;
+        const y=depth*14;
+        const scale=Math.max(.08,(.64+focus*.46-depth*.07)*(.22+.78*introDepth));
+        const brightness=Math.max(.44,.74+focus*.30-depth*.11);
+        const opacity=Math.max(.10,(.70+focus*.28-depth*.18)*(.30+.70*introDepth));
+        // Normalize the bookstore's focal landing pose back to the Scene's
+        // authored size and position, avoiding a final 1.1x size jump.
+        const translateZ=z-135,normalizedScale=scale/1.10;
+        frames.push({
+          offset:t,opacity:Math.min(1,opacity/.98),
+          transform:`perspective(1200px) translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,${translateZ.toFixed(2)}px) rotateY(${(-angle*.72).toFixed(2)}deg) scale(${normalizedScale.toFixed(4)})`,
+          filter:`brightness(${(brightness/1.04).toFixed(3)})`
+        });
+      }
+      return frames;
+    }
+
+    _playBookstoreRingEffect(scene,target) {
+      if(!target||target.dataset.ringEffectPlayed==='true'||typeof target.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+      if(target.classList.contains('live-edit-empty-target')&&!target.textContent.trim())return;
+      target.dataset.ringEffectPlayed='true';
+      const timing=scene?.presentation?.effectTiming||{};
+      const duration=Math.max(600,Math.min(6000,(Number(timing.duration)||2.35)*1000));
+      const delay=Math.max(0,Math.min(6000,(Number(timing.delay)||0)*1000));
+      const animation=target.animate(this._bookstoreRingKeyframes(),{duration,delay,easing:'linear',fill:'both'});
+      animation.onfinish=()=>{try{animation.cancel();}catch{}};
+    }
+
+    _playEntranceEffectOnce(article, scene) {
       if (!article || article.dataset.fxPlayed === 'true') return;
       article.dataset.fxPlayed = 'true';
+      if(article.dataset.effect==='ring'){
+        this._playBookstoreRingEffect(scene||this.currentScene,article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text'));
+        return;
+      }
       article.classList.remove('sp-fx-play');
       void article.offsetWidth;
       article.classList.add('sp-fx-play');
@@ -6895,9 +6944,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(effect==='scene')effect=scene?.presentation?.effect||'auto';
       if(effect==='typewriter')effect='fade';
       if(!effect||effect==='none'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+      if(effect==='ring'){object.dataset.imageEffectPlayed='true';this._playBookstoreRingEffect(scene,object);return;}
       const motion={
         auto:[{opacity:0,filter:'blur(3px)',transform:'translateY(14px) scale(.985)'},{opacity:1,filter:'blur(0)',transform:'translateY(0) scale(1)'}],
-        ring:[{opacity:0,transform:'perspective(900px) translate3d(76vw,-8vh,-220px) rotateY(65deg) rotateZ(16deg) scale(.35)',offset:0},{opacity:.45,transform:'perspective(900px) translate3d(35vw,40vh,-120px) rotateY(35deg) rotateZ(10deg) scale(.55)',offset:.28},{opacity:.82,transform:'perspective(900px) translate3d(-48vw,24vh,40px) rotateY(-40deg) rotateZ(-12deg) scale(.82)',offset:.58},{opacity:1,transform:'perspective(900px) translate3d(-28vw,-26vh,110px) rotateY(-20deg) rotateZ(-8deg) scale(.96)',offset:.82},{opacity:1,transform:'perspective(900px) translate3d(0,0,0) rotateY(0) rotateZ(0) scale(1)',offset:1}],
         fade:[{opacity:0},{opacity:1}],rise:[{opacity:0,transform:'translateY(34px)'},{opacity:1,transform:'translateY(0)'}],
         left:[{opacity:0,transform:'translateX(-48px)'},{opacity:1,transform:'translateX(0)'}],right:[{opacity:0,transform:'translateX(48px)'},{opacity:1,transform:'translateX(0)'}],
         up:[{opacity:0,transform:'translateY(-40px)'},{opacity:1,transform:'translateY(0)'}],down:[{opacity:0,transform:'translateY(40px)'},{opacity:1,transform:'translateY(0)'}],
@@ -6924,7 +6973,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Entrance effects belong to the moment the Scene first appears.
       // Never replay merely because the Scene remains in the visible stack
       // or because another Scene is revealed above/below it.
-      this._playEntranceEffectOnce(article);
+      this._playEntranceEffectOnce(article,scene);
       this._playSceneImageEffectOnce(scene, article);
 
       if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
