@@ -7868,8 +7868,24 @@ return flowCommentCard;}
     ['down',u('下へ入る','Enter from below')],['pop',u('ポップ','Pop')],['blur',u('ぼかしから表示','Reveal from blur')],
     ['zoom',u('ズーム','Zoom')],['rotate',u('回転しながら表示','Rotate in')],['flash',u('閃光','Flash')]
   ];
-  const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')]];
+  const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-soft',u('やわらかい心情枠','Soft emotion frame')],['handdrawn-shout',u('トゲのある叫び枠','Spiky shout frame')],['handdrawn-focus',u('集中線風の枠','Impact burst frame')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')]];
   const isFrameType=value=>String(value||'').startsWith('handdrawn-');
+  function makeFrameStyleControls(scene,onUpdate){
+    const p=ensurePresentation(scene);p.frame||={type:'handdrawn-voice'};
+    const box=document.createElement('section');box.className='live-frame-style-controls';
+    const title=document.createElement('strong');title.textContent=u('枠のサイズ・色','Frame size & color');box.appendChild(title);
+    const row=(label,min,max,value)=>{const wrap=document.createElement('label');wrap.className='live-frame-range';const name=document.createElement('span');name.textContent=label;const input=document.createElement('input');input.type='range';input.min=String(min);input.max=String(max);input.step='1';input.value=String(value);const number=document.createElement('output');number.textContent=`${value>0?'+':''}${value}px`;wrap.append(name,input,number);input.addEventListener('input',()=>{const v=Math.max(min,Math.min(max,Number(input.value)||0));number.textContent=`${v>0?'+':''}${v}px`;p.frame[wrap.dataset.key]=v||undefined;if(!v)delete p.frame[wrap.dataset.key];document.querySelectorAll('.sp-handdrawn-frame').forEach(el=>{if(el.closest('.sp-scene')?.dataset.sceneId===String(scene.id))el.style.setProperty(wrap.dataset.css,`${v}px`);});scheduleDraftSave(120);onUpdate?.();});return{wrap,input};};
+    const x=row(u('左右の余白','Horizontal padding'),-24,100,Number(p.frame.extraX)||0);x.wrap.dataset.key='extraX';x.wrap.dataset.css='--sp-frame-extra-x';
+    const y=row(u('上下の余白','Vertical padding'),-24,100,Number(p.frame.extraY)||0);y.wrap.dataset.key='extraY';y.wrap.dataset.css='--sp-frame-extra-y';
+    box.append(x.wrap,y.wrap);
+    const colors=document.createElement('div');colors.className='live-frame-colors';
+    const makeColor=(key,label,fallback)=>{const wrap=document.createElement('label');wrap.className='live-frame-color';const text=document.createElement('span');text.textContent=label;const input=document.createElement('input');input.type='color';input.value=/^#[0-9a-f]{6}$/i.test(String(p.frame[key]||''))?p.frame[key]:(fallback);input.addEventListener('input',()=>{p.frame[key]=input.value.toUpperCase();const css=key==='fill'?'--sp-frame-fill':'--sp-frame-stroke';document.querySelectorAll('.sp-handdrawn-frame').forEach(el=>{if(el.closest('.sp-scene')?.dataset.sceneId===String(scene.id))el.style.setProperty(css,input.value);});scheduleDraftSave(120);});input.addEventListener('change',()=>onUpdate?.());wrap.append(text,input);return wrap;};
+    const dark=p.frame.type==='handdrawn-dark';
+    colors.append(makeColor('fill',u('塗り','Fill'),dark?'#171512':'#FFFDF8'),makeColor('stroke',u('線','Outline'),dark?'#FFFDF8':'#171512'));
+    box.appendChild(colors);
+    const hint=document.createElement('small');hint.textContent=u('余白を増やすと、文字より大きな枠になります。','Increase padding to make the frame larger than the text.');box.appendChild(hint);
+    return box;
+  }
   function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
   function setFramePositionPreset(p,preset){
     p.text||={};
@@ -12910,9 +12926,10 @@ function openDesktopEffectDetail(){
       desktopDetailSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);apply();}),
       desktopDetailSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
       desktopDetailSelect(u('文字の出現方向','Text entrance direction'),TEXT_ENTRY_DIRECTION_OPTIONS,p.text?.entryDirection||'auto',v=>{p.text||={};if(v==='auto')delete p.text.entryDirection;else p.text.entryDirection=v;apply();}),
-      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
+      desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();if(refreshMobileLiveDetail('effect'))return;closeDesktopEffectDetail();openDesktopEffectDetail();}),
       desktopDetailSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{setSceneTextFlip(scene,v);apply();})
     );
+    if(isFrameType(p.frame?.type))basic.appendChild(makeFrameStyleControls(scene,apply));
 
     const timing=section(u('タイミング','Timing'));timing.classList.add('desktop-effect-timing-section');
     const timingGrid=two(timing);
@@ -16659,10 +16676,11 @@ function openDesktopTextDetail(){
           makeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の出現方向','Text entrance direction'),TEXT_ENTRY_DIRECTION_OPTIONS,p.text?.entryDirection||'auto',v=>{p.text||={};if(v==='auto')delete p.text.entryDirection;else p.text.entryDirection=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('消え方','Exit motion'),EXIT_MOTION_OPTIONS,p.disappear?.motion||'stay',v=>{p.disappear={...(p.disappear||{}),motion:v};if(!(Number(p.disappear.after)>0))p.disappear.after=2500;if(!(Number(p.disappear.fade)>0))p.disappear.fade=700;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           textFlipField
         );
         liveEditSheetBody.append(grid);
+        if(isFrameType(p.frame?.type))liveEditSheetBody.append(makeFrameStyleControls(scene,()=>refreshLivePlayer()));
         if((p.view||'world')==='web-board'){
           initWebBoardMeta(scene,index);
           const board=document.createElement('div');board.className='live-web-board-fields';

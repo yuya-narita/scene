@@ -5762,18 +5762,36 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _handdrawnPath(width,height,seed,trace=0,shapeLevel=0,frameType='handdrawn-voice') {
       const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0);
-      const inset=5.5+trace*.35,rx=Math.max(8,(width-inset*2)/2),ry=Math.max(8,(height-inset*2)/2);
-      const cx=width/2+(random()-.5)*1.8,cy=height/2+(random()-.5)*1.8,count=32,phase=random()*Math.PI*2,points=[];
+      const inset=5.5+trace*.35;
+      const rx=Math.max(8,(width-inset*2)/2);
+      const ry=Math.max(8,(height-inset*2)/2);
+      const cx=width/2+(random()-.5)*1.8;
+      const cy=height/2+(random()-.5)*1.8;
+      const burst=frameType==='handdrawn-shout'||frameType==='handdrawn-focus';
+      const count=frameType==='handdrawn-focus'?96:32;
+      const phase=random()*Math.PI*2;
+      const points=[];
       for(let i=0;i<count;i++){
-        const angle=(Math.PI*2*i/count)-Math.PI/2,ca=Math.cos(angle),sa=Math.sin(angle),n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel'].includes(frameType)?4.7:8.5);
-        const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx,baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
-        const wobble=1+Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006+(random()-.5)*.018+(trace-1)*.0025;
+        const angle=(Math.PI*2*i/count)-Math.PI/2;
+        const ca=Math.cos(angle),sa=Math.sin(angle);
+        const n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel','handdrawn-soft'].includes(frameType)?5.2:8.5);
+        const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx;
+        const baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
+        const harmonic=Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006;
+        const grain=(random()-.5)*.018;
+        const spike=frameType==='handdrawn-shout'?(i%2?.84:1.12):frameType==='handdrawn-focus'?(i%2?.94:1.075):1;
+        const wobble=(1+harmonic+grain+(trace-1)*.0025)*spike;
         points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});
       }
       let d=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+      if(burst){for(let i=1;i<count;i++)d+=` L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`;return `${d} Z`;}
       for(let i=0;i<count;i++){
         const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];
-        d+=` C ${(p1.x+(p2.x-p0.x)/6).toFixed(2)} ${(p1.y+(p2.y-p0.y)/6).toFixed(2)} ${(p2.x-(p3.x-p1.x)/6).toFixed(2)} ${(p2.y-(p3.y-p1.y)/6).toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+        const c1x=p1.x+(p2.x-p0.x)/6;
+        const c1y=p1.y+(p2.y-p0.y)/6;
+        const c2x=p2.x-(p3.x-p1.x)/6;
+        const c2y=p2.y-(p3.y-p1.y)/6;
+        d+=` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
       }
       return `${d} Z`;
     }
@@ -5804,7 +5822,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;
           rects=measureRects();const fittedTextRect=logicalRect(text);
           inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
-          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12),padY=(mobile?30:38)+shapeLevel*(mobile?13:18),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
+          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,frameOptions=presentation.frame||{},padX=(mobile?27:34)+shapeLevel*(mobile?8:12)+Math.max(-24,Math.min(120,Number(frameOptions.extraX)||0)),padY=(mobile?30:38)+shapeLevel*(mobile?13:18)+Math.max(-24,Math.min(120,Number(frameOptions.extraY)||0)),inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
           text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
           frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;
         }
@@ -6681,6 +6699,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;
             frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
             frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
+            const frameOptions=presentation.frame||{};if(frameOptions.fill)frame.style.setProperty('--sp-frame-fill',String(frameOptions.fill));if(frameOptions.stroke)frame.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke));frame.style.setProperty('--sp-frame-extra-x',`${Math.max(-24,Math.min(120,Number(frameOptions.extraX)||0))}px`);frame.style.setProperty('--sp-frame-extra-y',`${Math.max(-24,Math.min(120,Number(frameOptions.extraY)||0))}px`);
             const inkColor=String(presentation.text?.color||'').trim().toLowerCase();if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';
             frame.appendChild(text);article.appendChild(frame);article.dataset.frame=presentation.frame.type;this._mountHanddrawnFrame(frame,scene,presentation);
           }else article.appendChild(text);
