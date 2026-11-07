@@ -6940,6 +6940,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         copy.querySelectorAll('[contenteditable="true"],button,input,textarea,select,a').forEach(node=>{node.removeAttribute('contenteditable');node.removeAttribute('tabindex');});
         copy.setAttribute('aria-hidden','true');
         copy.removeAttribute('tabindex');
+        copy.classList.remove('sp-bookstore-ring-source-hidden');
         copy.classList.add('sp-bookstore-ring-clone');
         copy.style.position='absolute';copy.style.left=`${centerX}px`;copy.style.top=`${centerY}px`;
         copy.style.width=`${width}px`;copy.style.height=`${height}px`;copy.style.margin='0';
