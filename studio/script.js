@@ -7861,6 +7861,13 @@ return flowCommentCard;}
     ['down-left',u('左下に抜ける','Exit lower left')],['down-right',u('右下に抜ける','Exit lower right')],
     ['shatter',u('ガラスのように砕ける','Shatter like glass')],['explode',u('爆発して消える','Explode away')]
   ];
+  const SCENE_IMAGE_ENTRY_EFFECT_OPTIONS=[
+    ['none',u('なし','None')],['scene',u('Sceneの出かたに合わせる','Match Scene entrance')],
+    ['auto',u('やわらかく表示','Soft reveal')],['fade',u('フェード','Fade')],['rise',u('下から浮かぶ','Rise from below')],
+    ['up',u('上から降りる','Drop from above')],['left',u('左から入る','Enter from left')],['right',u('右から入る','Enter from right')],
+    ['down',u('下へ入る','Enter from below')],['pop',u('ポップ','Pop')],['blur',u('ぼかしから表示','Reveal from blur')],
+    ['zoom',u('ズーム','Zoom')],['rotate',u('回転しながら表示','Rotate in')],['flash',u('閃光','Flash')]
+  ];
   const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')]];
   const isFrameType=value=>String(value||'').startsWith('handdrawn-');
   function framePositionPreset(scene){return scene?.presentation?.text?.position?.preset||scene?.presentation?.frame?.position?.preset||'auto';}
@@ -15148,6 +15155,10 @@ function openDesktopTextDetail(){
         sceneImage.align||imageAlignDefault,
         v=>{p.image.align=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}
       );
+      const imageEffectField=desktopMakeSelect(
+        u('画像の出現演出','Image entrance effect'),SCENE_IMAGE_ENTRY_EFFECT_OPTIONS,sceneImage.entryEffect||'none',
+        v=>{captureUndo('Scene画像の出現演出を元に戻せます');p.image.entryEffect=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}
+      );
 
       const rotationField=document.createElement('label');rotationField.className='desktop-scene-image-rotation';
       const rotationTitle=document.createElement('span');rotationTitle.textContent=u('傾き','Rotation');
@@ -15202,7 +15213,7 @@ function openDesktopTextDetail(){
       captionInput.addEventListener('change',()=>{captureUndo('Scene画像のキャプション設定変更を元に戻せます');p.image.caption=captionInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});
       captionField.append(captionInput,document.createElement('span'));captionField.lastChild.textContent=u('説明を画像下に表示','Show description as caption');
       const pageCountField=document.createElement('label');pageCountField.className='desktop-scene-image-check';const pageCountInput=document.createElement('input');pageCountInput.type='checkbox';pageCountInput.checked=sceneImage.showPageCount!==false;pageCountInput.addEventListener('change',()=>{captureUndo('ページ数バッジの表示設定を元に戻せます');p.image.showPageCount=pageCountInput.checked;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});});pageCountField.append(pageCountInput,document.createElement('span'));pageCountField.lastChild.textContent=u('＋ページ数を表示','Show page count badge');
-      sceneImageOptions.append(sizeField,alignField,rotationField,roundedField,shadowField,tapActionField,pageCountField);if(sceneImagePages(sceneImage).length>1)sceneImageOptions.append(pageDirectionField);if(viewRecField)sceneImageOptions.append(viewRecField);sceneImageOptions.append(altField,captionField);
+      sceneImageOptions.append(sizeField,alignField,imageEffectField,rotationField,roundedField,shadowField,tapActionField,pageCountField);if(sceneImagePages(sceneImage).length>1)sceneImageOptions.append(pageDirectionField);if(viewRecField)sceneImageOptions.append(viewRecField);sceneImageOptions.append(altField,captionField);
       sceneImageCard.append(sceneImageOptions);
 
       const sceneImageNote=document.createElement('small');sceneImageNote.className='desktop-scene-image-note';
@@ -16872,6 +16883,7 @@ function openDesktopTextDetail(){
             makeSceneImageSelect(u('表示サイズ','Display size'),[['small',u('小','Small')],['large',u('大','Large')]],current.size||((p.view==='chat')?'small':'large'),v=>{captureUndo('Scene画像の表示サイズ変更を元に戻せます');p.image.size=v;scheduleDraftSave(40);refreshLivePlayer();}),
             makeSceneImageSelect(u('配置','Alignment'),[['speaker',u('話者に合わせる','Follow speaker')],['left',u('左','Left')],['center',u('中央','Center')],['right',u('右','Right')]],current.align||((p.view==='chat')?'speaker':'center'),v=>{captureUndo('Scene画像の配置変更を元に戻せます');p.image.align=v;scheduleDraftSave(40);refreshLivePlayer();})
           );
+          opts.append(makeSceneImageSelect(u('画像の出現演出','Image entrance effect'),SCENE_IMAGE_ENTRY_EFFECT_OPTIONS,current.entryEffect||'none',v=>{captureUndo('Scene画像の出現演出を元に戻せます');p.image.entryEffect=v;scheduleDraftSave(40);refreshLivePlayer();}));
           const rotation=document.createElement('label');rotation.className='live-edit-field live-scene-image-rotation';rotation.append(u('傾き','Rotation'));
           const rotationRow=document.createElement('div');rotationRow.className='live-scene-image-rotation-row';
           const rotationRange=document.createElement('input');rotationRange.type='range';rotationRange.min='-20';rotationRange.max='20';rotationRange.step='1';rotationRange.value=String(Number(current.rotation)||0);

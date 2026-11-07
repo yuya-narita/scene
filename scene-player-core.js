@@ -6941,6 +6941,34 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       animation.onfinish=()=>{try{animation.cancel();}catch{}};
     }
 
+    _playSceneImageEffectOnce(scene, article) {
+      const image=scene?.presentation?.image;
+      const object=article?.querySelector(':scope > .sp-scene-image .sp-scene-image-object')||article?.querySelector('.sp-scene-image-object');
+      if(!image?.src||!object||object.dataset.imageEffectPlayed==='true'||typeof object.animate!=='function')return;
+      let effect=image.entryEffect||'none';
+      if(effect==='scene')effect=scene?.presentation?.effect||'auto';
+      if(effect==='typewriter')effect='fade';
+      if(!effect||effect==='none'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+      const motion={
+        auto:[{opacity:0,filter:'blur(3px)',transform:'translateY(14px) scale(.985)'},{opacity:1,filter:'blur(0)',transform:'translateY(0) scale(1)'}],
+        fade:[{opacity:0},{opacity:1}],rise:[{opacity:0,transform:'translateY(34px)'},{opacity:1,transform:'translateY(0)'}],
+        left:[{opacity:0,transform:'translateX(-48px)'},{opacity:1,transform:'translateX(0)'}],right:[{opacity:0,transform:'translateX(48px)'},{opacity:1,transform:'translateX(0)'}],
+        up:[{opacity:0,transform:'translateY(-40px)'},{opacity:1,transform:'translateY(0)'}],down:[{opacity:0,transform:'translateY(40px)'},{opacity:1,transform:'translateY(0)'}],
+        pop:[{opacity:0,transform:'scale(.72)'},{opacity:1,transform:'scale(1.08)',offset:.68},{opacity:1,transform:'scale(1)'}],
+        blur:[{opacity:0,filter:'blur(14px)',transform:'scale(1.03)'},{opacity:1,filter:'blur(0)',transform:'scale(1)'}],
+        zoom:[{opacity:0,transform:'scale(1.22)'},{opacity:1,transform:'scale(1)'}],
+        rotate:[{opacity:0,transform:'rotate(-12deg) scale(.84)'},{opacity:1,transform:'rotate(0) scale(1)'}],
+        flash:[{opacity:0,filter:'brightness(3) blur(5px)'},{opacity:1,filter:'brightness(1) blur(0)'}]
+      };
+      const keyframes=motion[effect]||motion.auto;
+      object.dataset.imageEffectPlayed='true';
+      const timing=scene.presentation?.effectTiming||{};
+      const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
+      const delay=Math.max(0,Math.min(6000,(Number(timing.delay)||0)*1000));
+      const animation=object.animate(keyframes,{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
+      animation.onfinish=()=>{try{animation.cancel();}catch{}};
+    }
+
     _activatePresentation(scene, article) {
       const presentation = scene.presentation || {};
       const textNode = article.querySelector('.sp-text');
@@ -6950,6 +6978,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Never replay merely because the Scene remains in the visible stack
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article);
+      this._playSceneImageEffectOnce(scene, article);
       this._playTextEntryDirectionOnce(scene,article);
 
       if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
