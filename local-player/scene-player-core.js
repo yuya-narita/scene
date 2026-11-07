@@ -5519,6 +5519,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       wrap.dataset.imageSize = ['small','large'].includes(image.size)
         ? image.size
         : ((presentation?.view==='chat') ? 'small' : 'large');
+      const customImageWidth=Math.max(40,Math.min(2000,Number(image.customWidth)||320));
+      wrap.style.setProperty('--sp-scene-image-custom-width',`${customImageWidth}px`);
 
       let imageAlign=image.align||((presentation?.view==='chat')?'speaker':'center');
       if(imageAlign==='speaker'){
@@ -6889,7 +6891,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const image=scene?.presentation?.image;
       const object=article?.querySelector(':scope > .sp-scene-image .sp-scene-image-object')||article?.querySelector('.sp-scene-image-object');
       if(!image?.src||!object||object.dataset.imageEffectPlayed==='true'||typeof object.animate!=='function')return;
-      let effect=image.entryEffect||'none';
+      let effect=image.entryEffect||'scene';
       if(effect==='scene')effect=scene?.presentation?.effect||'auto';
       if(effect==='typewriter')effect='fade';
       if(!effect||effect==='none'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;

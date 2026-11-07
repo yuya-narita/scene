@@ -2402,3 +2402,30 @@ html.sp-scene-image-open body{
 .sp-core.sp-bg-360-active .sp-background{pointer-events:none}
 .sp-core.sp-bg-360-active .sp-bg-layer{inset:-2%;background-size:auto 108%;background-repeat:repeat-x;will-change:background-position,opacity,filter}
 .sp-core.sp-bg-360-active .sp-bg-layer.is-current{animation:none!important;transform:none!important}
+
+
+/* Scene image custom width (CSS px), bounded by the preview/device viewport. */
+.sp-scene-image[data-image-size="custom"] .sp-scene-image-media{
+  width:min(var(--sp-scene-image-custom-width,320px),92cqw);
+  max-width:100%;
+  max-height:min(62cqh,760px);
+}
+.sp-scene-image[data-image-size="custom"] .sp-scene-image-media img{
+  width:100%!important;
+  max-width:100%!important;
+  max-height:min(62cqh,760px)!important;
+  height:auto!important;
+  object-fit:contain;
+}
+.sp-history-scene-image[data-image-size="custom"] .sp-history-scene-image-media{
+  width:min(var(--sp-scene-image-custom-width,320px),72cqw,520px);
+  max-width:100%;
+  max-height:28cqh;
+}
+.sp-history-scene-image[data-image-size="custom"] .sp-history-scene-image-media img{
+  width:100%!important;
+  max-width:100%!important;
+  max-height:28cqh!important;
+  height:auto!important;
+  object-fit:contain;
+}
