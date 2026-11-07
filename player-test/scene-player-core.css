@@ -2430,3 +2430,8 @@ html.sp-scene-image-open body{
   object-fit:contain;
 }
 
+
+/* Store-style ring: temporary copies circle the authored item, then the original remains. */
+.sp-bookstore-ring-overlay{position:absolute;inset:0;overflow:visible;pointer-events:none;perspective:1200px;transform-style:preserve-3d;z-index:9999}
+.sp-bookstore-ring-clone{position:absolute;backface-visibility:hidden;transform-style:preserve-3d;will-change:transform,opacity,filter;pointer-events:none!important}
+.sp-bookstore-ring-source-hidden{visibility:hidden!important}
