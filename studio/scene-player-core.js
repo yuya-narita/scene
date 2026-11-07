@@ -5946,13 +5946,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const extraY=Math.max(-80,Math.min(180,Number(frameOptions.extraY)||0));
       frame.style.setProperty('--sp-frame-extra-x',`${extraX}px`);
       frame.style.setProperty('--sp-frame-extra-y',`${extraY}px`);
-      const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-      const savedFill=String(frameOptions.fill||'').trim().toLowerCase();
-      const defaultFill=!savedFill||['#fffdf8','#ffffff','#fff','#101116','#171512','#000000','#000'].includes(savedFill);
-      const savedFrameStroke=String(frameOptions.stroke||'').trim().toLowerCase();
-      const defaultFrameStroke=!savedFrameStroke||['#171512','#000','#000000','black','#f5f2ff','#fff','#ffffff','white'].includes(savedFrameStroke);
-      if(!defaultFill)frame.style.setProperty('--sp-frame-fill',String(frameOptions.fill));
-      if(!defaultFrameStroke)frame.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke));
+      // Saved frame colors are explicit. Legacy balloons keep their original
+      // white fill / dark ink even when the surrounding Player theme is dark.
+      if(frameOptions.fill)frame.style.setProperty('--sp-frame-fill',String(frameOptions.fill));
+      if(frameOptions.stroke)frame.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke));
+      if(Object.prototype.hasOwnProperty.call(frameOptions,'extraX')||Object.prototype.hasOwnProperty.call(frameOptions,'extraY'))frame.dataset.frameCustomPadding='true';
       const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
       svg.classList.add('sp-handdrawn-frame-svg');svg.setAttribute('aria-hidden','true');svg.setAttribute('preserveAspectRatio','none');
       const defs=document.createElementNS(ns,'defs'),filter=document.createElementNS(ns,'filter');
@@ -6855,9 +6853,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const frame=document.createElement('div');frame.className='sp-handdrawn-frame';frame.dataset.frameType=presentation.frame.type;
             frame.dataset.writingMode=presentation.text?.writingMode==='vertical-rl'?'vertical-rl':'horizontal-tb';
             frame.dataset.frameAlign=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
-            const inkColor=String(presentation.text?.color||'').trim().toLowerCase();const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-            const themeDefaultInk=!inkColor||['white','#fff','#ffffff','#171512','#000','#000000','black'].includes(inkColor);
-            if(themeDefaultInk)text.style.color=darkTheme?'#F5F2FF':'#171512';
+            const inkColor=String(presentation.text?.color||'').trim().toLowerCase();
+            if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';
             frame.appendChild(text);article.appendChild(frame);article.dataset.frame=presentation.frame.type;this._mountHanddrawnFrame(frame,scene,presentation);
           }else article.appendChild(text);
         }

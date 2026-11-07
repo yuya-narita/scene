@@ -5912,13 +5912,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const extraY=Math.max(-80,Math.min(180,Number(frameOptions.extraY)||0));
       frame.style.setProperty('--sp-frame-extra-x',`${extraX}px`);
       frame.style.setProperty('--sp-frame-extra-y',`${extraY}px`);
-      const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-      const savedFill=String(frameOptions.fill||'').trim().toLowerCase();
-      const defaultFill=!savedFill||['#fffdf8','#ffffff','#fff','#101116','#171512','#000000','#000'].includes(savedFill);
-      const savedFrameStroke=String(frameOptions.stroke||'').trim().toLowerCase();
-      const defaultFrameStroke=!savedFrameStroke||['#171512','#000','#000000','black','#f5f2ff','#fff','#ffffff','white'].includes(savedFrameStroke);
-      if(!defaultFill)frame.style.setProperty('--sp-frame-fill',String(frameOptions.fill));
-      if(!defaultFrameStroke)frame.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke));
+      // Saved frame colors are explicit. Legacy balloons keep their original
+      // white fill / dark ink even when the surrounding Player theme is dark.
+      if(frameOptions.fill)frame.style.setProperty('--sp-frame-fill',String(frameOptions.fill));
+      if(frameOptions.stroke)frame.style.setProperty('--sp-frame-stroke',String(frameOptions.stroke));
+      if(Object.prototype.hasOwnProperty.call(frameOptions,'extraX')||Object.prototype.hasOwnProperty.call(frameOptions,'extraY'))frame.dataset.frameCustomPadding='true';
       const ns='http://www.w3.org/2000/svg';
       const svg=document.createElementNS(ns,'svg');
       svg.classList.add('sp-handdrawn-frame-svg');
@@ -5970,8 +5968,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length;
           const shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58)));
           const mobile=(this.host.clientWidth||global.innerWidth)<=600;
-          const padX=(mobile?27:34)+shapeLevel*(mobile?8:12);
-          const padY=(mobile?30:38)+shapeLevel*(mobile?13:18);
+          const padX=Math.max(0,(mobile?27:34)+shapeLevel*(mobile?8:12)+extraX);
+          const padY=Math.max(0,(mobile?30:38)+shapeLevel*(mobile?13:18)+extraY);
           const inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
           text.style.position='absolute';
           text.style.margin='0';
@@ -6843,9 +6841,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
             const align=['left','right'].includes(presentation.text?.align)?presentation.text.align:'center';
             frame.dataset.frameAlign=align;
             const inkColor=String(presentation.text?.color||'').trim().toLowerCase();
-            const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
-            const themeDefaultInk=!inkColor||['white','#fff','#ffffff','#171512','#000','#000000','black'].includes(inkColor);
-            if(themeDefaultInk)text.style.color=darkTheme?'#F5F2FF':'#171512';
+            if(!inkColor||inkColor==='white'||inkColor==='#fff'||inkColor==='#ffffff')text.style.color='#171512';
             frame.appendChild(text);
             article.appendChild(frame);
             article.dataset.frame=presentation.frame.type;
