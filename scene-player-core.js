@@ -5791,15 +5791,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const text=frame.querySelector(':scope > .sp-text');
       const stage=this.els.stage;
       if(!stage||!text)return;
-      stage.insertBefore(svg,this.els.scenes);
       const frameOptions=presentation?.frame||{};
       const darkTheme=this.host.dataset.theme==='dark'||(this.host.dataset.theme==='cinema'&&this.host.dataset.cinemaTone==='dark');
       const savedStroke=String(frameOptions.stroke||'').trim().toLowerCase();
       const defaultStroke=!savedStroke||['#171512','#000','#000000','black','#f5f2ff','#fff','#ffffff','white'].includes(savedStroke);
       svg.style.setProperty('--sp-frame-stroke',defaultStroke?(darkTheme?'#F5F2FF':'#171512'):frameOptions.stroke);
+      const sceneElement=frame.closest('.sp-scene');
+      const isActive=()=>sceneElement?.classList.contains('is-active')&&this.currentScene?.id===scene.id;
       let lastKey='';
       const draw=()=>{
-        if(!frame.isConnected||!stage.isConnected)return;
+        if(!frame.isConnected||!stage.isConnected||!isActive())return;
         const sr=stage.getBoundingClientRect(),elementRect=text.getBoundingClientRect();
         let tr={left:elementRect.left,top:elementRect.top,right:elementRect.right,bottom:elementRect.bottom,width:elementRect.width,height:elementRect.height};
         try{
@@ -5809,6 +5810,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }catch(_){}
         const width=Math.max(1,sr.width),height=Math.max(1,sr.height);
         const cx=tr.left+tr.width/2-sr.left,cy=tr.top+tr.height/2-sr.top;
+        const halfTextW=tr.width/2,halfTextH=tr.height/2;
+        const extraX=Math.max(0,Math.min(180,Number(frameOptions.extraX)||0));
+        const extraY=Math.max(0,Math.min(180,Number(frameOptions.extraY)||0));
+        // Intersect each ray with one enclosing ellipse. A projected rectangle's
+        // support distance creates two lobes and a pinched waist on vertical text.
+        const paddedX=Math.max(1,halfTextW+extraX+22),paddedY=Math.max(1,halfTextH+extraY+22);
+        const enclosure=Math.max(1,Math.hypot(halfTextW/paddedX,halfTextH/paddedY));
+        const radiusX=paddedX*enclosure,radiusY=paddedY*enclosure;
+        const clearDistance=(dx,dy)=>1/Math.hypot(dx/radiusX,dy/radiusY);
         const key=[width,height,cx,cy,tr.width,tr.height].map(v=>Math.round(v*2)/2).join(':');
         if(key===lastKey)return;lastKey=key;
         svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
@@ -5833,10 +5843,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         for(let i=0;i<count;i++){
           const angle=phase+(Math.PI*2*i/count)+(random()-.5)*.012;
           const dx=Math.cos(angle),dy=Math.sin(angle),endR=edgeDistance(angle);
-          const halfTextW=tr.width/2,halfTextH=tr.height/2;
-          const extraX=Math.max(0,Math.min(180,Number(frameOptions.extraX)||0));
-          const extraY=Math.max(0,Math.min(180,Number(frameOptions.extraY)||0));
-          const startR=Math.abs(dx)*(halfTextW+extraX)+Math.abs(dy)*(halfTextH+extraY)+18+random()*10;
+          const startR=clearDistance(dx,dy)+random()*10;
           if(endR<=startR+8)continue;
           const ex=cx+dx*endR,ey=cy+dy*endR;
           const nx=-dy,ny=dx;
@@ -5859,31 +5866,54 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         for(let i=0;i<56;i++){
           const angle=phase+(Math.PI*2*(i+.42)/56)+(random()-.5)*.025;
           const dx=Math.cos(angle),dy=Math.sin(angle),endR=edgeDistance(angle);
-          const extraX=Math.max(0,Math.min(180,Number(frameOptions.extraX)||0));
-          const extraY=Math.max(0,Math.min(180,Number(frameOptions.extraY)||0));
-          const startR=Math.abs(dx)*(tr.width/2+extraX)+Math.abs(dy)*(tr.height/2+extraY)+28+random()*20;
+          const startR=clearDistance(dx,dy)+10+random()*20;
           const r0=startR+(endR-startR)*(.12+random()*.36),r1=Math.min(endR,r0+35+random()*150);
           if(r1<=r0)continue;
           const p=document.createElementNS(ns,'path');p.setAttribute('d',`M ${fmt(cx+dx*r0)} ${fmt(cy+dy*r0)} L ${fmt(cx+dx*r1)} ${fmt(cy+dy*r1)}`);p.classList.add('sp-focus-dry');p.style.strokeWidth=String(.35+random()*.9);p.style.opacity=String(.18+random()*.32);rays.appendChild(p);
         }
       };
-      // Scene entrance uses transforms, which ResizeObserver does not report. Keep
-      // the focal hole attached to the visible text while that entrance settles.
-      let tracking=false;
+      // ResizeObserver cannot see entrance transforms. Track them briefly, but
+      // the viewport artwork belongs only to this Scene while it is active.
+      let trackingFrame=0,resizeObserver=null,lifecycleObserver=null,disposed=false,visible=false;
       const trackEntrance=()=>{
-        if(tracking)return;tracking=true;let frames=0;
-        const tick=()=>{if(!frame.isConnected){tracking=false;svg.remove();return;}draw();if(++frames<90)requestAnimationFrame(tick);else tracking=false;};
-        requestAnimationFrame(tick);
+        if(trackingFrame||disposed||!isActive())return;
+        let frames=0;
+        const tick=()=>{
+          trackingFrame=0;
+          if(disposed||!frame.isConnected||!isActive())return;
+          draw();
+          if(++frames<90)trackingFrame=requestAnimationFrame(tick);
+        };
+        trackingFrame=requestAnimationFrame(tick);
       };
-      trackEntrance();
-      const sceneElement=frame.closest('.sp-scene');
+      const dispose=()=>{
+        if(disposed)return;disposed=true;
+        cancelAnimationFrame(trackingFrame);trackingFrame=0;
+        resizeObserver?.disconnect();lifecycleObserver?.disconnect();
+        sceneElement?.removeEventListener('transitionrun',trackEntrance);
+        svg.remove();
+      };
+      const syncActive=()=>{
+        if(disposed)return;
+        if(!frame.isConnected||!stage.isConnected){dispose();return;}
+        if(!isActive()){
+          visible=false;svg.remove();
+          cancelAnimationFrame(trackingFrame);trackingFrame=0;
+          return;
+        }
+        if(svg.parentNode!==stage)stage.insertBefore(svg,this.els.scenes);
+        if(!visible){visible=true;lastKey='';trackEntrance();}
+      };
       sceneElement?.addEventListener('transitionrun',trackEntrance);
       if(typeof ResizeObserver==='function'){
-        const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();svg.remove();return;}draw();});
-        observer.observe(stage);observer.observe(frame);observer.observe(text);
+        resizeObserver=new ResizeObserver(()=>{syncActive();draw();});
+        resizeObserver.observe(stage);resizeObserver.observe(frame);resizeObserver.observe(text);
       }
-      const cleanup=new MutationObserver(()=>{if(!frame.isConnected){cleanup.disconnect();svg.remove();}});
-      cleanup.observe(stage,{subtree:true,childList:true});
+      // Past Scene nodes stay mounted in stack mode. Observe their active class,
+      // rather than waiting for the old text node to be removed from the DOM.
+      lifecycleObserver=new MutationObserver(syncActive);
+      lifecycleObserver.observe(this.els.scenes,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+      requestAnimationFrame(syncActive);
     }
 
     _mountHanddrawnFrame(frame,scene,presentation) {
