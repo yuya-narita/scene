@@ -6607,7 +6607,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (effect && /^[a-zA-Z0-9_-]+$/.test(effect)) article.dataset.effect = effect;
       const fxTiming = presentation.effectTiming || {};
       const fxDuration = Math.max(.08, Math.min(6, asNumber(fxTiming.duration, 0)));
-      const fxDelay = Math.max(0, Math.min(6, asNumber(fxTiming.delay, 0)));
+      const fxDelay = Math.max(0, Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600:6, asNumber(fxTiming.delay, 0)));
       if (fxDuration > 0) article.style.setProperty('--sp-effect-duration', `${fxDuration}s`);
       if (fxDelay > 0) article.style.setProperty('--sp-effect-delay', `${fxDelay}s`);
       if (requestedEffect === 'auto') article.dataset.autoTransition = 'true';
@@ -7013,7 +7013,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const radius=Math.min(430,Math.max(320,stageWidth*.52));
       const timing=scene?.presentation?.effectTiming||{};
       const duration=Math.max(600,Math.min(6000,(Number(timing.duration)||2.35)*1000));
-      const delay=Math.max(0,Math.min(6000,(Number(timing.delay)||0)*1000));
+      const delay=Math.max(0,Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600000:6000,(Number(timing.delay)||0)*1000));
       const baseTransform=target.style.transform&&target.style.transform!=='none'?target.style.transform:'';
       const overlay=document.createElement('div');
       overlay.className='sp-bookstore-ring-overlay';
@@ -7112,7 +7112,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       object.dataset.imageEffectPlayed='true';
       const timing=scene.presentation?.effectTiming||{};
       const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
-      const delay=Math.max(0,Math.min(6000,(Number(timing.delay)||0)*1000));
+      const delay=Math.max(0,Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600000:6000,(Number(timing.delay)||0)*1000));
       const animation=object.animate(keyframes,{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
       animation.onfinish=()=>{try{animation.cancel();}catch{}};
     }
@@ -7129,7 +7129,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const dy=Math.round(Math.max(48,Math.min(240,height*.18))*vector[1]);
       const timing=scene.presentation?.effectTiming||{};
       const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
-      const delay=Math.max(0,Math.min(6000,(Number(timing.delay)||0)*1000));
+      const delay=Math.max(0,Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600000:6000,(Number(timing.delay)||0)*1000));
       const animation=text.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
       animation.onfinish=()=>{try{animation.cancel();}catch{}};
     }
@@ -7360,7 +7360,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       node.classList.toggle('is-active',current);node.classList.add('is-visible');node.classList.remove('entering');
       node.dataset.age=current?'0':String(Math.max(1,this._simultaneousUnits().filter(u=>u.start>index&&u.start<=g.start).length));
       node.dataset.simultaneousMember=current?'active':'past';
-      if(current){node.style.transition='none';node.style.opacity='';}
+      if(current){
+        node.style.transition='none';node.style.opacity='';
+        // Suppress the entire member before its delay, including balloons and images.
+        // Directional WAAPI animations can otherwise expose their initial position.
+        if(Number(scene.presentation?.effectTiming?.delay)>0)node.dataset.simultaneousWaiting='true';
+        else delete node.dataset.simultaneousWaiting;
+      }
       this.els.scenes.appendChild(node);nodes.push(node);
     });
     old.forEach(node=>node.remove());
@@ -7373,6 +7379,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._simultaneousLayoutPending=false;
       for(let i=0;i<nodes.length;i++)if(visible[i].index>=g.start&&visible[i].index<=g.end){
         const member=visible[i].scene,node=nodes[i],timing=member.presentation?.effectTiming||{};
+        const wait=Math.max(0,Number(timing.delay)||0)*1000;
+        if(wait>0)this._presentationTimeout(()=>{
+          if(node.isConnected&&this._simultaneousEpoch===epoch)delete node.dataset.simultaneousWaiting;
+        },wait);
         if(node.dataset.entryMotion!=='still'&&typeof node.animate==='function'&&!global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches){
           const horizontal=member.presentation?.flow==='horizontal',vertical=member.presentation?.text?.writingMode==='vertical-rl';
           const dx=horizontal?(vertical?-13:13):0,dy=horizontal?0:13;
@@ -7392,7 +7402,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
   };
   const originalFinish=P._finishVisibleEntranceEffects;
   P._finishVisibleEntranceEffects=function(){
-    this.els?.scenes?.querySelectorAll('.sp-scene').forEach(n=>{n._simultaneousEntryAnimation?.cancel();n._simultaneousEntryAnimation=null;});
+    this.els?.scenes?.querySelectorAll('.sp-scene').forEach(n=>{n._simultaneousEntryAnimation?.cancel();n._simultaneousEntryAnimation=null;delete n.dataset.simultaneousWaiting;});
     return originalFinish.call(this);
   };
   Object.defineProperty(P,'progress',{configurable:true,get(){return this.document?(this._simultaneousBounds().end+1)/this.document.scenes.length:0;}});

@@ -3003,3 +3003,8 @@ html.sp-scene-image-open body{
 /* Frame artwork follows the active Player theme unless a Scene stores custom colors. */
 
 .sp-text-outline{paint-order:stroke fill;-webkit-text-fill-color:currentColor;}
+
+/* Keep every visual of a delayed group member hidden until its own cue. */
+.sp-scene[data-simultaneous-waiting="true"]{opacity:0!important;pointer-events:none!important}
+
+.sp-scene[data-simultaneous-waiting="true"] *{pointer-events:none!important}
