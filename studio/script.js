@@ -7883,10 +7883,15 @@ return flowCommentCard;}
       input.addEventListener('input',()=>{p.frame[key]=Number(input.value);value.textContent=`+${input.value}px`;scheduleDraftSave(100);onPreview();});
       wrap.append(head,input);return wrap;
     };
+    const darkTheme=selectedTheme==='dark'||(selectedTheme==='cinema'&&cinemaTone==='dark');
     const makeColor=(label,key,fallback)=>{
       const wrap=document.createElement('label');wrap.className='desktop-live-frame-color';
       const name=document.createElement('span');name.textContent=label;
-      const input=document.createElement('input');input.type='color';input.value=/^#[0-9a-f]{6}$/i.test(String(p.frame[key]||''))?p.frame[key]:fallback;
+      const stored=String(p.frame[key]||'').trim().toLowerCase();
+      const defaults=key==='fill'?['#fffdf8','#ffffff','#fff','#101116','#171512','#000000','#000'] : ['#171512','#000000','#000','black','#f5f2ff','#ffffff','#fff','white'];
+      const isThemeDefault=!stored||defaults.includes(stored);
+      const themeDefault=darkTheme?(key==='fill'?'#101116':'#F5F2FF'):fallback;
+      const input=document.createElement('input');input.type='color';input.value=isThemeDefault?themeDefault:(/^#[0-9a-f]{6}$/i.test(stored)?stored:fallback);
       input.addEventListener('input',()=>{p.frame[key]=input.value.toUpperCase();scheduleDraftSave(100);onPreview();});
       wrap.append(name,input);return wrap;
     };

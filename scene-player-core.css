@@ -2977,6 +2977,8 @@ html.sp-scene-image-open body{
 /* Full-screen manga focus rays: the text remains clear while broken ink beams reach the stage edges. */
 .sp-handdrawn-frame.sp-focus-screen-frame{padding:0!important;background:transparent!important;isolation:isolate;}
 .sp-focus-screen-frame>.sp-text{position:relative;z-index:1;text-shadow:none;}
+.sp-fullscreen-focus-rays{z-index:0!important;}
+.sp-focus-screen-frame{position:relative;z-index:1;}
 .sp-fullscreen-focus-rays{position:absolute;inset:0;z-index:auto;display:block;width:100%;height:100%;overflow:hidden;pointer-events:none;}
 .sp-focus-wedge{fill:var(--sp-frame-stroke,#171512);stroke:none;}
 .sp-focus-ray,.sp-focus-hairline,.sp-focus-dry{fill:none;stroke:var(--sp-frame-stroke,#171512);stroke-linecap:round;vector-effect:non-scaling-stroke;}
@@ -2997,3 +2999,6 @@ html.sp-scene-image-open body{
 .sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-fill{fill:var(--sp-frame-fill,rgba(23,21,18,.9))}
 .sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-bleed,.sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-ghost,.sp-handdrawn-frame[data-frame-type="handdrawn-dark"] .sp-handdrawn-ink{stroke:var(--sp-frame-stroke,#fffdf8)}
 .sp-handdrawn-frame[data-frame-type="handdrawn-panel"] .sp-handdrawn-fill{fill:var(--sp-frame-fill,rgba(255,253,248,.7))}
+
+/* Frame artwork follows the active Player theme unless a Scene stores custom colors. */
+.sp-core[data-theme="dark"] .sp-handdrawn-frame,.sp-core[data-theme="cinema"][data-cinema-tone="dark"] .sp-handdrawn-frame{--sp-frame-fill:#101116;--sp-frame-stroke:#F5F2FF}
