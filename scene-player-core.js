@@ -6967,11 +6967,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           : [article];
         targets.forEach(target=>{
         target.style.setProperty('--sp-disappear-fade', `${fade}ms`);
-        // Shatter / explode animate the Scene at its CURRENT laid-out position.
-        // Their keyframes add relative motion on top of this anchor instead of
-        // replacing the stack translate and jumping to the stage origin first.
-        if (motion === 'shatter' || motion === 'explode') {
-          target.style.setProperty('--sp-disappear-anchor-transform', target.style.transform || 'translate3d(0,0,0)');
+        // Preserve the Scene's current layout transform for every moving exit.
+        // UP previously replaced a stacked Scene transform with a tiny translateY,
+        // which looked like a teleport before fading. The CSS now adds its travel
+        // distance on top of this captured anchor.
+        if (motion === 'up' || motion === 'shatter' || motion === 'explode') {
+          const currentTransform=target.style.transform;
+          const anchorTransform=currentTransform&&currentTransform!=='none'?currentTransform:'translate3d(0,0,0)';
+          target.style.setProperty('--sp-disappear-anchor-transform',anchorTransform);
         } else {
           target.style.removeProperty('--sp-disappear-anchor-transform');
         }
