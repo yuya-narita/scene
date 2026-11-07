@@ -5751,29 +5751,50 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _handdrawnPath(width,height,seed,trace=0,shapeLevel=0,frameType='handdrawn-voice') {
       const random=this._handdrawnRandom((seed+Math.imul(trace+1,2654435761))>>>0);
-      const inset=5.5+trace*.35;
+      const aliases={'handdrawn-rounded':'handdrawn-voice','handdrawn-double':'handdrawn-sketch','handdrawn-dashed':'handdrawn-whisper','handdrawn-dark':'handdrawn-inkburst','handdrawn-narration':'handdrawn-paper'};
+      frameType=aliases[frameType]||frameType;
+      const inset=frameType==='handdrawn-focus'||frameType==='handdrawn-impact'?10+trace*.35:5.5+trace*.35;
       const rx=Math.max(8,(width-inset*2)/2);
       const ry=Math.max(8,(height-inset*2)/2);
       const cx=width/2+(random()-.5)*1.8;
       const cy=height/2+(random()-.5)*1.8;
-      const burst=frameType==='handdrawn-shout'||frameType==='handdrawn-focus';
-      const count=frameType==='handdrawn-focus'?96:32;
+      const burst=['handdrawn-shout','handdrawn-focus','handdrawn-impact'].includes(frameType);
+      const count=frameType==='handdrawn-focus'?112:frameType==='handdrawn-whisper'?76:frameType==='handdrawn-sketch'?28:frameType==='handdrawn-paper'?48:frameType==='handdrawn-inkburst'?72:48;
       const phase=random()*Math.PI*2;
       const points=[];
       for(let i=0;i<count;i++){
         const angle=(Math.PI*2*i/count)-Math.PI/2;
         const ca=Math.cos(angle),sa=Math.sin(angle);
-        const n=frameType==='handdrawn-voice'?2.05+Math.max(0,Math.min(1,shapeLevel))*2.35:(['handdrawn-rounded','handdrawn-panel','handdrawn-soft'].includes(frameType)?5.2:8.5);
+        const n=frameType==='handdrawn-voice'?2.18+Math.max(0,Math.min(1,shapeLevel))*1.6:
+          frameType==='handdrawn-soft'?3.35:
+          frameType==='handdrawn-thought'?2.25:
+          frameType==='handdrawn-paper'?5.8:
+          frameType==='handdrawn-romance'?2.05:
+          frameType==='handdrawn-fear'?2.15:4.2;
         const baseX=Math.sign(ca)*Math.pow(Math.abs(ca),2/n)*rx;
         const baseY=Math.sign(sa)*Math.pow(Math.abs(sa),2/n)*ry;
-        const harmonic=Math.sin(angle*3+phase)*.010+Math.sin(angle*5-phase*.7)*.006;
-        const grain=(random()-.5)*.018;
-        const spike=frameType==='handdrawn-shout'?(i%2?.84:1.12):frameType==='handdrawn-focus'?(i%2?.94:1.075):1;
-        const wobble=(1+harmonic+grain+(trace-1)*.0025)*spike;
+        const harmonic=Math.sin(angle*3+phase)*.018+Math.sin(angle*5-phase*.7)*.012+Math.sin(angle*9+phase*.4)*.006;
+        let grain=(random()-.5)*(frameType==='handdrawn-fear'?.026:frameType==='handdrawn-sketch'?.034:.016);
+        let detail=0;
+        if(frameType==='handdrawn-soft')detail=Math.sin(angle*7+phase)*.035+Math.sin(angle*11-phase)*.012;
+        if(frameType==='handdrawn-thought')detail=Math.cos(angle*10+phase)*.115;
+        if(frameType==='handdrawn-romance')detail=Math.sin(angle*6+phase)*.025;
+        if(frameType==='handdrawn-fear')detail=Math.sin(angle*15+phase)*.025+Math.sin(angle*23-phase)*.014;
+        if(frameType==='handdrawn-paper')detail=Math.sin(angle*17+phase)*.055+Math.sin(angle*31-phase)*.025;
+        let spike=1;
+        if(frameType==='handdrawn-shout')spike=i%2?(0.79+random()*.12):(1.12+random()*.38);
+        if(frameType==='handdrawn-impact')spike=i%4===0?1.42+random()*.38:i%2?.88:1.07;
+        if(frameType==='handdrawn-focus')spike=i%2?.91+random()*.06:1.09+random()*.13;
+        // Give the classic balloon one hand-cut tail, integrated into the contour.
+        const tail=frameType==='handdrawn-voice'?.44*Math.exp(-Math.pow((angle-2.18)/.17,2)):0;
+        const wobble=(1+harmonic+grain+detail+tail+(trace-1)*.003)*spike;
         points.push({x:cx+baseX*wobble,y:cy+baseY*wobble});
       }
       let d=`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
-      if(burst){for(let i=1;i<count;i++)d+=` L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`;return `${d} Z`;}
+      if(burst||frameType==='handdrawn-paper'||frameType==='handdrawn-sketch'||frameType==='handdrawn-inkburst'){
+        for(let i=1;i<count;i++)d+=` L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`;
+        return `${d} Z`;
+      }
       for(let i=0;i<count;i++){
         const p0=points[(i-1+count)%count],p1=points[i],p2=points[(i+1)%count],p3=points[(i+2)%count];
         const c1x=p1.x+(p2.x-p0.x)/6;
@@ -5783,6 +5804,52 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         d+=` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
       }
       return `${d} Z`;
+    }
+
+    _handdrawnDecoration(width,height,seed,frameType) {
+      const random=this._handdrawnRandom((seed^0x51f15e5d)>>>0);
+      const cx=width/2,cy=height/2,rx=Math.max(8,width/2-3),ry=Math.max(8,height/2-3);
+      const paths=[];
+      const line=(x1,y1,x2,y2,w=1)=>paths.push(`M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`);
+      if(['handdrawn-focus','handdrawn-impact','handdrawn-shout'].includes(frameType)){
+        const total=frameType==='handdrawn-focus'?46:frameType==='handdrawn-impact'?24:16;
+        for(let i=0;i<total;i++){
+          const a=Math.PI*2*(i+(random()-.5)*.45)/total-Math.PI/2;
+          const ca=Math.cos(a),sa=Math.sin(a),start=1+random()*5;
+          const end=frameType==='handdrawn-focus'?10+random()*25:8+random()*18;
+          line(cx+ca*(rx+start),cy+sa*(ry+start),cx+ca*(rx+end),cy+sa*(ry+end),random()<.2?1.9:.9);
+        }
+      }
+      if(frameType==='handdrawn-thought'){
+        const r=Math.max(3,Math.min(width,height)*.035);
+        paths.push(`M${(cx-rx*.2).toFixed(1)} ${(cy+ry+r*1.3).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(r*2).toFixed(1)} 0a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(-r*2).toFixed(1)} 0`);
+        paths.push(`M${(cx-rx*.2-r*1.8).toFixed(1)} ${(cy+ry+r*3.1).toFixed(1)}a${(r*.53).toFixed(1)} ${(r*.53).toFixed(1)} 0 1 0 ${(r*1.06).toFixed(1)} 0a${(r*.53).toFixed(1)} ${(r*.53).toFixed(1)} 0 1 0 ${(-r*1.06).toFixed(1)} 0`);
+      }
+      if(frameType==='handdrawn-sketch'||frameType==='handdrawn-voice'||frameType==='handdrawn-paper'){
+        const total=frameType==='handdrawn-sketch'?24:frameType==='handdrawn-paper'?20:10;
+        for(let i=0;i<total;i++){
+          const a=(i/total)*Math.PI*2+(random()-.5)*.12;
+          const ca=Math.cos(a),sa=Math.sin(a),x=cx+ca*rx,y=cy+sa*ry;
+          const len=2+random()*(frameType==='handdrawn-sketch'?13:7);
+          const nx=-sa,ny=ca;
+          line(x-nx*len*.4,y-ny*len*.4,x+nx*len*.6+ca*len*.35,y+ny*len*.6+sa*len*.35,1);
+        }
+      }
+      if(frameType==='handdrawn-fear'){
+        for(let i=0;i<9;i++){
+          const a=(i/9)*Math.PI*2+random()*.3-Math.PI/2,ca=Math.cos(a),sa=Math.sin(a);
+          const x=cx+ca*rx*.91,y=cy+sa*ry*.91;
+          line(x,y,x+ca*(3+random()*7)+sa*2,y+sa*(4+random()*8)-ca*2,2+random()*1.8);
+        }
+      }
+      if(frameType==='handdrawn-romance'){
+        for(let i=0;i<8;i++){
+          const a=(i/8)*Math.PI*2+(random()-.5)*.24,ca=Math.cos(a),sa=Math.sin(a),x=cx+ca*rx*1.09,y=cy+sa*ry*1.09;
+          const s=2+random()*3;
+          paths.push(`M${x.toFixed(1)} ${(y-s).toFixed(1)}L${x.toFixed(1)} ${(y+s).toFixed(1)}M${(x-s).toFixed(1)} ${y.toFixed(1)}L${(x+s).toFixed(1)} ${y.toFixed(1)}`);
+        }
+      }
+      return paths.join('');
     }
 
     _mountHanddrawnFrame(frame,scene,presentation) {
@@ -5799,7 +5866,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const blur=document.createElementNS(ns,'feGaussianBlur');blur.setAttribute('stdDeviation','.72');
       filter.appendChild(blur);defs.appendChild(filter);svg.appendChild(defs);
       const makePath=(className)=>{const path=document.createElementNS(ns,'path');path.classList.add(className);svg.appendChild(path);return path;};
+      const decor=makePath('sp-handdrawn-decor');
       const fill=makePath('sp-handdrawn-fill');
+      const hole=makePath('sp-handdrawn-hole');
       const bleed=makePath('sp-handdrawn-bleed');bleed.setAttribute('filter',`url(#${filterId})`);
       const ghost=makePath('sp-handdrawn-ghost');
       const ink=makePath('sp-handdrawn-ink');
@@ -5863,7 +5932,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`);
         const shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0));
         const primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);
+        decor.setAttribute('d',this._handdrawnDecoration(width,height,seed,frameType));
         fill.setAttribute('d',primary);ink.setAttribute('d',primary);
+        if(frameType==='handdrawn-inkburst'){
+          const holeWidth=Math.max(12,width*.64),holeHeight=Math.max(12,height*.64);
+          hole.setAttribute('d',this._handdrawnPath(holeWidth,holeHeight,seed^0x6d2b79f5,0,shapeLevel,'handdrawn-soft'));
+          hole.setAttribute('transform',`translate(${((width-holeWidth)/2).toFixed(2)} ${((height-holeHeight)/2).toFixed(2)})`);
+        }else{hole.removeAttribute('d');hole.removeAttribute('transform');}
         bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));
         ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));
         scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));

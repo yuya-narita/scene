@@ -7868,7 +7868,7 @@ return flowCommentCard;}
     ['down',u('下へ入る','Enter from below')],['pop',u('ポップ','Pop')],['blur',u('ぼかしから表示','Reveal from blur')],
     ['zoom',u('ズーム','Zoom')],['rotate',u('回転しながら表示','Rotate in')],['flash',u('閃光','Flash')]
   ];
-  const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-soft',u('やわらかい心情枠','Soft emotion frame')],['handdrawn-shout',u('トゲのある叫び枠','Spiky shout frame')],['handdrawn-focus',u('集中線風の枠','Impact burst frame')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')]];
+  const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('01 手描き定番','01 Hand-drawn classic')],['handdrawn-soft',u('02 やわらか心情','02 Soft emotion')],['handdrawn-whisper',u('03 囁き・かすれ','03 Whisper / dry ink')],['handdrawn-thought',u('04 思考・雲','04 Thought cloud')],['handdrawn-shout',u('05 叫び・トゲ','05 Jagged shout')],['handdrawn-inkburst',u('06 墨はね・白抜き','06 Ink splash ring')],['handdrawn-impact',u('07 角形インパクト','07 Angular impact')],['handdrawn-focus',u('08 集中線','08 Focus rays')],['handdrawn-sketch',u('09 ラフスケッチ','09 Rough sketch')],['handdrawn-paper',u('10 破れ紙','10 Torn paper')],['handdrawn-romance',u('11 少女漫画・砂目','11 Romance stipple')],['handdrawn-fear',u('12 恐怖・震え','12 Fear / tremor')]];
   const isFrameType=value=>String(value||'').startsWith('handdrawn-');
   function makeFrameStyleControls(scene,onUpdate){
     const p=ensurePresentation(scene);p.frame||={type:'handdrawn-voice'};
