@@ -2733,6 +2733,7 @@
       label:String(endingLabelInput?.value||'').trim(),
       fontFamily:endingFontFamily,
       ...(Object.keys(preservedStyle).length?{style:preservedStyle}:{}),
+      ...(workingDocument?.ending?.image?.src?{image:clone(workingDocument.ending.image)}:{}),
       ...(endingAudioFromFields().length?{audio:endingAudioFromFields()}:{}),
       coverButton:{kicker:'COVER',label:t('ending.cover')},
       links:endingLinkInputs.map((row,index)=>({position:index===0?'left':'right',kicker:String(row.kicker?.value||'').trim(),label:String(row.label?.value||'').trim(),url:String(row.url?.value||'').trim()})).filter(x=>x.label&&x.url)
@@ -4879,6 +4880,8 @@ return flowCommentCard;}
 
   function walkAssetRefs(doc,callback){
     const cover=doc?.cover;
+    const endingImage=doc?.ending?.image;
+    if(endingImage?.src)callback({kind:'endingImage',sceneIndex:-1,holder:endingImage,key:'src',src:endingImage.src,fileName:endingImage._editorFileName||''});
     if(cover?.src)callback({kind:'cover',sceneIndex:-1,holder:cover,key:'src',src:cover.src,fileName:cover._editorFileName||coverImageFileName||''});
     if(cover?.logo?.src)callback({kind:'logo',sceneIndex:-1,holder:cover.logo,key:'src',src:cover.logo.src,fileName:cover.logo._editorFileName||coverLogoFileName||''});
     (doc?.metadata?.chatSpeakers||[]).forEach((speaker,speakerIndex)=>{
@@ -14903,6 +14906,43 @@ function openDesktopTextDetail(){
     desktopLivePanelBody.appendChild(shell);
   }
 
+  // Decorative ending logo: one managed asset and one display-width setting.
+  function buildEndingImageEditor(){
+    const card=desktopCard(u('読了画像（ロゴ）','Ending image (logo)'));
+    card.classList.add('ending-image-editor');
+    const body=document.createElement('div');card.appendChild(body);
+    const save=()=>{refreshLivePlayerDocumentChrome();syncEasyPublishButton();scheduleDraftSave(70);};
+    const render=()=>{
+      body.replaceChildren();
+      const image=workingDocument?.ending?.image;
+      const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+      if(image?.src){const preview=document.createElement('img');preview.src=image.src;preview.alt='';preview.style.cssText='width:48px;height:48px;object-fit:contain;border:1px solid #d7d9de;border-radius:6px';row.appendChild(preview);}
+      const pick=desktopAction(image?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>pickSceneImageFile(picked=>{
+        captureUndo(u('読了画像の変更を元に戻せます','Undo ending image change'));
+        workingDocument.ending=workingDocument.ending||{};
+        workingDocument.ending.image={...picked,width:workingDocument.ending.image?.width||160};
+        save();render();
+      }));
+      pick.style.cssText='min-height:32px;height:32px;padding:4px 10px;font-size:11px';row.appendChild(pick);
+      if(image?.src){
+        const remove=desktopAction(u('画像を外す','Remove image'),()=>{captureUndo(u('読了画像の削除を元に戻せます','Undo ending image removal'));delete workingDocument.ending.image;save();render();});
+        remove.style.cssText=pick.style.cssText;row.appendChild(remove);
+      }
+      body.appendChild(row);
+      if(!image?.src)return;
+      const widthLabel=document.createElement('label');widthLabel.style.cssText='display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11px';
+      const caption=document.createElement('span');caption.textContent=u('表示幅','Display width');
+      const range=document.createElement('input');range.type='range';range.min='24';range.max='720';range.step='1';range.style.cssText='flex:1;min-width:40px;width:100px';
+      const number=document.createElement('input');number.type='number';number.min='24';number.max='720';number.step='1';number.inputMode='numeric';number.setAttribute('aria-label',u('読了画像の表示幅（px）','Ending image width (px)'));number.style.cssText='width:64px;height:32px;min-height:32px;box-sizing:border-box;padding:4px 6px;font-size:11px';
+      const initial=Math.max(24,Math.min(720,Number(image.width)||160));range.value=number.value=String(initial);
+      range.setAttribute('aria-label',number.getAttribute('aria-label'));
+      const change=event=>{const value=event.target.valueAsNumber;if(!Number.isFinite(value))return;image.width=Math.max(24,Math.min(720,Math.round(value)));range.value=String(image.width);if(event.target===range)number.value=String(image.width);save();};
+      range.addEventListener('input',change);number.addEventListener('input',change);number.addEventListener('change',()=>{number.value=String(image.width);});
+      widthLabel.append(caption,range,number,document.createTextNode('px'));body.appendChild(widthLabel);
+    };
+    render();return card;
+  }
+
   function renderDesktopEndingPanel(){
     desktopSceneLabel.textContent=u('読了ページ','Ending page');desktopPrevScene.disabled=false;desktopNextScene.disabled=true;
     if(desktopV2Chrome)desktopV2Chrome.hidden=false;
@@ -14939,7 +14979,7 @@ function openDesktopTextDetail(){
     const pageKicker=document.createElement('small');pageKicker.textContent='ENDING';
     const pageTitle=document.createElement('strong');pageTitle.textContent=u('読了ページを編集','Edit ending page');
     pageHead.append(pageKicker,pageTitle);
-    shell.append(pageHead,textCard,styleCard,seCard,linksCard);
+    shell.append(pageHead,textCard,buildEndingImageEditor(),styleCard,seCard,linksCard);
     desktopLivePanelBody.appendChild(shell);
   }
 
@@ -18005,7 +18045,7 @@ function openDesktopTextDetail(){
     placeOverlay();
     const card=document.createElement('section');
     Object.assign(card.style,{width:'min(680px,100%)',maxHeight:'calc(100% - 24px)',overflowY:'auto',borderRadius:'22px',background:'#fff',color:'#17181b',padding:'18px 18px 22px',boxShadow:'0 18px 55px rgba(0,0,0,.28)'});
-    const h=document.createElement('h2');h.textContent=u('読了文字の詳細設定','Ending text details');Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
+    const h=document.createElement('h2');h.textContent=u('読了ページの詳細設定','Ending page details');Object.assign(h.style,{margin:'0 0 16px',font:'800 20px/1.35 system-ui'});
     card.appendChild(h);
 
     const grid=document.createElement('div');Object.assign(grid.style,{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'});
@@ -18034,6 +18074,7 @@ function openDesktopTextDetail(){
     const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(st.color||'')?st.color:'#ffffff';
     Object.assign(picker.style,{width:'48px',height:'42px',border:'1px solid #d7d9de',borderRadius:'10px',padding:'4px',background:'#fff'});
     colors.appendChild(picker);card.append(colorTitle,colors);
+    const imageEditor=buildEndingImageEditor();imageEditor.style.marginTop='16px';card.appendChild(imageEditor);
 
     const foot=document.createElement('div');Object.assign(foot.style,{display:'flex',justifyContent:'flex-end',marginTop:'18px'});
     const done=document.createElement('button');done.type='button';done.textContent=t('common.done');Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});

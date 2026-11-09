@@ -73,22 +73,6 @@
     observer.observe(ownCopyButton,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
     if(ownCopyStatus)observer.observe(ownCopyStatus,{childList:true,subtree:true,characterData:true});
   }
-  function operatorGuideCopyExists(copyId){
-    return new Promise(resolve=>{
-      if(!window.indexedDB){resolve(false);return;}
-      let request;try{request=indexedDB.open('ahako-local-bookshelf',3);}catch(_){resolve(false);return;}
-      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('readerBooks'))db.createObjectStore('readerBooks',{keyPath:'copyId'});};
-      request.onerror=()=>resolve(false);
-      request.onsuccess=()=>{
-        const db=request.result;
-        if(!db.objectStoreNames.contains('readerBooks')){db.close();resolve(false);return;}
-        try{const row=db.transaction('readerBooks','readonly').objectStore('readerBooks').get(copyId);
-          row.onsuccess=()=>{const exists=row.result?.workId==='operator_guide_01';db.close();resolve(exists);};
-          row.onerror=()=>{db.close();resolve(false);};
-        }catch(_){db.close();resolve(false);}
-      };
-    });
-  }
   async function savedOperatorGuideCopy(){
     let id='';try{id=localStorage.getItem(OPERATOR_GUIDE_COPY_KEY)||'';}catch(_){}
     if(!/^copy_[a-f0-9]{32}$/.test(id)||!window.indexedDB)return '';
@@ -153,9 +137,7 @@
 
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
-    const returnTo=isOperatorGuide()
-      ?{url:new URL('./bookstore/',location.href).toString(),label:'← あ箱書店へ'}
-      :safeShelfReturn(params.get('returnTo'));
+    const returnTo=safeShelfReturn(params.get('returnTo'));
     if(!returnTo){shelfReturnLink.hidden=true;return;}
     shelfReturnLink.href=returnTo.url;
     shelfReturnLink.textContent=returnTo.label;
@@ -488,6 +470,17 @@
       if(resolved)endingLabel.style.setProperty('font-size',resolved,'important');
     }
     const label=String(doc.ending?.label ?? doc.ending?.title ?? '').trim(); endingLabel.textContent=label; endingLabel.hidden=!label;
+    // Keep image + authored copy together in the existing ending-copy slot.
+    const endingImage=doc?.ending?.image;
+    if(endingImage?.src){
+      const stack=document.createElement('span');stack.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;max-width:100%;min-width:0';
+      const logo=document.createElement('img');logo.className='public-ending-logo';logo.src=endingImage.src;logo.alt='';logo.draggable=false;
+      logo.style.cssText=`display:block;width:${Math.max(24,Math.min(720,Number(endingImage.width)||160))}px;max-width:100%;max-height:28vh;object-fit:contain;pointer-events:none;user-select:none;background:transparent;border:0;box-shadow:none`;
+      stack.appendChild(logo);
+      if(label){const text=document.createElement('span');text.textContent=label;stack.appendChild(text);}
+      endingLabel.replaceChildren(stack);endingLabel.hidden=false;
+    }
+
     const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
     const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right'); const left=hasPositions?(links.find(x=>x?.position==='left')||null):(links[0]||null); const right=hasPositions?(links.find(x=>x?.position==='right')||null):(links.length>1?links[1]:null);
     const applyBox=(node,item,delay)=>{if(!node)return;const text=String(item?.label||item?.title||'').trim(),kicker=String(item?.kicker||'').trim(),url=String(item?.url||item?.href||'').trim();node.hidden=!(text&&url);if(node.hidden)return;const s=node.querySelector('small'),b=node.querySelector('strong');if(s){s.textContent=kicker;s.hidden=!kicker;}if(b)b.textContent=text;node.href=url;node.style.setProperty('--ending-delay',`${delay}ms`);};
@@ -671,45 +664,12 @@
       sessionStorage.setItem(`${BOOKSHELF_CLAIM_RETURN_PREFIX}${handoffId}`,location.href);
     }catch(_){}
   }
-  function importOperatorGuideClaimInBackground(token,copyId){
-    return new Promise((resolve,reject)=>{
-      const frame=document.createElement('iframe');
-      frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;
-      Object.assign(frame.style,{position:'fixed',width:'1px',height:'1px',left:'-10px',bottom:'0',opacity:'0',border:'0',pointerEvents:'none'});
-      let timer=0,pollTimer=0,settled=false;
-      const cleanup=()=>{clearTimeout(timer);clearTimeout(pollTimer);window.removeEventListener('message',onMessage);frame.remove();};
-      const finish=(error,savedCopyId)=>{if(settled)return;settled=true;cleanup();error?reject(error):resolve(savedCopyId);};
-      const onMessage=event=>{
-        if(event.origin!==location.origin||event.source!==frame.contentWindow||event.data?.type!=='AHAKO_BOOKSHELF_CLAIM_COMPLETE')return;
-        if(event.data.ok===true&&/^copy_[a-f0-9]{32}$/.test(String(event.data.copyId||'')))finish(null,String(event.data.copyId));
-        else finish(new Error(String(event.data.error||'本棚への保存に失敗しました。')));
-      };
-      window.addEventListener('message',onMessage);
-      const startedAt=Date.now();
-      const confirmSaved=async()=>{
-        if(settled)return;
-        if(await operatorGuideCopyExists(copyId)){finish(null,copyId);return;}
-        if(Date.now()-startedAt>=60000){finish(new Error('本棚への保存を確認できませんでした。もう一度お試しください。'));return;}
-        pollTimer=setTimeout(confirmSaved,350);
-      };
-      timer=setTimeout(()=>finish(new Error('本棚への保存を確認できませんでした。もう一度お試しください。')),65000);
-      const claimUrl=publicBookshelfClaimUrl(token,{returnToBookstore:true});
-      if(!claimUrl){finish(new Error('本棚への受取リンクを作れませんでした。'));return;}
-      const target=new URL(claimUrl);target.searchParams.set('embeddedClaim','1');
-      frame.src=target.toString();document.body.appendChild(frame);confirmSaved();
-    });
-  }
-  function openOperatorGuideCopyInBookstore(copyId){
-    const target=new URL('./bookstore/',location.href);target.searchParams.set('ownedCopy',String(copyId));target.hash='reading-room';
-    location.replace(target.toString());
-  }
-  function publicBookshelfClaimUrl(token,{handoffId='',external=false,paidPublicationId='',returnToBookstore=false}={}){
+  function publicBookshelfClaimUrl(token,{handoffId='',external=false,paidPublicationId=''}={}){
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const url=new URL('./bookshelf/',location.href);
     url.searchParams.set('claim',String(token));
     if(/^handoff_[a-f0-9]{24}$/i.test(handoffId))url.searchParams.set('handoff',handoffId);
     if(external)url.searchParams.set('openExternalBrowser','1');
-    if(returnToBookstore)url.searchParams.set('returnToBookstore','1');
     if(/^[A-Za-z0-9_-]{12,80}$/.test(String(paidPublicationId||'')))url.searchParams.set('paidPublicationId',String(paidPublicationId));
     return url.toString();
   }
@@ -845,11 +805,7 @@
         const existing=await savedOperatorGuideCopy();
         if(existing&&!ownCopyButton.disabled){
           ownCopyButton.textContent='本棚で読む';
-          ownCopyButton.onclick=()=>{
-            const target=new URL('./local-player/',location.href);target.searchParams.set('bookshelfCopy',existing);
-            const returnUrl=new URL('./bookstore/',location.href);returnUrl.searchParams.set('ownedCopy',existing);returnUrl.hash='reading-room';
-            target.searchParams.set('returnTo',returnUrl.toString());location.href=target.toString();
-          };
+          ownCopyButton.onclick=()=>{location.href=`./local-player/?bookshelfCopy=${encodeURIComponent(existing)}`;};
         }
         mirrorGuideReceive();
       }
@@ -1236,20 +1192,11 @@
       }
       if(isOperatorGuide()&&/^copy_[a-f0-9]{32}$/.test(payload?.distribution?.copyId||'')){try{localStorage.setItem(OPERATOR_GUIDE_COPY_KEY,payload.distribution.copyId);}catch(_){}}
       const token=String(payload?.bookshelfClaim?.token||'');
-      if(isOperatorGuide()){
-        if(ownCopyStatus)ownCopyStatus.textContent='あ箱書店の本棚に入れています…';
-        const copyId=String(payload?.distribution?.copyId||'');
-        if(!/^copy_[a-f0-9]{32}$/.test(copyId))throw new Error('説明書のコピーIDを確認できませんでした。');
-        await importOperatorGuideClaimInBackground(token,copyId);
-        try{localStorage.setItem(OPERATOR_GUIDE_COPY_KEY,copyId);}catch(_){}
-        openOperatorGuideCopyInBookstore(copyId);
-        return;
-      }
       const external=needsExternalSafariHandoff();
       if(external){
         const handoffId=newBookshelfHandoffId();
         rememberBookshelfClaimSource(handoffId,token);
-        const claimUrl=publicBookshelfClaimUrl(token,{handoffId,external:true,returnToBookstore:isOperatorGuide()});
+        const claimUrl=publicBookshelfClaimUrl(token,{handoffId,external:true});
         if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
         ownCopyButton.disabled=false;
         ownCopyButton.textContent='Safariで本棚を開く';
@@ -1257,7 +1204,7 @@
         ownCopyButton.onclick=()=>{try{const target=new URL(claimUrl);location.href=`x-safari-https://${target.host}${target.pathname}${target.search}${target.hash}`;}catch(error){console.error(error);}};
         return;
       }
-      const claimUrl=publicBookshelfClaimUrl(token,{returnToBookstore:isOperatorGuide()});
+      const claimUrl=publicBookshelfClaimUrl(token);
       if(!claimUrl)throw new Error('本棚への受取リンクを作れませんでした。');
       if(ownCopyStatus)ownCopyStatus.textContent='本棚へ入れています…';
       location.href=claimUrl;

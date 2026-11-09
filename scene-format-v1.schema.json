@@ -895,7 +895,18 @@
             }
           }
         },
-        "image": {"type":"object","properties":{"bundleLayout":{"enum":["normal","ring"]}},"additionalProperties":true},
+        "image": {
+          "type": "object",
+          "properties": {
+            "bundleLayout": {
+              "enum": [
+                "normal",
+                "ring"
+              ]
+            }
+          },
+          "additionalProperties": true
+        },
         "background": {
           "$ref": "#/$defs/background"
         },
@@ -2176,6 +2187,25 @@
             "sans",
             "mono"
           ]
+        },
+        "image": {
+          "type": "object",
+          "description": "Optional noninteractive logo above ending text. Transparent images are preserved.",
+          "properties": {
+            "src": {
+              "type": "string"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 24,
+              "maximum": 720,
+              "default": 160
+            }
+          },
+          "required": [
+            "src"
+          ],
+          "additionalProperties": true
         }
       },
       "additionalProperties": true

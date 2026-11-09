@@ -2512,3 +2512,7 @@ html.sp-scene-image-open body{
 .sp-page-ring[data-ring-appearance="image"] .sp-page-ring-spine,
 .sp-page-ring[data-ring-appearance="image"] .sp-page-ring-pages,
 .sp-page-ring[data-ring-appearance="image"] .sp-page-ring-bottom{display:none;}
+
+/* Ending logo remains decorative and preserves image transparency. */
+.sp-ending-copy{max-width:100%;min-width:0}
+.sp-ending-logo{display:block;max-width:100%;max-height:28vh;object-fit:contain;flex-shrink:1;pointer-events:none;user-select:none;background:transparent;border:0;box-shadow:none;margin:0 auto 6px}

@@ -7668,3 +7668,23 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
   const originalDestroy=P.destroy;
   P.destroy=function(){this._pageRingControllers?.forEach(r=>r.dispose());this._pageRingControllers?.clear();return originalDestroy.apply(this,arguments);};
 })(typeof window!=='undefined'?window:globalThis);
+
+// Decorative ending image, shared by all Player variants and Studio chrome refresh.
+(function(global){
+  const P=global.ScenePlayerCore?.prototype;if(!P)return;
+  P._syncEndingImage=function(){
+    const copy=this.els?.endingTitle?.closest('.sp-ending-copy');if(!copy)return;
+    let logo=copy.querySelector('.sp-ending-logo');
+    const image=this.document?.ending?.image;
+    const label=String(this.document?.ending?.label??this.document?.ending?.title??'').trim();
+    this.els.endingTitle.hidden=!!image?.src&&!label;
+    if(!image?.src){logo?.remove();return;}
+    if(!logo){logo=document.createElement('img');logo.className='sp-ending-logo';logo.alt='';logo.draggable=false;copy.insertBefore(logo,copy.firstChild);}
+    if(logo.getAttribute('src')!==image.src)logo.src=image.src;
+    logo.style.width=`${Math.max(24,Math.min(720,Number(image.width)||160))}px`;
+  };
+  for(const key of ['load','refreshDocumentChrome']){
+    const original=P[key];if(!original)continue;
+    P[key]=function(){const result=original.apply(this,arguments);this._syncEndingImage();return result;};
+  }
+})(typeof window!=='undefined'?window:globalThis);

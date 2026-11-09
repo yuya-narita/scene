@@ -451,6 +451,17 @@
       if(resolved)endingLabel.style.setProperty('font-size',resolved,'important');
     }
     const label=String(doc.ending?.label ?? doc.ending?.title ?? '').trim(); endingLabel.textContent=label; endingLabel.hidden=!label;
+    // Keep image + authored copy together in the existing ending-copy slot.
+    const endingImage=doc?.ending?.image;
+    if(endingImage?.src){
+      const stack=document.createElement('span');stack.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;max-width:100%;min-width:0';
+      const logo=document.createElement('img');logo.className='public-ending-logo';logo.src=endingImage.src;logo.alt='';logo.draggable=false;
+      logo.style.cssText=`display:block;width:${Math.max(24,Math.min(720,Number(endingImage.width)||160))}px;max-width:100%;max-height:28vh;object-fit:contain;pointer-events:none;user-select:none;background:transparent;border:0;box-shadow:none`;
+      stack.appendChild(logo);
+      if(label){const text=document.createElement('span');text.textContent=label;stack.appendChild(text);}
+      endingLabel.replaceChildren(stack);endingLabel.hidden=false;
+    }
+
     const links=Array.isArray(doc.ending?.links)?doc.ending.links:[];
     const hasPositions=links.some(x=>x?.position==='left'||x?.position==='right'); const left=hasPositions?(links.find(x=>x?.position==='left')||null):(links[0]||null); const right=hasPositions?(links.find(x=>x?.position==='right')||null):(links.length>1?links[1]:null);
     const applyBox=(node,item,delay)=>{if(!node)return;const text=String(item?.label||item?.title||'').trim(),kicker=String(item?.kicker||'').trim(),url=String(item?.url||item?.href||'').trim();node.hidden=!(text&&url);if(node.hidden)return;const s=node.querySelector('small'),b=node.querySelector('strong');if(s){s.textContent=kicker;s.hidden=!kicker;}if(b)b.textContent=text;node.href=url;node.style.setProperty('--ending-delay',`${delay}ms`);};
