@@ -11983,15 +11983,16 @@ function startInlineTextEdit(field='text',targetEl=null){
     input.addEventListener('change',async()=>{const file=input.files?.[0];if(file){const snap=await snapshotPickedFile(file);const url=URL.createObjectURL(snap.blob);registerAsset(url,snap.blob,snap.name);onPicked({src:url,alt:'',_editorFileName:snap.name,_editorManaged:true});scheduleDraftSave(60);}input.remove();},{once:true});input.click();
   }
   function appendSceneImageCoverEditor(host,image,onChange){
-    const box=document.createElement('div');box.className='scene-image-cover-editor';
-    const title=document.createElement('strong');title.textContent=u('表紙','Cover');
-    const preview=document.createElement('div');preview.className='scene-image-cover-preview';
+    const box=document.createElement('div');box.className='scene-image-cover-editor';box.style.cssText='grid-template-columns:48px minmax(0,1fr);gap:6px 10px;padding:10px;margin:8px 0 12px;border-radius:10px;';
+    const title=document.createElement('strong');title.textContent=u('表紙','Cover');title.style.cssText='font-size:11px;font-weight:600;line-height:1.4;';
+    const preview=document.createElement('div');preview.className='scene-image-cover-preview';preview.style.cssText='width:48px;height:56px;border-radius:6px;font-size:10px;';
     const drawPreview=()=>{preview.replaceChildren();if(image?.cover?.src){const thumb=document.createElement('img');thumb.src=image.cover.src;thumb.alt=image.cover.alt||u('表紙画像','Cover image');thumb.loading='lazy';preview.appendChild(thumb);}else{const empty=document.createElement('span');empty.textContent=u('未設定','Not set');preview.appendChild(empty);}};
-    const actions=document.createElement('div');actions.className='scene-image-cover-actions';
+    const actions=document.createElement('div');actions.className='scene-image-cover-actions';actions.style.cssText='flex-direction:row;justify-content:flex-end;flex-wrap:wrap;gap:6px;';
     const choose=document.createElement('button');choose.type='button';choose.textContent=image?.cover?.src?u('表紙を変更','Change cover'):u('表紙を設定','Set cover');
     choose.onclick=()=>pickSceneImageFile(cover=>{image={...image,cover};onChange(cover);drawPreview();choose.textContent=u('表紙を変更','Change cover');});
     const remove=document.createElement('button');remove.type='button';remove.textContent=u('表紙を外す','Remove cover');remove.disabled=!image?.cover?.src;
     remove.onclick=()=>{image={...image};delete image.cover;onChange(null);drawPreview();choose.textContent=u('表紙を設定','Set cover');remove.disabled=true;};
+    for(const button of [choose,remove])button.style.cssText='min-height:32px;height:32px;width:auto;padding:4px 8px;border-radius:8px;font-size:11px;font-weight:500;line-height:1.2;white-space:nowrap;';
     actions.append(choose,remove);box.append(title,preview,actions);drawPreview();host.appendChild(box);
   }
   function appendSceneImagePagesEditor(host,image,onChange){

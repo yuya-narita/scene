@@ -5531,7 +5531,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       wrap.dataset.showPageCount=image.showPageCount===false?'false':'true';
       if(pages.length>1||image?.cover?.src){wrap.dataset.pageCount=String(Math.max(1,pages.length));wrap.classList.add('has-page-stack');}
       wrap.dataset.imageRounded=image.rounded===false?'false':'true';
-      wrap.dataset.imageSize = ['small','large'].includes(image.size)
+      wrap.dataset.imageSize = ['small','large','custom'].includes(image.size)
         ? image.size
         : ((presentation?.view==='chat') ? 'small' : 'large');
       const customImageWidth=Math.max(40,Math.min(2000,Number(image.customWidth)||320));
