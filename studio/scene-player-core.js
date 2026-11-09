@@ -5988,6 +5988,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         let fitted=false;
         frame.classList.add('sp-frame-measuring');
         if(text&&frame.dataset.writingMode==='vertical-rl'){
+          // Refit from natural text geometry on every live padding update.
+          // Reusing the previous fitted box leaves stale inline dimensions and
+          // makes the Studio preview lag or drift as the sliders move.
+          text.style.position='relative';text.style.left='';text.style.top='';text.style.height='';text.style.width='max-content';
+          frame.style.width='fit-content';frame.style.height='';frame.style.padding='';
           const liveFrame=this.document?.scenes?.find(item=>item.id===scene.id)?.presentation?.frame||frameOptions;
           const liveExtraX=Math.max(-80,Math.min(180,Number(liveFrame.extraX)||0));
           const liveExtraY=Math.max(-80,Math.min(180,Number(liveFrame.extraY)||0));
@@ -7091,7 +7096,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(!direction||direction==='auto'||!article||article.dataset.textEntryDirectionPlayed==='true')return;
       const vector={top:[0,-1],bottom:[0,1],left:[-1,0],right:[1,0],'top-left':[-1,-1],'top-right':[1,-1],'bottom-left':[-1,1],'bottom-right':[1,1]}[direction];
       const text=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text');
-      if(!vector||!text||scene?.presentation?.entryMotion==='still'||typeof text.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+      if(!vector||!text||typeof text.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
       article.dataset.textEntryDirectionPlayed='true';
       const width=Math.max(1,this.host?.clientWidth||global.innerWidth||360),height=Math.max(1,this.host?.clientHeight||global.innerHeight||640);
       const dx=Math.round(Math.max(48,Math.min(240,width*.28))*vector[0]);
