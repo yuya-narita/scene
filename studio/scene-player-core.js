@@ -7572,6 +7572,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     open.textContent=en?'Open page':'ページを開く';open.disabled=!canOpen;count.hidden=image.showPageCount===false;count.className='sp-page-ring-count';count.setAttribute('aria-live','polite');
     controls.append(prev,count,next,open);root.appendChild(controls);
     const hint=document.createElement('div');hint.className='sp-page-ring-hint';hint.textContent=en?'Drag to rotate · Tap the center page to open':'左右に回して選ぶ・中央のページをタップで開く';root.appendChild(hint);
+    function setGuides(settings={}){
+      prev.hidden=next.hidden=settings.arrows===false;
+      open.hidden=settings.open===false;
+      hint.hidden=settings.hint===false;
+      controls.hidden=prev.hidden&&next.hidden&&open.hidden&&count.hidden;
+    }
+    setGuides(image.ringGuide||{});
+    function setAppearance(value){root.dataset.ringAppearance=value==='image'?'image':'book';}
+    setAppearance(image.ringAppearance);
     let index=0,center=0,depth=1,raf=0,epoch=0,disposed=false,started=false,busy=false,drag=null,suppressClickUntil=0,ro=null;
     const nodes=new Map(),n=pages.length;
     const norm=i=>((i%n)+n)%n;
@@ -7688,7 +7697,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     root.addEventListener('wheel',e=>{if(e.ctrlKey)return;e.preventDefault();e.stopPropagation();if(root.dataset.ready==='ready')move((e.deltaX||e.deltaY)>0?1:-1);},{passive:false});
     root.addEventListener('keydown',e=>{if(e.target.closest('.sp-page-ring-controls')){e.stopPropagation();return;}if(['ArrowLeft','ArrowRight','Enter',' '].includes(e.key)){e.preventDefault();e.stopPropagation();if(e.key==='ArrowLeft')move(-1);else if(e.key==='ArrowRight')move(1);else choose(index);}});
     prev.onclick=e=>{e.preventDefault();e.stopPropagation();move(-1);};next.onclick=e=>{e.preventDefault();e.stopPropagation();move(1);};open.onclick=e=>{e.preventDefault();e.stopPropagation();choose(index);};
-    const api={root,start,finish,dispose,select,get busy(){return busy;},get index(){return index;}};
+    const api={root,start,finish,dispose,select,setGuides,setAppearance,get busy(){return busy;},get index(){return index;}};
     root._pageRing=api;root._sceneImageOpenForReading=e=>{e?.preventDefault?.();e?.stopPropagation?.();choose(index);};
     render(0,1);
     if(core._simultaneousHistoryBuilding||!root.closest('.sp-scene'))root.dataset.ready='pending';

@@ -11936,6 +11936,41 @@ function startInlineTextEdit(field='text',targetEl=null){
     input.addEventListener('change',commit);if(input.tagName!=='SELECT')input.addEventListener('blur',commit);
     range?.addEventListener('pointerdown',stop);range?.addEventListener('touchstart',stop,{passive:true});range?.addEventListener('click',stop);
   }
+  function buildSceneRingGuideEditor(scene,image){
+    const wrap=document.createElement('div');wrap.className='scene-ring-guide-settings';
+    wrap.style.cssText='display:grid;gap:8px;margin:12px 0;';
+    const appearance=document.createElement('label');appearance.className='live-edit-field';
+    appearance.append(document.createTextNode(u('円環の画像表示','Ring artwork')));
+    const select=document.createElement('select');select.dataset.ringAppearance='true';
+    for(const [value,ja,en] of [['book','本の形','Book'],['image','画像そのまま（透過PNG対応）','Original image (transparent PNG)']]){
+      const option=document.createElement('option');option.value=value;option.textContent=u(ja,en);select.appendChild(option);
+    }
+    select.value=image.ringAppearance==='image'?'image':'book';
+    select.addEventListener('change',()=>{
+      captureUndo('円環の画像表示を元に戻せます');image.ringAppearance=select.value;
+      const previewScene=player?.document?.scenes?.find(s=>s.id===scene.id);
+      if(previewScene?.presentation?.image)previewScene.presentation.image.ringAppearance=select.value;
+      playerHost?.querySelectorAll('.sp-page-ring').forEach(root=>{if(root.closest('.sp-scene')?.dataset.sceneId===scene.id)root._pageRing?.setAppearance(select.value);});
+      scheduleDraftSave(40);
+    });
+    appearance.appendChild(select);wrap.appendChild(appearance);
+    const title=document.createElement('strong');title.textContent=u('円環のガイド','Ring guides');title.style.fontSize='12px';wrap.appendChild(title);
+    for(const [key,ja,en] of [['hint','操作説明を表示','Show instructions'],['arrows','左右の矢印を表示','Show arrows'],['open','「ページを開く」を表示','Show open-page button']]){
+      const label=document.createElement('label');label.className='live-scene-image-check';
+      const input=document.createElement('input');input.type='checkbox';input.dataset.ringGuide=key;input.checked=image.ringGuide?.[key]!==false;
+      input.addEventListener('change',()=>{
+        captureUndo('円環のガイド表示を元に戻せます');
+        image.ringGuide||={};image.ringGuide[key]=input.checked;
+        const previewScene=player?.document?.scenes?.find(s=>s.id===scene.id);
+        if(previewScene?.presentation?.image)previewScene.presentation.image.ringGuide=clone(image.ringGuide);
+        // Update only the guides: changing a checkbox must not replay the spin.
+        playerHost?.querySelectorAll('.sp-page-ring').forEach(root=>{if(root.closest('.sp-scene')?.dataset.sceneId===scene.id)root._pageRing?.setGuides(image.ringGuide);});
+        scheduleDraftSave(40);
+      });
+      label.append(input,document.createTextNode(u(ja,en)));wrap.appendChild(label);
+    }
+    return wrap;
+  }
   function sceneImagePages(image){const pages=Array.isArray(image?.pages)&&image.pages.length?image.pages:(image?.src?[{src:image.src,alt:image.alt||'',viewPoints:image.viewPoints||image.viewRec||null,_editorFileName:image._editorFileName||''}]:[]);if(pages.length&&image?.viewPoints&&!pages[0]?.viewPoints)return pages.map((page,index)=>index===0?{...page,viewPoints:image.viewPoints}:page);return pages;}
   function replaceSceneImageFirst(image,url,name){
     const pages=sceneImagePages(image);
@@ -15270,6 +15305,7 @@ function openDesktopTextDetail(){
     if(sceneImage?.src){
       appendSceneImagePagesEditor(sceneImageCard,sceneImage,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt||p.image.alt||'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined,tapAction:pages.some(page=>(page.viewPoints?.points||page.viewRec?.points||[]).length)?'viewRec':p.image.tapAction};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
       if(sceneImagePages(sceneImage).length>1)sceneImageCard.appendChild(desktopMakeSelect(u('ページ束の表示','Page bundle display'),[['normal',u('通常','Normal')],['ring',u('円環（書店と同じ回転）','Ring (Bookstore spin)')]],sceneImage.bundleLayout||'normal',v=>{captureUndo('ページ束の表示方式を元に戻せます');p.image.bundleLayout=v;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();}));
+      if(sceneImage.bundleLayout==='ring'&&sceneImagePages(sceneImage).length>1)sceneImageCard.appendChild(buildSceneRingGuideEditor(scene,sceneImage));
       appendSceneImageCoverEditor(sceneImageCard,sceneImage,cover=>{captureUndo('Scene画像の表紙設定を元に戻せます');if(cover)p.image.cover=cover;else delete p.image.cover;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();});
     }
 
@@ -17015,6 +17051,7 @@ function openDesktopTextDetail(){
         if(current?.src){
           appendSceneImagePagesEditor(liveEditSheetBody,current,pages=>{captureUndo('Scene画像ページ束の変更を元に戻せます');p.image={...p.image,pages,src:pages[0]?.src||'',alt:pages[0]?.alt||p.image.alt||'',_editorFileName:pages[0]?._editorFileName||p.image._editorFileName||'',viewPoints:pages[0]?.viewPoints||undefined,tapAction:pages.some(page=>(page.viewPoints?.points||page.viewRec?.points||[]).length)?'viewRec':p.image.tapAction};if(!pages[0]?.viewPoints)delete p.image.viewPoints;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
           if(sceneImagePages(current).length>1)liveEditSheetBody.appendChild(makeSceneImageSelect(u('ページ束の表示','Page bundle display'),[['normal',u('通常','Normal')],['ring',u('円環（書店と同じ回転）','Ring (Bookstore spin)')]],current.bundleLayout||'normal',v=>{captureUndo('ページ束の表示方式を元に戻せます');p.image.bundleLayout=v;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();}));
+          if(current.bundleLayout==='ring'&&sceneImagePages(current).length>1)liveEditSheetBody.appendChild(buildSceneRingGuideEditor(scene,current));
           appendSceneImageCoverEditor(liveEditSheetBody,current,cover=>{captureUndo('Scene画像の表紙設定を元に戻せます');if(cover)p.image.cover=cover;else delete p.image.cover;scheduleDraftSave(40);refreshLivePlayer();renderMobileSceneImagePanel();});
         }
         if(current?.src){

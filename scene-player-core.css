@@ -3039,3 +3039,13 @@ html.sp-scene-image-open body{
 .sp-page-ring-hint{position:absolute;left:0;right:0;bottom:0;text-align:center;font:11px/1.5 system-ui,sans-serif;color:var(--sp-sub,#888);pointer-events:none;}
 @container scene-viewport (max-width:680px){.sp-page-ring-book{width:min(43cqw,176px)}.sp-scene .sp-page-ring{height:clamp(330px,54cqh,470px)}}
 .sp-page-ring-controls button:focus-visible,.sp-page-ring-book:focus-visible{outline:2px solid currentColor;outline-offset:4px;}
+
+/* Explicit guide visibility must also win inside flex controls and PAST previews. */
+.sp-page-ring [hidden]{display:none!important}
+
+/* Flat transparent artwork: no book backing, thickness, clipping or shadow. */
+.sp-page-ring[data-ring-appearance="image"] .sp-page-ring-shell{filter:none;}
+.sp-page-ring[data-ring-appearance="image"] .sp-page-ring-face{background:transparent;border:0;border-radius:0;box-shadow:none;overflow:visible;transform:none;}
+.sp-page-ring[data-ring-appearance="image"] .sp-page-ring-spine,
+.sp-page-ring[data-ring-appearance="image"] .sp-page-ring-pages,
+.sp-page-ring[data-ring-appearance="image"] .sp-page-ring-bottom{display:none;}
