@@ -3494,3 +3494,12 @@ html.sp-scene-image-open body{
 .sp-scene[data-simultaneous-waiting="true"]{opacity:0!important;pointer-events:none!important}
 
 .sp-scene[data-simultaneous-waiting="true"] *{pointer-events:none!important}
+
+/* A simultaneous group occupies one PAST card, preserving its authored stage. */
+.sp-history-group .sp-history-body{display:block;min-width:0;position:relative;}
+.sp-history-group-viewport{display:block;position:relative;width:100%;overflow:hidden;}
+.sp-history-group-canvas{display:block;position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none;}
+.sp-history-group-scenes{display:block;}
+.sp-history-group-canvas .sp-scene{opacity:1!important;filter:none!important;transition:none!important;pointer-events:none!important;}
+.sp-history-group-canvas *{animation:none!important;transition:none!important;pointer-events:none!important;}
+.sp-history.is-horizontal .sp-history-group .sp-history-body{overflow:hidden;align-self:stretch;}
