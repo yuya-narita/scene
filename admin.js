@@ -482,7 +482,7 @@ function selectionDistributionControls({relayOn=true,edition=false}={}){
 }
 function selectionWorkCard(x,{registered=false}={}){
   const relayOn=x.relayEnabled!==false,cover=x.coverUrl?`<img src="${escapeHtml(x.coverUrl)}" alt="" loading="lazy">`:'あ□';
-  return `<article class="edition-candidate operator-work selection-work" data-work-id="${escapeHtml(x.workId)}"><div class="edition-cover-placeholder ${x.coverUrl?'has-cover':''}">${cover}</div><div class="edition-candidate-main"><div class="edition-candidate-head"><div><h3>${escapeHtml(x.title||'無題')}</h3><p>${escapeHtml(x.author||'作者未設定')}</p></div>${registered?'<span class="selection-badge">ORIGINAL</span>':''}</div><div class="selection-work-meta"><small>更新 ${escapeHtml(formatJstDate(x.updatedAt))}${relayOn?'':' · RELAY OFF'}</small><div class="selection-row-actions"><button class="review-link" type="button" data-review-work>読む</button><button type="button" data-original-enable="${registered?'false':'true'}">${registered?'登録解除':'ORIGINALに登録'}</button></div></div>${registered?selectionDistributionControls({relayOn}):''}</div></article>`;
+  return `<article class="edition-candidate operator-work selection-work" data-work-id="${escapeHtml(x.workId)}"><div class="edition-cover-placeholder ${x.coverUrl?'has-cover':''}">${cover}</div><div class="edition-candidate-main"><div class="edition-candidate-head"><div><h3>${escapeHtml(x.title||'無題')}</h3><p>${escapeHtml(x.author||'作者未設定')}</p></div>${registered?'<span class="selection-badge">ORIGINAL</span>':''}${x.freeOwnCopy?'<span class="selection-badge">MY COPY無料</span>':''}</div><div class="selection-work-meta"><small>更新 ${escapeHtml(formatJstDate(x.updatedAt))}${relayOn?'':' · RELAY OFF'}</small><div class="selection-row-actions"><button class="review-link" type="button" data-review-work>読む</button><button type="button" data-original-enable="${registered?'false':'true'}">${registered?'登録解除':'ORIGINALに登録'}</button><button type="button" data-free-own-copy="${x.freeOwnCopy?'false':'true'}">${x.freeOwnCopy?'MY COPY無料を解除':'MY COPYを無料化'}</button></div></div>${registered?selectionDistributionControls({relayOn}):''}</div></article>`;
 }
 function renderPublishedWorks(rows){
   if(!els.publishedWorks)return;
@@ -989,6 +989,14 @@ async function handleSelectionWorkClick(e){
   const card=e.target.closest('.operator-work');if(!card)return;
   const workId=card.dataset.workId||'',title=card.querySelector('h3')?.textContent||'この作品';
   if(e.target.closest('[data-review-work]')){await openSelectionReview({workId});return;}
+  const freeCopy=e.target.closest('[data-free-own-copy]');
+  if(freeCopy){
+    const enabled=freeCopy.dataset.freeOwnCopy==='true';
+    if(!await AhakoDialog.confirm(`「${title}」のMY COPY取得を${enabled?'無料':'通常料金に戻す'}設定にしますか？\n\n対象はこの公開作品だけです。種本の冊数と他作品の料金は変わりません。`,{title:enabled?'MY COPYを無料化':'無料設定を解除',confirmLabel:enabled?'無料にする':'解除する'}))return;
+    freeCopy.disabled=true;
+    try{await api('/admin/official-shelf/free-own-copy',{method:'POST',body:JSON.stringify({workId,enabled})});toast(enabled?'この作品のMY COPYを無料にしました':'無料設定を解除しました');await loadOfficialShelfAdmin();}
+    catch(err){AhakoDialog.alert(`設定できませんでした: ${err.message}`);}finally{freeCopy.disabled=false;}return;
+  }
   const registration=e.target.closest('[data-original-enable]');
   if(registration){
     const enabled=registration.dataset.originalEnable==='true';
