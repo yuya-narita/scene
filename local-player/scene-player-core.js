@@ -525,7 +525,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // phase so VIEW POINT owns the gesture before generic Scene advance can run.
       this._on(this.els.stage, 'click', (e) => {
         if (this.historyOpen || e.defaultPrevented) return;
-        if(e.target.closest?.('.sp-page-ring'))return;
+        if(e.target.closest?.('.sp-page-ring, .sp-rich-link-card'))return;
         // TAP safe zone always belongs to generic Scene advance, never image open.
         if (isTapAdvanceSafeZone(e)) return;
         const currentScene = this.document?.scenes?.[this.index];
@@ -566,7 +566,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           e.stopImmediatePropagation();
           return;
         }
-        if (e.target.closest('button')) return;
+        if (e.target.closest('button, .sp-rich-link-card')) return;
 
         // V133 — even when a large image physically overlaps this area, tapping
         // around the visible TAP hint must fall through to this handler's next().

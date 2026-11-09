@@ -7930,8 +7930,24 @@ return flowCommentCard;}
   ];
   const FRAME_TYPE_OPTIONS=[['none',u('なし','None')],['handdrawn-voice',u('手書き吹き出し','Hand-drawn balloon')],['handdrawn-narration',u('手書きナレーション枠','Hand-drawn narration box')],['handdrawn-rounded',u('手書き角丸枠','Hand-drawn rounded box')],['handdrawn-double',u('手書き二重枠','Hand-drawn double box')],['handdrawn-dashed',u('手書き点線枠','Hand-drawn dashed box')],['handdrawn-dark',u('黒ベタ手書き枠','Dark hand-drawn box')],['handdrawn-panel',u('半透明パネル','Translucent panel')]];
   const isFrameType=value=>String(value||'').startsWith('handdrawn-');
+  // Update the selected frame without replaying entrances or replacing inspector controls.
+  function previewSceneFrameStyle(scene,overrides={}){
+    const article=[...(player?.els?.scenes?.querySelectorAll('.sp-scene')||[])].find(node=>node.dataset.sceneId===String(scene.id));
+    const frame=article?.querySelector('.sp-handdrawn-frame');if(!frame)return false;
+    const current=workingDocument?.scenes?.find(item=>item.id===scene.id)||scene;
+    const values={...(current.presentation?.frame||{}),...overrides};
+    frame.style.setProperty('--sp-frame-extra-x',`${Math.max(-80,Math.min(180,Number(values.extraX)||0))}px`);
+    frame.style.setProperty('--sp-frame-extra-y',`${Math.max(-80,Math.min(180,Number(values.extraY)||0))}px`);
+    if(Object.prototype.hasOwnProperty.call(values,'extraX')||Object.prototype.hasOwnProperty.call(values,'extraY'))frame.dataset.frameCustomPadding='true';else delete frame.dataset.frameCustomPadding;
+    for(const key of ['fill','stroke'])if(values[key])frame.style.setProperty(`--sp-frame-${key}`,values[key]);
+    const runtime=player.document?.scenes?.find(item=>item.id===scene.id);
+    if(runtime){runtime.presentation ||= {};runtime.presentation.frame={...values};}
+    return true;
+  }
   function buildFrameStyleControls(scene,onPreview=()=>{}){
     const p=ensurePresentation(scene);p.frame ||= {type:'handdrawn-voice'};
+    const currentFrame=()=>{const current=workingDocument?.scenes?.find(item=>item.id===scene.id)||scene;const pp=ensurePresentation(current);return pp.frame ||= {type:'handdrawn-voice'};};
+    const preview=overrides=>{if(!previewSceneFrameStyle(scene,overrides))onPreview();};
     const card=desktopCard(u('枠のサイズ・色','Frame size & color'),'desktop-live-frame-settings');
     const grid=document.createElement('div');grid.className='desktop-live-grid desktop-live-frame-settings-grid';
     const makeRange=(label,key)=>{
@@ -7941,17 +7957,22 @@ return flowCommentCard;}
       const format=n=>`${n>0?'+':''}${n}px`;const initial=Math.max(-80,Math.min(180,Math.round(Number(p.frame[key])||0)));
       const value=document.createElement('output');value.textContent=format(initial);head.append(name,value);
       const input=document.createElement('input');input.type='range';input.min='-80';input.max='180';input.step='1';input.value=String(initial);
-      input.addEventListener('input',()=>{p.frame[key]=Number(input.value);value.textContent=format(Number(input.value));scheduleDraftSave(100);onPreview();});
+      input.addEventListener('pointerdown',()=>captureUndo(u('枠の余白の変更を元に戻せます','Undo frame padding change')));
+      input.addEventListener('input',()=>{currentFrame()[key]=Number(input.value);value.textContent=format(Number(input.value));preview();scheduleDraftSave(100);});
       wrap.append(head,input);return wrap;
     };
     const darkTheme=selectedTheme==='dark'||(selectedTheme==='cinema'&&cinemaTone==='dark');
     const makeColor=(label,key,fallback)=>{
-      const wrap=document.createElement('label');wrap.className='desktop-live-frame-color';
+      const wrap=document.createElement('div');wrap.className='desktop-live-frame-color';
       const name=document.createElement('span');name.textContent=label;
-      const stored=String(p.frame[key]||'').trim();
-      const input=document.createElement('input');input.type='color';input.value=/^#[0-9a-f]{6}$/i.test(stored)?stored:fallback;
-      input.addEventListener('input',()=>{p.frame[key]=input.value.toUpperCase();scheduleDraftSave(100);onPreview();});
-      wrap.append(name,input);return wrap;
+      const stored=String(currentFrame()[key]||'').trim();
+      const picker=makeCommittedTextColorPicker(/^#[0-9a-f]{6}$/i.test(stored)?stored:fallback,{
+        compact:true,
+        onPreview:color=>preview({[key]:color}),
+        onCommit:color=>{captureUndo(u('枠の色の変更を元に戻せます','Undo frame color change'));currentFrame()[key]=color;preview();syncEasyPublishButton();scheduleDraftSave(100);}
+      });
+      picker.root.querySelector('button')?.setAttribute('aria-label',label);
+      wrap.append(name,picker.root);return wrap;
     };
     grid.append(makeRange(u('左右の余白','Side padding'),'extraX'),makeRange(u('上下の余白','Vertical padding'),'extraY'));
     const colors=document.createElement('div');colors.className='desktop-live-frame-colors';colors.append(makeColor(u('塗り','Fill'),'fill','#fffdf8'),makeColor(u('線','Line'),'stroke','#171512'));

@@ -515,7 +515,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           e.stopImmediatePropagation();
           return;
         }
-        if (e.target.closest('button')) return;
+        if (e.target.closest('button, .sp-rich-link-card')) return;
         if (liveEditTextPointerGesture) {
           liveEditTextPointerGesture = false;
           e.preventDefault();

@@ -2521,3 +2521,6 @@ html.sp-scene-image-open body{
    update in place and never restart the entrance. */
 .sp-ending-logo{opacity:0!important;transform:translateY(5px)!important;transition:opacity 1200ms ease 280ms,transform 1200ms ease 280ms!important}
 .sp-ending.is-visible .sp-ending-logo{opacity:1!important;transform:translateY(0)!important}
+
+/* Scene canvas passes ordinary taps through; URL cards are real link hit targets. */
+.sp-scenes > .sp-scene:not([data-simultaneous-waiting="true"]):not(.sp-layout-leaving) .sp-rich-link-card{pointer-events:auto!important;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
