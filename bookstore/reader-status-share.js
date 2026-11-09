@@ -89,7 +89,25 @@
   const known=publicationId(value?.publicationId)||publicationId(value?.publicId);if(known)return known;
   const workId=publicationId(value?.workId);if(!workId)return '';
   const data=await request(BASE+'/publication/'+encodeURIComponent(workId));
-  return data?.ok&&data.exists?publicationId(data.id):'';
+  if(data?.ok&&data.exists){
+   return !data.state||data.state==='public'?publicationId(data.id):'';
+  }
+  // Official seed copies use the public ID as workId; Master copies use
+  // the editor ID. Only accept a direct ID after its public route succeeds.
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+  try{
+   const response=await fetch(BASE+'/work/'+encodeURIComponent(workId)+'?raw=1',{
+    headers:{Accept:'application/json'},cache:'no-store',signal:controller.signal
+   });
+   const available=response.ok&&(response.headers.get('Content-Type')||'').includes('application/json');
+   if(response.body)await response.body.cancel();
+   if(response.status===404||response.status===410)return '';
+   if(!response.ok)throw new Error('作品の公開状態を確認できませんでした。時間をおいてお試しください。');
+   return available?workId:'';
+  }catch(error){
+   if(error.name==='AbortError')throw new Error('作品の公開状態の確認がタイムアウトしました。もう一度お試しください。');
+   throw error;
+  }finally{clearTimeout(timer);}
  }
  function book(value,featured){
   if(!value||typeof value!=='object')return null;
