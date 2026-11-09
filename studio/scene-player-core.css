@@ -3541,3 +3541,8 @@ html.sp-scene-image-open body{
 .sp-ending-logo{display:block;max-width:100%;max-height:28vh;object-fit:contain;flex-shrink:1;pointer-events:none;user-select:none;background:transparent;border:0;box-shadow:none;margin:0 auto 6px}
 
 .sp-ending-logo{max-height:28cqh}
+
+/* Ending logo shares the authored ending-copy entrance timing. Width edits
+   update in place and never restart the entrance. */
+.sp-ending-logo{opacity:0!important;transform:translateY(5px)!important;transition:opacity 1200ms ease 280ms,transform 1200ms ease 280ms!important}
+.sp-ending.is-visible .sp-ending-logo{opacity:1!important;transform:translateY(0)!important}

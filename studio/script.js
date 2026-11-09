@@ -14936,8 +14936,10 @@ function openDesktopTextDetail(){
       const number=document.createElement('input');number.type='number';number.min='24';number.max='720';number.step='1';number.inputMode='numeric';number.setAttribute('aria-label',u('読了画像の表示幅（px）','Ending image width (px)'));number.style.cssText='width:64px;height:32px;min-height:32px;box-sizing:border-box;padding:4px 6px;font-size:11px';
       const initial=Math.max(24,Math.min(720,Number(image.width)||160));range.value=number.value=String(initial);
       range.setAttribute('aria-label',number.getAttribute('aria-label'));
-      const change=event=>{const value=event.target.valueAsNumber;if(!Number.isFinite(value))return;image.width=Math.max(24,Math.min(720,Math.round(value)));range.value=String(image.width);if(event.target===range)number.value=String(image.width);save();};
-      range.addEventListener('input',change);number.addEventListener('input',change);number.addEventListener('change',()=>{number.value=String(image.width);});
+      // Autosave/shell sync may replace ending.image with a cloned object.
+      // Resolve the current store on every input instead of editing a stale snapshot.
+      const change=event=>{const value=event.target.valueAsNumber;const current=workingDocument?.ending?.image;if(!Number.isFinite(value)||!current?.src)return;current.width=Math.max(24,Math.min(720,Math.round(value)));range.value=String(current.width);if(event.target===range)number.value=String(current.width);save();};
+      range.addEventListener('input',change);number.addEventListener('input',change);number.addEventListener('change',()=>{number.value=String(workingDocument?.ending?.image?.width||160);});
       widthLabel.append(caption,range,number,document.createTextNode('px'));body.appendChild(widthLabel);
     };
     render();return card;
