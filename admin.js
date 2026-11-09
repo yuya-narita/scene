@@ -475,66 +475,68 @@ function groupLatestEditions(rows){
   }
   return [...groups.values()].map(items=>items.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0))).sort((a,b)=>new Date(b[0]?.createdAt||0)-new Date(a[0]?.createdAt||0));
 }
+const selectionData={works:[],editions:[],shelf:[],search:'',loaded:false};
+function selectionIsOriginal(workId){return selectionData.works.some(x=>x.workId===workId&&x.originalRegistered===true);}
+function selectionDistributionControls({relayOn=true,edition=false}={}){
+  return `<details class="selection-distribution"><summary>配布設定</summary><div class="seed-controls"><label>種類<select data-shelf-kind><option value="seed">🌱 種本</option><option value="bloom">🌸 開花</option></select></label><label>配布冊数<input data-issue-limit type="number" min="1" max="100000" step="1" value="10" inputmode="numeric"></label><button class="primary" type="button" ${edition?'data-put-shelf':'data-add-work-shelf'} ${relayOn?'':'disabled'}>配布を開始</button></div><small class="candidate-note">${relayOn?'指定部数の無料配布枠を作ります。通常販売の価格は変更しません。':'配布にはStudioでRELAYを有効にして再公開してください。'}</small></details>`;
+}
+function selectionWorkCard(x,{registered=false}={}){
+  const relayOn=x.relayEnabled!==false,cover=x.coverUrl?`<img src="${escapeHtml(x.coverUrl)}" alt="" loading="lazy">`:'あ□';
+  return `<article class="edition-candidate operator-work selection-work" data-work-id="${escapeHtml(x.workId)}"><div class="edition-cover-placeholder ${x.coverUrl?'has-cover':''}">${cover}</div><div class="edition-candidate-main"><div class="edition-candidate-head"><div><h3>${escapeHtml(x.title||'無題')}</h3><p>${escapeHtml(x.author||'作者未設定')}</p></div>${registered?'<span class="selection-badge">ORIGINAL</span>':''}</div><div class="selection-work-meta"><small>更新 ${escapeHtml(formatJstDate(x.updatedAt))}${relayOn?'':' · RELAY OFF'}</small><div class="selection-row-actions"><button class="review-link" type="button" data-review-work>読む</button><button type="button" data-original-enable="${registered?'false':'true'}">${registered?'登録解除':'ORIGINALに登録'}</button></div></div>${registered?selectionDistributionControls({relayOn}):''}</div></article>`;
+}
 function renderPublishedWorks(rows){
   if(!els.publishedWorks)return;
-  if(!rows?.length){els.publishedWorks.innerHTML='<div class="empty">公開中の作品はありません。</div>';return;}
-  els.publishedWorks.innerHTML=rows.map(x=>{
-    const relayOn=x.relayEnabled!==false;
-    const cover=x.coverUrl?`<img src="${escapeHtml(x.coverUrl)}" alt="" loading="lazy">`:'あ□';
-    return `<article class="edition-candidate operator-work" data-work-id="${escapeHtml(x.workId)}">
-      <div class="edition-cover-placeholder ${x.coverUrl?'has-cover':''}">${cover}</div>
-      <div class="edition-candidate-main">
-        <div class="edition-candidate-head"><div><small>公開中</small><h3>${escapeHtml(x.title||'無題')}</h3><p>${escapeHtml(x.author||'作者未設定')}</p></div><span class="edition-count">${relayOn?'RELAY ON':'RELAY OFF'}</span></div>
-        <div class="edition-choice-row"><span class="work-updated">更新 · ${escapeHtml(formatJstDate(x.updatedAt))}</span><button class="review-link" type="button" data-review-work>読む</button></div>
-        <div class="seed-controls"><label>種類<select data-shelf-kind><option value="seed">🌱 種本</option><option value="bloom">🌸 開花</option></select></label><label>発行冊数<input data-issue-limit type="number" min="1" max="100000" value="10" inputmode="numeric"></label><button class="primary" type="button" data-add-work-shelf ${relayOn?'':'disabled'}>あ箱の本に追加</button></div>
-        <small class="candidate-note">${relayOn?'追加時点の公開版を新しいEditionとして凍結し、そのEditionから一冊ずつ発行します。':'この作品はRELAYがOFFのため、種本・開花には追加できません。'}</small>
-      </div>
-    </article>`;
-  }).join('');
+  const query=selectionData.search.trim().toLocaleLowerCase('ja');
+  const items=(rows||[]).filter(x=>!x.originalRegistered&&(!query||`${x.title||''} ${x.author||''}`.toLocaleLowerCase('ja').includes(query)));
+  els.publishedWorks.innerHTML=items.length?items.map(x=>selectionWorkCard(x)).join(''):'<div class="empty">該当する未登録作品はありません。</div>';
+  if(els.publishedWorksStatus)els.publishedWorksStatus.textContent=`未登録 ${items.length}作品`;
+  const originals=(rows||[]).filter(x=>x.originalRegistered===true);
+  const host=$('#originalWorks');if(host)host.innerHTML=originals.length?originals.map(x=>selectionWorkCard(x,{registered:true})).join(''):'<div class="empty">まだORIGINALはありません。下の「公開作品からORIGINALに登録」から選んでください。</div>';
+  const status=$('#originalWorksStatus');if(status)status.textContent=`${originals.length}作品`;
 }
 function renderEditionCandidates(rows){
   if(!els.editionCandidates)return;
-  const groups=groupLatestEditions(rows);
-  if(!groups.length){els.editionCandidates.innerHTML='<div class="empty">発行済みEditionはありません。</div>';return;}
-  els.editionCandidates.innerHTML=groups.map((items,idx)=>{
+  const groups=groupLatestEditions((rows||[]).filter(x=>selectionIsOriginal(x.workId)));
+  if(!groups.length){els.editionCandidates.innerHTML='<div class="empty">登録済みORIGINALの発行済みEditionはありません。</div>';return;}
+  els.editionCandidates.innerHTML=groups.map(items=>{
     const latest=items[0],workId=String(latest.workId||'');
     const opts=items.map((x,i)=>`<option value="${escapeHtml(x.editionId)}">${i===0?'最新 · ':''}${escapeHtml(formatJstDate(x.createdAt))}</option>`).join('');
-    return `<article class="edition-candidate" data-work-id="${escapeHtml(workId)}">
-      <div class="edition-cover-placeholder">あ□</div>
-      <div class="edition-candidate-main">
-        <div class="edition-candidate-head"><div><small>発行済み作品</small><h3>${escapeHtml(latest.title||'無題')}</h3><p>${escapeHtml(latest.author||'作者未設定')}</p></div><span class="edition-count">${items.length} Edition</span></div>
-        <div class="edition-choice-row"><label>Edition<select data-edition-choice>${opts}</select></label><button class="review-link" type="button" data-review-edition>読む</button></div>
-        <div class="seed-controls"><label>種類<select data-shelf-kind><option value="seed">🌱 種本</option><option value="bloom">🌸 開花</option></select></label><label>発行冊数<input data-issue-limit type="number" min="1" max="100000" value="10" inputmode="numeric"></label><button class="primary" type="button" data-put-shelf>あ箱の本に置く</button></div>
-        <small class="candidate-note">「読む」は選択した凍結Editionを審査モードで開きます。審査閲覧は観測・読了・RELAYの数字に入りません。</small>
-      </div>
-    </article>`;
+    return `<article class="edition-candidate selection-edition" data-work-id="${escapeHtml(workId)}"><div class="edition-candidate-main"><div class="edition-candidate-head"><div><h3>${escapeHtml(latest.title||'無題')}</h3><p>${escapeHtml(latest.author||'作者未設定')}</p></div><span class="edition-count">${items.length}版</span></div><div class="edition-choice-row"><label>配布する版<select data-edition-choice>${opts}</select></label><button class="review-link" type="button" data-review-edition>読む</button></div>${selectionDistributionControls({edition:true})}</div></article>`;
   }).join('');
 }
 function renderOfficialShelfAdmin(items){
   if(!els.officialShelfItems)return;
-  if(!items?.length){els.officialShelfItems.innerHTML='<div class="empty">まだありません。</div>';return;}
-  els.officialShelfItems.innerHTML=items.map(x=>`<article class="official-shelf-row">
-    <div><small>${x.kind==='bloom'?'🌸 開花':'🌱 種本'} · ${escapeHtml(x.status==='active'?'公開中':'停止中')}</small><strong>${escapeHtml(x.title||'無題')}</strong><span>${escapeHtml(x.author||'作者未設定')}</span></div>
-    <div class="shelf-count"><strong>${Number(x.issuedCount||0).toLocaleString('ja-JP')} / ${Number(x.issueLimit||0).toLocaleString('ja-JP')}</strong><small>発行</small></div>
-    <div class="shelf-actions"><button type="button" data-shelf-id="${escapeHtml(x.shelfId)}" data-shelf-action="${x.status==='active'?'stop':'resume'}">${x.status==='active'?'停止':'再開'}</button><button class="delete" type="button" data-shelf-id="${escapeHtml(x.shelfId)}" data-shelf-delete>削除</button></div>
-  </article>`).join('');
+  const filter=$('#selectionShelfFilter')?.value||'all';
+  const state=x=>x.originalRegistered!==true?'unregistered':!x.sourcePreviewOnly&&x.status==='active'&&Number(x.issueLimit)>Number(x.issuedCount||0)?'active':'stopped';
+  const rows=(items||[]).filter(x=>filter==='all'||state(x)===filter);
+  if(!rows.length){els.officialShelfItems.innerHTML='<div class="empty">この条件の配布枠はありません。</div>';return;}
+  els.officialShelfItems.innerHTML=rows.map(x=>{
+    const registered=x.originalRegistered===true,remaining=Math.max(0,Number(x.issueLimit||0)-Number(x.issuedCount||0)),ended=remaining===0;
+    const label=!registered?'ORIGINAL未登録':x.sourcePreviewOnly?'配布版の更新が必要':ended?'配布終了':x.status==='active'?'配布中':'停止中';
+    return `<article class="official-shelf-row" data-shelf-id="${escapeHtml(x.shelfId)}"><div><div class="selection-shelf-labels"><small>${x.kind==='bloom'?'🌸 開花':'🌱 種本'}</small><span class="selection-badge ${label==='配布中'?'is-active':''}">${label}</span></div><strong>${escapeHtml(x.title||'無題')}</strong><span>${escapeHtml(x.author||'作者未設定')}</span><small>${escapeHtml(formatJstDate(x.createdAt))} · ${Number(x.sceneCount||0)} Scene</small>${!registered?'<small class="selection-warning">対象の運営作品をORIGINALに登録してください。</small>':x.sourcePreviewOnly?'<small class="selection-warning">旧枠を停止し、現在公開版から新しい配布枠を作ってください。</small>':''}</div><div class="shelf-count"><strong>残り ${remaining.toLocaleString('ja-JP')}冊</strong><small>${Number(x.issuedCount||0).toLocaleString('ja-JP')} / ${Number(x.issueLimit||0).toLocaleString('ja-JP')}冊 配布済み</small></div><div class="shelf-actions"><button type="button" data-shelf-id="${escapeHtml(x.shelfId)}" data-shelf-action="${x.status==='active'?'stop':'resume'}" ${x.status!=='active'&&(!registered||ended||x.sourcePreviewOnly)?'disabled':''}>${x.status==='active'?'停止':'再開'}</button><button class="delete" type="button" data-shelf-id="${escapeHtml(x.shelfId)}" data-shelf-delete>削除</button></div></article>`;
+  }).join('');
+}
+function renderSelectionSummary(){
+  const originalCount=selectionData.works.filter(x=>x.originalRegistered).length;
+  const active=selectionData.shelf.filter(x=>x.originalRegistered&&!x.sourcePreviewOnly&&x.status==='active'&&Number(x.issueLimit)>Number(x.issuedCount||0));
+  const remaining=active.reduce((n,x)=>n+Math.max(0,Number(x.issueLimit||0)-Number(x.issuedCount||0)),0);
+  const node=$('#selectionSummary');if(node)node.innerHTML=`<div><strong>${originalCount}</strong><span>ORIGINAL作品</span></div><div><strong>${active.length}</strong><span>配布中の枠</span></div><div><strong>${remaining.toLocaleString('ja-JP')}</strong><span>受け取れる残部数</span></div>`;
 }
 let officialShelfLoading=false;
 async function loadOfficialShelfAdmin(){
   if(officialShelfLoading)return;officialShelfLoading=true;
   if(els.selectionStatus)els.selectionStatus.textContent='読み込み中…';
-  if(els.publishedWorksStatus)els.publishedWorksStatus.textContent='読み込み中…';
+  if(els.reloadSelection)els.reloadSelection.disabled=true;
   try{
     const [works,editions,shelf]=await Promise.all([api('/admin/official-shelf/works'),api('/admin/official-shelf/editions'),api('/admin/official-shelf')]);
-    renderPublishedWorks(works.items||[]);renderEditionCandidates(editions.items||[]);renderOfficialShelfAdmin(shelf.items||[]);
-    if(els.publishedWorksStatus)els.publishedWorksStatus.textContent=`${Number((works.items||[]).length).toLocaleString('ja-JP')}作品`;
-    if(els.selectionStatus)els.selectionStatus.textContent=`${groupLatestEditions(editions.items||[]).length}作品`;
-  }catch(e){
-    if(els.publishedWorks)els.publishedWorks.innerHTML=`<div class="empty">公開作品を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
-    if(els.editionCandidates)els.editionCandidates.innerHTML=`<div class="empty">作品候補を読み込めませんでした: ${escapeHtml(e.message)}</div>`;
-    if(els.publishedWorksStatus)els.publishedWorksStatus.textContent='';
+    selectionData.works=works.items||[];selectionData.editions=editions.items||[];selectionData.shelf=shelf.items||[];
+    renderPublishedWorks(selectionData.works);renderEditionCandidates(selectionData.editions);renderOfficialShelfAdmin(selectionData.shelf);renderSelectionSummary();
+    if(!selectionData.loaded&&selectionData.works.every(x=>!x.originalRegistered))$('#originalRegistration')?.setAttribute('open','');
+    selectionData.loaded=true;
     if(els.selectionStatus)els.selectionStatus.textContent='';
-  }finally{officialShelfLoading=false;}
+  }catch(e){
+    if(els.selectionStatus)els.selectionStatus.textContent=`読み込めませんでした: ${e.message}`;
+  }finally{officialShelfLoading=false;if(els.reloadSelection)els.reloadSelection.disabled=false;}
 }
 const reasonLabel=r=>({copyright:'第三者の著作物・権利侵害',unauthorized:'自分の作品が無断で使用されている',other:'その他'})[r]||r;
 const subjectLabel=s=>({text:'本文・文章',cover:'表紙',image:'背景・画像',audio:'BGM・SE・音声',other:'その他'})[s]||s||'不明';
@@ -983,24 +985,38 @@ if(els.payoutAuditReload)els.payoutAuditReload.addEventListener('click',loadPayo
 if(els.auditOrderId)els.auditOrderId.addEventListener('keydown',e=>{if(e.key==='Enter')runPaymentAudit();});
 document.querySelectorAll('[data-admin-tab]').forEach(b=>b.addEventListener('click',()=>setAdminTab(b.dataset.adminTab)));
 if(els.reloadSelection)els.reloadSelection.addEventListener('click',loadOfficialShelfAdmin);
-if(els.publishedWorks)els.publishedWorks.addEventListener('click',async e=>{
-  const review=e.target.closest('[data-review-work]');
-  if(review){const card=review.closest('.operator-work');await openSelectionReview({workId:card?.dataset.workId||''});return;}
+async function handleSelectionWorkClick(e){
+  const card=e.target.closest('.operator-work');if(!card)return;
+  const workId=card.dataset.workId||'',title=card.querySelector('h3')?.textContent||'この作品';
+  if(e.target.closest('[data-review-work]')){await openSelectionReview({workId});return;}
+  const registration=e.target.closest('[data-original-enable]');
+  if(registration){
+    const enabled=registration.dataset.originalEnable==='true';
+    const message=enabled?`「${title}」をあ箱ORIGINALに登録しますか？\n\nあ箱が配布の権利を持つ運営作品であることを確認してください。登録だけでは配布は始まりません。`:`「${title}」のORIGINAL登録を解除しますか？\n\nこの作品の配布枠をすべて停止します。受け取り済みの一冊と通常販売は維持されます。`;
+    if(!await AhakoDialog.confirm(message,{title:enabled?'ORIGINALに登録':'ORIGINAL登録を解除',confirmLabel:enabled?'登録する':'解除する',danger:!enabled}))return;
+    registration.disabled=true;
+    try{await api('/admin/official-shelf/original',{method:'POST',body:JSON.stringify({workId,enabled})});toast(enabled?'ORIGINALに登録しました':'ORIGINAL登録を解除しました');await loadOfficialShelfAdmin();}
+    catch(err){AhakoDialog.alert(`変更できませんでした: ${err.message}`);}finally{registration.disabled=false;}return;
+  }
   const b=e.target.closest('[data-add-work-shelf]');if(!b)return;
-  const card=b.closest('.operator-work'),workId=card?.dataset.workId||'',kind=card?.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card?.querySelector('[data-issue-limit]')?.value||0);
-  if(!workId||!Number.isInteger(issueLimit)||issueLimit<1){AhakoDialog.alert('作品と発行冊数を確認してください。');return;}
-  const label=kind==='bloom'?'開花':'種本',title=card.querySelector('h3')?.textContent||'この作品';
-  if(!await AhakoDialog.confirm(`「${title}」の現在公開版を凍結して、${label}として ${issueLimit}冊「あ箱の本」に追加しますか？`,{title:'あ箱の本へ追加',confirmLabel:'追加する'}))return;
+  const kind=card.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card.querySelector('[data-issue-limit]')?.value||0);
+  if(!workId||!Number.isSafeInteger(issueLimit)||issueLimit<1||issueLimit>100000){AhakoDialog.alert('配布冊数を1〜100000の整数で指定してください。');return;}
+  const label=kind==='bloom'?'開花':'種本';
+  if(!await AhakoDialog.confirm(`「${title}」の現在公開版を保存し、${label}として ${issueLimit}冊を無料配布しますか？\n\n通常販売の料金設定は変更しません。`,{title:'ORIGINALの配布を開始',confirmLabel:'配布を開始'}))return;
   b.disabled=true;
-  try{await api('/admin/official-shelf/from-work',{method:'POST',body:JSON.stringify({workId,kind,issueLimit})});toast(`あ箱の本に${label}を追加しました`);await loadOfficialShelfAdmin();}
-  catch(err){AhakoDialog.alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
-});
+  try{await api('/admin/official-shelf/from-work',{method:'POST',body:JSON.stringify({workId,kind,issueLimit})});toast(`${label} ${issueLimit}冊の配布を開始しました`);await loadOfficialShelfAdmin();}
+  catch(err){AhakoDialog.alert(`配布を開始できませんでした: ${err.message}`);}finally{b.disabled=false;}
+}
+els.publishedWorks?.addEventListener('click',handleSelectionWorkClick);
+$('#originalWorks')?.addEventListener('click',handleSelectionWorkClick);
+$('#selectionWorkSearch')?.addEventListener('input',e=>{selectionData.search=e.target.value;renderPublishedWorks(selectionData.works);});
+$('#selectionShelfFilter')?.addEventListener('change',()=>renderOfficialShelfAdmin(selectionData.shelf));
 if(els.editionCandidates)els.editionCandidates.addEventListener('click',async e=>{
   const review=e.target.closest('[data-review-edition]');
   if(review){const card=review.closest('.edition-candidate');await openSelectionReview({workId:card?.dataset.workId||'',editionId:card?.querySelector('[data-edition-choice]')?.value||''});return;}
   const b=e.target.closest('[data-put-shelf]');if(!b)return;const card=b.closest('.edition-candidate');
   const workId=card?.dataset.workId||'',editionId=card?.querySelector('[data-edition-choice]')?.value||'',kind=card?.querySelector('[data-shelf-kind]')?.value||'seed',issueLimit=Number(card?.querySelector('[data-issue-limit]')?.value||0);
-  if(!workId||!editionId||!Number.isInteger(issueLimit)||issueLimit<1){AhakoDialog.alert('Editionと発行冊数を確認してください。');return;}
+  if(!workId||!editionId||!Number.isSafeInteger(issueLimit)||issueLimit<1||issueLimit>100000){AhakoDialog.alert('Editionと発行冊数を確認してください。');return;}
   const label=kind==='bloom'?'開花':'種本';if(!await AhakoDialog.confirm(`「${card.querySelector('h3')?.textContent||'この作品'}」を${label}として ${issueLimit}冊、「あ箱の本」に置きますか？`,{title:'あ箱の本へ追加',confirmLabel:'追加する'}))return;
   b.disabled=true;try{await api('/admin/official-shelf',{method:'POST',body:JSON.stringify({workId,editionId,kind,issueLimit})});toast(`あ箱の本に${label}を置きました`);await loadOfficialShelfAdmin();}catch(err){AhakoDialog.alert(`追加できませんでした: ${err.message}`);}finally{b.disabled=false;}
 });

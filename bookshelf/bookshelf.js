@@ -1329,7 +1329,7 @@ async function claimOfficialBook(button){
   try{
     const response=await fetch(`${API_BASE}/official-shelf/claim`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({shelfId,readerId:officialReaderId()})});
     const payload=await response.json().catch(()=>null);
-    if(!response.ok||!payload?.ok||!payload?.scene){const code=String(payload?.code||'');throw new Error(code==='SHELF_SOLD_OUT'?'この種本はすべて旅立ちました。':code==='SHELF_ALREADY_CLAIMED'?'この種本はすでに受け取っています。':String(payload?.error||'一冊を受け取れませんでした。'));}
+    if(!response.ok||!payload?.ok||!payload?.scene){const code=String(payload?.code||'');throw new Error(code==='SHELF_SOLD_OUT'?'この種本はすべて旅立ちました。':code==='SHELF_ALREADY_CLAIMED'?'この種本はすでに受け取っています。':({ORIGINAL_REQUIRED:'この本は現在、種本を受け取れる対象になっていません。',SHELF_SOURCE_PREVIEW_ONLY:'配布版の更新が必要です。運営へお知らせください。',OWN_COPY_GATE_REQUIRED:'この本の受け取り条件を確認できません。運営へお知らせください。',EDITION_STOPPED:'この版の配布は終了しています。',SHELF_ITEM_NOT_FOUND:'この本の配布は終了しています。',SHELF_READER_REQUIRED:'本棚を再読み込みしてから、もう一度お試しください。'}[code]||String(payload?.error||'一冊を受け取れませんでした。')));}
     const file=await distributionFileFromClaimScene(payload.scene);await addDistribution(file,{silent:true});
     officialShelfLoaded=false;await render({refreshOfficial:true});toast('あ箱から一冊を受け取りました。');
     setTimeout(()=>switchShelf('owned'),450);
