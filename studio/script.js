@@ -11938,10 +11938,10 @@ function startInlineTextEdit(field='text',targetEl=null){
   }
   function buildSceneRingGuideEditor(scene,image){
     const wrap=document.createElement('div');wrap.className='scene-ring-guide-settings';
-    wrap.style.cssText='display:grid;gap:8px;margin:12px 0;';
-    const appearance=document.createElement('label');appearance.className='live-edit-field';
+    wrap.style.cssText='display:grid;gap:4px;margin:10px 0;font-size:11px;';
+    const appearance=document.createElement('label');appearance.className='live-edit-field';appearance.style.cssText='display:grid;gap:4px;font-size:11px;font-weight:400;margin-bottom:6px;';
     appearance.append(document.createTextNode(u('円環の画像表示','Ring artwork')));
-    const select=document.createElement('select');select.dataset.ringAppearance='true';
+    const select=document.createElement('select');select.dataset.ringAppearance='true';select.style.fontSize='11px';
     for(const [value,ja,en] of [['book','本の形','Book'],['image','画像そのまま（透過PNG対応）','Original image (transparent PNG)']]){
       const option=document.createElement('option');option.value=value;option.textContent=u(ja,en);select.appendChild(option);
     }
@@ -11954,10 +11954,10 @@ function startInlineTextEdit(field='text',targetEl=null){
       scheduleDraftSave(40);
     });
     appearance.appendChild(select);wrap.appendChild(appearance);
-    const title=document.createElement('strong');title.textContent=u('円環のガイド','Ring guides');title.style.fontSize='12px';wrap.appendChild(title);
+    const title=document.createElement('strong');title.textContent=u('円環のガイド','Ring guides');title.style.cssText='font-size:11px;font-weight:500;margin:0;';wrap.appendChild(title);
     for(const [key,ja,en] of [['hint','操作説明を表示','Show instructions'],['arrows','左右の矢印を表示','Show arrows'],['open','「ページを開く」を表示','Show open-page button']]){
-      const label=document.createElement('label');label.className='live-scene-image-check';
-      const input=document.createElement('input');input.type='checkbox';input.dataset.ringGuide=key;input.checked=image.ringGuide?.[key]!==false;
+      const label=document.createElement('label');label.className='scene-ring-guide-check';label.style.cssText='display:flex;align-items:center;gap:8px;min-height:28px;padding:3px 6px;margin:0;font-size:11px;font-weight:400;line-height:1.4;cursor:pointer;box-sizing:border-box;';
+      const input=document.createElement('input');input.type='checkbox';input.style.cssText='width:16px;height:16px;min-width:16px;min-height:16px;flex:0 0 16px;margin:0;padding:0;';input.dataset.ringGuide=key;input.checked=image.ringGuide?.[key]!==false;
       input.addEventListener('change',()=>{
         captureUndo('円環のガイド表示を元に戻せます');
         image.ringGuide||={};image.ringGuide[key]=input.checked;
