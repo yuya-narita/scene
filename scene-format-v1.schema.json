@@ -895,6 +895,7 @@
             }
           }
         },
+        "image": {"type":"object","properties":{"bundleLayout":{"enum":["normal","ring"]}},"additionalProperties":true},
         "background": {
           "$ref": "#/$defs/background"
         },

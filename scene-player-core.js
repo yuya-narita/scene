@@ -425,7 +425,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(this.els.coverStart)this._on(this.els.coverStart,'click',(e)=>{e.stopPropagation();this._beginFromCover(e);});
       this._on(this.els.cover,'click',(e)=>{
         if(this.els.cover.hidden||this.host.classList.contains('live-edit-enabled'))return;
-        if(e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        if(e.target.closest('button,a,input,select,textarea,[contenteditable],.sp-page-ring'))return;
         e.stopPropagation();this._beginFromCover(e);
       });
 
@@ -525,6 +525,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // phase so VIEW POINT owns the gesture before generic Scene advance can run.
       this._on(this.els.stage, 'click', (e) => {
         if (this.historyOpen || e.defaultPrevented) return;
+        if(e.target.closest?.('.sp-page-ring'))return;
         // TAP safe zone always belongs to generic Scene advance, never image open.
         if (isTapAdvanceSafeZone(e)) return;
         const currentScene = this.document?.scenes?.[this.index];
@@ -542,6 +543,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const activeScene = this.els.stage.querySelector('.sp-scene.is-active');
         const imageTarget = activeScene?.querySelector('.sp-scene-image');
         if (!imageTarget) return;
+        if(imageTarget.classList.contains('sp-page-ring'))return; // Ring controls own their pointer gestures.
         // The media is rotated independently of its layout wrapper. Hit-test its
         // painted bounds so taps near the visible corners still open the image.
         const rect = (imageTarget.querySelector('.sp-scene-image-media') || imageTarget).getBoundingClientRect();
@@ -629,7 +631,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           if (this.destroyed || !this.document || this.ended || !this.els.cover?.hidden || this.historyOpen) return;
           if (!this.host.contains(e.target)) return;
           if (e.isComposing) return;
-          if (e.target?.closest?.('button, a, input, textarea, select, [contenteditable="true"], .sp-image-viewer, .sp-scene-image-viewer')) return;
+          if (e.target?.closest?.('button, a, input, textarea, select, [contenteditable="true"], .sp-image-viewer, .sp-scene-image-viewer, .sp-page-ring')) return;
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
             e.stopPropagation();
@@ -4398,7 +4400,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const isHorizontalPast=()=>this.currentScene?.presentation?.text?.writingMode==='vertical-rl'
         && !this._hasCredits(this.currentScene?.presentation);
       this._on(this.els.stage,'pointerdown',(e)=>{
-        if(!this._isSpatialBackground()||e.target.closest('button,a,input,select,textarea,[contenteditable]'))return;
+        if(!this._isSpatialBackground()||e.target.closest('button,a,input,select,textarea,[contenteditable],.sp-page-ring'))return;
         if(this._isFinitePanorama()){
           // Sensor -> finger handoff. Preserve the exact visible camera, then
           // make that view the new neutral sensor origin before TRUE GRAB starts.
@@ -5701,7 +5703,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         let hash=2166136261;for(let i=0;i<identity.length;i++){hash^=identity.charCodeAt(i);hash=Math.imul(hash,16777619);}readingResumeKey=`ahako:image-reading:v1:${(hash>>>0).toString(16)}`;
       }
       const readProgress=()=>{if(!readingResumeKey)return null;try{const value=JSON.parse(localStorage.getItem(readingResumeKey));return value&&Number.isInteger(value.page)&&value.page>=0&&value.page<Math.max(1,pages.length)&&Number.isInteger(value.point)&&value.point>=0?value:null;}catch(_){return null;}};
+      let pageRing=null;
       const openBundlePage=(pageIndex,{fromScene=false,forceFullscreen=false,startAtAuthoredPoint=false,resumePoint=0}={})=>{
+        pageRing?.select(pageIndex);
         const page=pages[pageIndex]||firstImage;
         const sourceEl=fromScene?wrap:null;
         const pointSet=page.viewPoints||page.viewRec||(pageIndex===0?(image.viewPoints||image.viewRec):null);
@@ -5715,6 +5719,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
       };
       const openReading=opts=>{const progress=readProgress();openBundlePage(progress?.page||0,{...opts,resumePoint:progress?.point||0,startAtAuthoredPoint:opts.startAtAuthoredPoint||!!progress});};
+      if(!history && image.bundleLayout==='ring' && pages.length>1){
+        pageRing=this._createScenePageRing(scene,image,pages,pageIndex=>openBundlePage(pageIndex,{startAtAuthoredPoint:true}),{canOpen:imageTapAction!=='none'});
+        container.appendChild(pageRing.root);
+        if(this._simultaneousHistoryBuilding || !container.classList.contains('is-active'))pageRing.finish();
+        return;
+      }
       // The cover's comic-start mode opens the image even when ordinary Scene
       // tapping was disabled. Preserve authored VIEW POINT behavior when selected.
       wrap._sceneImageOpenForReading=(event)=>{
@@ -6946,6 +6956,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _resolveSceneEffect(scene, requested) {
+      if(requested==='ring')requested='fade';
       if (requested && requested !== 'auto') return requested;
 
       // "Auto" is the product default, not an effect lottery.
@@ -7097,81 +7108,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       });
     }
 
-    _playBookstoreRingEffect(scene,target,article) {
-      if(!target||!article||target.dataset.ringEffectPlayed==='true'||typeof global.Element?.prototype?.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
-      if(target.classList.contains('live-edit-empty-target')&&!target.textContent.trim())return;
-      const sourceRect=target.getBoundingClientRect(),articleRect=article.getBoundingClientRect();
-      if(!sourceRect.width||!sourceRect.height||!articleRect.width||!articleRect.height)return;
-      target.dataset.ringEffectPlayed='true';
-      const count=13,travel=Math.min(10,Math.max(5.5,count*.42)),samples=32;
-      const scaleX=(article.offsetWidth||articleRect.width)/articleRect.width;
-      const scaleY=(article.offsetHeight||articleRect.height)/articleRect.height;
-      const width=Math.max(1,(target.offsetWidth||sourceRect.width)*scaleX);
-      const height=Math.max(1,(target.offsetHeight||sourceRect.height)*scaleY);
-      const centerX=(sourceRect.left+sourceRect.width/2-articleRect.left)*scaleX;
-      const centerY=(sourceRect.top+sourceRect.height/2-articleRect.top)*scaleY;
-      const stageWidth=Math.max(1,this.els?.stage?.clientWidth||this.host?.clientWidth||global.innerWidth||360);
-      const radius=Math.min(430,Math.max(320,stageWidth*.52));
-      const timing=scene?.presentation?.effectTiming||{};
-      const duration=Math.max(600,Math.min(6000,(Number(timing.duration)||2.35)*1000));
-      const delay=Math.max(0,Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600000:6000,(Number(timing.delay)||0)*1000));
-      const baseTransform=target.style.transform&&target.style.transform!=='none'?target.style.transform:'';
-      const overlay=document.createElement('div');
-      overlay.className='sp-bookstore-ring-overlay';
-      overlay.setAttribute('aria-hidden','true');
-      const oldVisibility=target.style.visibility;
-      target.classList.add('sp-bookstore-ring-source-hidden');
-      article.appendChild(overlay);
-      const copies=[];
-      const wrap=(slot)=>{while(slot>count/2)slot-=count;while(slot< -count/2)slot+=count;return slot;};
-      for(let index=-6;index<=6;index++){
-        const copy=target.cloneNode(true);
-        copy.removeAttribute('id');
-        copy.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
-        copy.querySelectorAll('[contenteditable="true"],button,input,textarea,select,a').forEach(node=>{node.removeAttribute('contenteditable');node.removeAttribute('tabindex');});
-        copy.setAttribute('aria-hidden','true');
-        copy.removeAttribute('tabindex');
-        copy.classList.add('sp-bookstore-ring-clone');
-        copy.style.position='absolute';copy.style.left=`${centerX}px`;copy.style.top=`${centerY}px`;
-        copy.style.width=`${width}px`;copy.style.height=`${height}px`;copy.style.margin='0';
-        copy.style.transformOrigin='50% 50%';copy.style.pointerEvents='none';copy.style.visibility='visible';
-        overlay.appendChild(copy);
-        const keyframes=[];
-        for(let step=0;step<=samples;step++){
-          const t=step/samples;
-          const progress=1-Math.pow(1-t,4.6);
-          const approach=1-Math.pow(1-t,1.72);
-          const introDepth=.10+.90*approach;
-          const slot=wrap(index+travel*(1-progress));
-          const angle=slot*27,rad=angle*Math.PI/180;
-          const x=Math.sin(rad)*radius*introDepth;
-          const depth=1-Math.cos(rad);
-          const focus=Math.exp(-Math.pow(Math.abs(angle)/23,2));
-          const z=-55+focus*190-depth*145-(1-introDepth)*250;
-          const y=depth*14;
-          const scale=Math.max(.08,(.64+focus*.46-depth*.07)*(.22+.78*introDepth))/1.10;
-          const brightness=Math.max(.44,.74+focus*.30-depth*.11)/1.04;
-          const opacity=Math.min(1,Math.max(.10,(.70+focus*.28-depth*.18)*(.30+.70*introDepth))/.98);
-          keyframes.push({offset:t,opacity,filter:`brightness(${brightness.toFixed(3)})`,zIndex:String(Math.round(z+700)),transform:`translate(-50%,-50%) translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,${(z-135).toFixed(2)}px) rotateY(${(-angle*.72).toFixed(2)}deg) scale(${scale.toFixed(4)}) ${baseTransform}`});
-        }
-        copies.push(copy.animate(keyframes,{duration,delay,easing:'linear',fill:'both'}));
-      }
-      const cleanup=()=>{
-        target.classList.remove('sp-bookstore-ring-source-hidden');
-        target.style.visibility=oldVisibility;
-        copies.forEach(animation=>{try{animation.cancel();}catch{}});
-        overlay.remove();
-      };
-      global.setTimeout(cleanup,duration+delay+100);
-    }
-
     _playEntranceEffectOnce(article, scene) {
       if (!article || article.dataset.fxPlayed === 'true') return;
       article.dataset.fxPlayed = 'true';
-      if(article.dataset.effect==='ring'){
-        this._playBookstoreRingEffect(scene||this.currentScene,article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text'),article);
-        return;
-      }
       article.classList.remove('sp-fx-play');
       void article.offsetWidth;
       article.classList.add('sp-fx-play');
@@ -7214,7 +7153,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(effect==='scene')effect=scene?.presentation?.effect||'auto';
       if(effect==='typewriter')effect='fade';
       if(!effect||effect==='none'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
-      if(effect==='ring'){object.dataset.imageEffectPlayed='true';this._playBookstoreRingEffect(scene,object,article);return;}
+      if(effect==='ring')effect='fade';
       const motion={
         auto:[{opacity:0,filter:'blur(3px)',transform:'translateY(14px) scale(.985)'},{opacity:1,filter:'blur(0)',transform:'translateY(0) scale(1)'}],
         fade:[{opacity:0},{opacity:1}],rise:[{opacity:0,transform:'translateY(34px)'},{opacity:1,transform:'translateY(0)'}],
@@ -7647,4 +7586,168 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
   P._applyBackgroundForIndex=function(index){return originalBackground.call(this,this._simultaneousBounds(index).start);};
   const originalCore=P._applyCorePresentation;
   P._applyCorePresentation=function(scene){const i=this.document?.scenes.indexOf(scene);return originalCore.call(this,this.document?.scenes[this._simultaneousBounds(i).start]||scene);};
+})(typeof window!=='undefined'?window:globalThis);
+
+/* Page bundles: Bookstore V2.11.8 ring geometry, opening spin and inertial capture.
+   Source: bookstore/bookstore.js (setBookPose, playFirstViewSpin, coastAndSnap).
+   Real pages only; the live card window is bounded without duplicating pages. */
+(function(global){
+  'use strict';
+  const P=global.ScenePlayerCore.prototype;
+  P._createScenePageRing=function(scene,image,pages,openPage,options={}){
+    const core=this,root=document.createElement('div'),stage=document.createElement('div');
+    root.className='sp-scene-image sp-page-ring';root.dataset.bundleLayout='ring';root.dataset.ready='pending';
+    root.setAttribute('role','group');root.setAttribute('aria-label',image.alt||'ページ束の円環');root.tabIndex=0;
+    stage.className='sp-page-ring-stage';root.appendChild(stage);
+    const controls=document.createElement('div');controls.className='sp-page-ring-controls';
+    const prev=document.createElement('button'),next=document.createElement('button'),open=document.createElement('button'),count=document.createElement('span');
+    const en=core.options.uiLanguage==='en',canOpen=options.canOpen!==false;
+    for(const b of [prev,next,open])b.type='button';
+    prev.textContent='‹';next.textContent='›';prev.setAttribute('aria-label',en?'Previous page':'前のページ');next.setAttribute('aria-label',en?'Next page':'次のページ');
+    open.textContent=en?'Open page':'ページを開く';open.disabled=!canOpen;count.hidden=image.showPageCount===false;count.className='sp-page-ring-count';count.setAttribute('aria-live','polite');
+    controls.append(prev,count,next,open);root.appendChild(controls);
+    const hint=document.createElement('div');hint.className='sp-page-ring-hint';hint.textContent=en?'Drag to rotate · Tap the center page to open':'左右に回して選ぶ・中央のページをタップで開く';root.appendChild(hint);
+    let index=0,center=0,depth=1,raf=0,epoch=0,disposed=false,started=false,busy=false,drag=null,suppressClickUntil=0,ro=null;
+    const nodes=new Map(),n=pages.length;
+    const norm=i=>((i%n)+n)%n;
+    const wrappedOffsetFrom=(c,i)=>{let d=i-c;while(d>n/2)d-=n;while(d<-n/2)d+=n;return d;};
+    // Kept numerically identical to the Bookstore's setBookPose().
+    const RING_STEP_DEG=27;
+    function setBookPose(b,pos,introDepth=1){
+      const angle=pos*RING_STEP_DEG,rad=angle*Math.PI/180;
+      const radius=Math.min(430,Math.max(320,stage.clientWidth*.52));
+      const intro=Math.max(.08,Math.min(1,introDepth));
+      const x=Math.sin(rad)*radius*intro;
+      const depth=1-Math.cos(rad);
+      const focus=Math.exp(-Math.pow(Math.abs(angle)/23,2));
+      const z=-55 + focus*190 - depth*145 - (1-intro)*250;
+      const y=depth*14;
+      const scale=Math.max(.08,(.64 + focus*.46 - depth*.07)*(.22 + .78*intro));
+      const bright=Math.max(.44,.74 + focus*.30 - depth*.11);
+      const opacity=Math.max(.10,(.70 + focus*.28 - depth*.18)*(.30 + .70*intro));
+      b.style.setProperty('--ring-x',`${x}px`);b.style.setProperty('--ring-y',`${y}px`);b.style.setProperty('--ring-z',`${z}px`);
+      b.style.setProperty('--ring-rot',`${angle*-0.72}deg`);b.style.setProperty('--ring-scale',scale.toFixed(4));
+      b.style.setProperty('--ring-bright',bright.toFixed(4));b.style.setProperty('--ring-opacity',opacity.toFixed(4));
+      b.style.zIndex=String(1000-Math.round(depth*100));b.classList.toggle('is-far',Math.abs(angle)>105);
+    }
+    function card(i){
+      const b=document.createElement('button');b.type='button';b.className='sp-page-ring-book';b.dataset.pageIndex=String(i);
+      b.setAttribute('aria-label',`${i+1} / ${n}${pages[i].alt?' '+pages[i].alt:''}`);
+      const shell=document.createElement('span');shell.className='sp-page-ring-shell';
+      for(const part of ['spine','pages','bottom','face']){const el=document.createElement('span');el.className='sp-page-ring-'+part;shell.appendChild(el);if(part==='face'){const img=document.createElement('img');img.alt=pages[i].alt||'';img.decoding='async';img.draggable=false;img.src=pages[i].src;el.appendChild(img);}}
+      b.appendChild(shell);stage.appendChild(b);nodes.set(i,b);return b;
+    }
+    function render(c=center,d=depth){
+      center=c;depth=d;const keep=new Set();
+      // Walking slots, rather than all 100 pages, keeps drag-time work bounded.
+      for(let slot=-6;slot<=6;slot++){
+        const i=norm(Math.round(center)+slot),pos=wrappedOffsetFrom(center,i);
+        if(Math.abs(pos)>5.5||keep.has(i))continue;keep.add(i);
+        const b=nodes.get(i)||card(i);setBookPose(b,pos,depth);
+        const selected=i===index;b.tabIndex=selected?0:-1;b.setAttribute('aria-current',selected?'page':'false');
+      }
+      for(const [i,b] of nodes)if(!keep.has(i)){b.remove();nodes.delete(i);}
+      root.dataset.pageIndex=String(index);count.textContent=`${index+1} / ${n}`;
+    }
+    function active(){const article=root.closest('.sp-scene');return root.isConnected&&!core.ended&&!core.destroyed&&article?.classList.contains('is-active')&&!core.historyOpen;}
+    function cancel(){epoch++;cancelAnimationFrame(raf);raf=0;}
+    function finish(){cancel();busy=false;drag=null;root.dataset.ready='ready';root.classList.remove('is-intro-spinning','is-dragging');render(index,1);}
+    function dispose(){if(disposed)return;disposed=true;cancel();ro?.disconnect();ro=null;core._pageRingControllers?.delete(api);}
+    function animate(from,to,duration,apply,done){
+      cancel();const token=epoch,t0=performance.now();busy=true;
+      const frame=now=>{
+        raf=0;if(disposed||token!==epoch)return;if(!active()){finish();return;}
+        const t=Math.min(1,(now-t0)/duration);apply(from+(to-from)*(1-Math.pow(1-t,3)),t);
+        if(t<1)raf=requestAnimationFrame(frame);else{busy=false;done?.();core._scheduleAuto();}
+      };raf=requestAnimationFrame(frame);
+    }
+    function settle(target,duration=300){
+      const to=Math.round(target);animate(center,to,duration,c=>render(c,1),()=>{index=norm(to);center=index;render(index,1);});
+    }
+    function move(delta){if(disposed||root.dataset.ready!=='ready')return;settle(center+delta,190+Math.abs(delta)*72);}
+    function select(i){finish();index=norm(i);render(index,1);}
+    function choose(i){if(Date.now()<suppressClickUntil||root.dataset.ready!=='ready')return;const off=wrappedOffsetFrom(index,i);if(Math.abs(off)<.01){select(i);if(canOpen)openPage(i);}else move(off);}
+    async function preload(){
+      const travel=Math.min(10,Math.max(5.5,n*.42)),ids=new Set();
+      for(let k=0;k<=Math.ceil(travel);k++)for(const off of [-1,0,1])ids.add(norm(Math.round(index-travel+travel*k/Math.ceil(travel))+off));
+      await Promise.all([...ids].slice(0,14).map(i=>new Promise(resolve=>{const img=new Image();let timer;const done=()=>{clearTimeout(timer);resolve();};img.decoding='async';img.onload=()=>Promise.resolve(img.decode?.()).catch(()=>{}).then(done);img.onerror=done;timer=setTimeout(done,3200);img.src=pages[i].src;if(img.complete&&img.naturalWidth)img.onload();})));
+    }
+    async function start(delay=0){
+      if(started||disposed)return;started=true;busy=true;core._clearAutoTimer();
+      core._pageRingControllers ||= new Set();core._pageRingControllers.add(api);
+      if(typeof ResizeObserver==='function'){ro=new ResizeObserver(()=>{if(!disposed)render();});ro.observe(root);}
+      const token=++epoch;
+      // Decode and the authored delay run together; neither exposes a full-size first frame.
+      await Promise.all([preload(),new Promise(resolve=>{if(delay>0)core._presentationTimeout(resolve,delay);else resolve();})]);
+      if(disposed||epoch!==token)return;if(!active()){finish();return;}
+      if(global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches){finish();core._scheduleAuto();return;}
+      root.dataset.ready='spinning';root.classList.add('is-intro-spinning');
+      const travel=Math.min(10,Math.max(5.5,n*.42)),from=index-travel,t0=performance.now(),duration=2350;
+      render(from,.10);
+      function frame(now){
+        raf=0;if(disposed||epoch!==token)return;if(!active()){finish();return;}
+        const t=Math.min(1,(now-t0)/duration),e=1-Math.pow(1-t,4.6),approach=1-Math.pow(1-t,1.72);
+        render(from+(index-from)*e,.10+.90*approach);
+        if(t<1)raf=requestAnimationFrame(frame);else{busy=false;root.dataset.ready='ready';root.classList.remove('is-intro-spinning');render(index,1);core._scheduleAuto();}
+      }raf=requestAnimationFrame(frame);
+    }
+    function coast(velocity){
+      cancel();const token=epoch,origin=center,softTravel=Math.min(5.6,2.2+Math.abs(velocity)*210);let pos=center,v=velocity,last=performance.now();busy=true;
+      const frame=now=>{
+        raf=0;if(disposed||token!==epoch)return;if(!active()){finish();return;}
+        const dt=Math.min(32,now-last);last=now;pos+=v*dt;const travel=Math.abs(pos-origin),edge=Math.max(0,(travel-softTravel*.82)/(softTravel*.18));
+        v*=Math.pow(.974-Math.min(1,edge)*.010,dt/16.67);render(pos,1);
+        if(Math.abs(v)>.00115&&travel<softTravel)raf=requestAnimationFrame(frame);else settle(pos,280+Math.abs(Math.round(pos)-pos)*240);
+      };raf=requestAnimationFrame(frame);
+    }
+    for(const type of ['touchstart','touchmove','touchend','touchcancel'])root.addEventListener(type,e=>{e.stopPropagation();if(type==='touchmove'&&e.cancelable)e.preventDefault();},{passive:false});
+    root.addEventListener('pointerdown',e=>{
+      e.stopPropagation();if(e.target.closest('.sp-page-ring-controls')||e.button>0||root.dataset.ready!=='ready')return;
+      cancel();busy=true;core._clearAutoTimer();drag={id:e.pointerId,x:e.clientX,start:center,lastX:e.clientX,lastT:performance.now(),vx:0,moved:false};
+      root.classList.add('is-dragging');root.setPointerCapture?.(e.pointerId);
+    });
+    root.addEventListener('pointermove',e=>{
+      if(!drag||e.pointerId!==drag.id)return;e.stopPropagation();const dx=e.clientX-drag.x;if(!drag.moved&&Math.abs(dx)<5)return;
+      drag.moved=true;e.preventDefault();const now=performance.now(),dt=Math.max(1,now-drag.lastT);drag.vx=(e.clientX-drag.lastX)/dt;drag.lastX=e.clientX;drag.lastT=now;
+      const screenScale=root.getBoundingClientRect().width/(root.offsetWidth||1),spacing=Math.min(210,Math.max(145,stage.clientWidth*.39))*screenScale;
+      render(drag.start-dx/spacing,1);
+    });
+    const end=(e,cancelled=false)=>{
+      if(!drag||e.pointerId!==drag.id)return;e.stopPropagation();const d=drag;drag=null;root.classList.remove('is-dragging');try{root.releasePointerCapture?.(e.pointerId);}catch(_){}
+      if(cancelled){settle(center);return;}
+      if(d.moved){suppressClickUntil=Date.now()+360;const screenScale=root.getBoundingClientRect().width/(root.offsetWidth||1),spacing=Math.min(210,Math.max(145,stage.clientWidth*.39))*screenScale;coast(-d.vx/spacing*.66);}
+      else{busy=false;const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest('.sp-page-ring-book');if(hit&&root.contains(hit))choose(Number(hit.dataset.pageIndex));suppressClickUntil=Date.now()+220;core._scheduleAuto();}
+    };
+    root.addEventListener('pointerup',e=>end(e));root.addEventListener('pointercancel',e=>end(e,true));
+    root.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(e.target.closest('.sp-page-ring-controls'))return;const b=e.target.closest('.sp-page-ring-book');if(b)choose(Number(b.dataset.pageIndex));});
+    root.addEventListener('wheel',e=>{if(e.ctrlKey)return;e.preventDefault();e.stopPropagation();if(root.dataset.ready==='ready')move((e.deltaX||e.deltaY)>0?1:-1);},{passive:false});
+    root.addEventListener('keydown',e=>{if(e.target.closest('.sp-page-ring-controls')){e.stopPropagation();return;}if(['ArrowLeft','ArrowRight','Enter',' '].includes(e.key)){e.preventDefault();e.stopPropagation();if(e.key==='ArrowLeft')move(-1);else if(e.key==='ArrowRight')move(1);else choose(index);}});
+    prev.onclick=e=>{e.preventDefault();e.stopPropagation();move(-1);};next.onclick=e=>{e.preventDefault();e.stopPropagation();move(1);};open.onclick=e=>{e.preventDefault();e.stopPropagation();choose(index);};
+    const api={root,start,finish,dispose,select,get busy(){return busy;},get index(){return index;}};
+    root._pageRing=api;root._sceneImageOpenForReading=e=>{e?.preventDefault?.();e?.stopPropagation?.();choose(index);};
+    render(0,1);
+    if(core._simultaneousHistoryBuilding||!root.closest('.sp-scene'))root.dataset.ready='pending';
+    return api;
+  };
+  const originalActivate=P._activatePresentation;
+  P._activatePresentation=function(scene,article){
+    originalActivate.call(this,scene,article);
+    article.querySelectorAll('.sp-page-ring').forEach(root=>root._pageRing?.start(Math.max(0,Number(scene.presentation?.effectTiming?.delay)||0)*1000));
+  };
+  const originalRender=P._render;
+  P._render=function(){
+    const result=originalRender.apply(this,arguments);
+    this._pageRingControllers?.forEach(r=>{if(!r.root.isConnected)r.dispose();else if(!r.root.closest('.sp-scene')?.classList.contains('is-active'))r.finish();});return result;
+  };
+  const originalFinish=P._finishVisibleEntranceEffects;
+  P._finishVisibleEntranceEffects=function(){this._pageRingControllers?.forEach(r=>r.finish());return originalFinish.call(this);};
+  const originalAuto=P._scheduleAuto;
+  P._scheduleAuto=function(){
+    if([...this._pageRingControllers||[]].some(r=>r.busy&&r.root.isConnected&&r.root.closest('.sp-scene')?.classList.contains('is-active'))){this._clearAutoTimer();return;}
+    return originalAuto.call(this);
+  };
+  const originalHistory=P.openHistory;
+  P.openHistory=function(){this._pageRingControllers?.forEach(r=>r.finish());return originalHistory.apply(this,arguments);};
+  const originalDestroy=P.destroy;
+  P.destroy=function(){this._pageRingControllers?.forEach(r=>r.dispose());this._pageRingControllers?.clear();return originalDestroy.apply(this,arguments);};
 })(typeof window!=='undefined'?window:globalThis);
