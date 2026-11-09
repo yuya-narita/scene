@@ -1106,10 +1106,13 @@
     menuRelayToggleButton.setAttribute('aria-pressed',relayEnabled?'true':'false');
     const label=menuRelayToggleButton.querySelector('span');
     const note=menuRelayToggleButton.querySelector('small');
-    if(label)label.textContent=uiLanguage==='ja'?'回し読み':'Pass-along';
-    if(note)note.textContent=relayEnabled
-      ? (uiLanguage==='ja'?'ON｜次の一人へ渡せます':'ON | Readers can pass it on')
-      : (uiLanguage==='ja'?'OFF｜回し読みしません':'OFF | Pass-along disabled');
+    if(label)label.textContent=uiLanguage==='ja'?'回し読み（RELAY）':'Pass-along (RELAY)';
+    if(note)note.textContent=relayEnabled?'ON':'OFF';
+    const description=uiLanguage==='ja'
+      ? '読者が自分の一冊を次の一人へ渡すことを許可する設定です。変更後は再公開してください。発行済みの版には遡って適用されません。'
+      : 'Allow readers to pass their own copy to the next person. Republish after changing this setting. Existing editions keep their original policy.';
+    menuRelayToggleButton.title=description;
+    menuRelayToggleButton.setAttribute('aria-label',`${uiLanguage==='ja'?'回し読みの許可':'Allow pass-along'}: ${relayEnabled?'ON':'OFF'}`);
   }
   function setRelayPolicyEnabled(enabled,{save=true}={}){
     relayEnabled=Boolean(enabled);
@@ -9840,6 +9843,17 @@ return flowCommentCard;}
   // v0.2.94: menu is a top-right popover; no drag-to-dismiss gesture.
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
+  // Author permission is independent of issuing or purchasing a copy. Restore
+  // the work-level toggle without reopening direct Distribution exports.
+  menuRelayToggleButton?.addEventListener('click',event=>{
+    event.preventDefault();event.stopPropagation();
+    if(workingDocument)captureUndo(u('回し読みの許可の変更を元に戻せます','Undo pass-along permission change'));
+    setRelayPolicyEnabled(!relayEnabled,{save:true});
+    syncEasyPublishButton();
+    showEasyToast(uiLanguage==='ja'
+      ? `回し読みを${relayEnabled?'ON':'OFF'}にしました。公開作品へ反映するには再公開してください。`
+      : `Pass-along is ${relayEnabled?'ON':'OFF'}. Republish to update the public work.`);
+  });
   $('#menuExportDistributionButton')?.addEventListener('click',()=>{closeEasyMenu();exportDistributionScenePackage();});
   $('#menuDraftManageButton')?.addEventListener('click',()=>{closeEasyMenu();$('#draftManageButton')?.click();});
   $('#menuNewDraftButton')?.addEventListener('click',async()=>{
