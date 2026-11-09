@@ -18764,16 +18764,18 @@ function openDesktopTextDetail(){
     e.stopPropagation();
   },true);
 
+  playerHost.addEventListener('pointerdown',e=>{
+    if(!liveEditEnabled||autoRecActive||player?.historyOpen||player?.ended||playerHost.classList.contains('sp-cover-open'))return;
+    if(!player?._simultaneousBounds?.().id)return;
+    if(e.target.closest?.('.sp-scene.is-active .sp-text,.sp-scene.is-active .sp-subtext'))e.stopPropagation();
+  },true);
+
   // Live Edit: main text and subtext are both direct edit targets.
   // The CSS re-enables pointer events for both nodes; this capture listener
   // wins before the stage can interpret the same tap as "next Scene".
   playerHost.addEventListener('click',(e)=>{
     if(!liveEditEnabled||autoRecActive||player?.historyOpen)return;
     if(playerHost.classList.contains('sp-cover-open')||player?.ended)return;
-    if(liveInlineEditEl){
-      if(e.target.closest?.('.sp-scene.is-active')){e.preventDefault();e.stopImmediatePropagation();}
-      return;
-    }
 
     if(e.target.closest?.('.sp-credits')&&captureAndShowRichSelection()){e.preventDefault();e.stopImmediatePropagation();return;}
     const activeSubText=e.target.closest?.('.sp-scene.is-active .sp-subtext');
@@ -18783,13 +18785,26 @@ function openDesktopTextDetail(){
     const webText=e.target.closest?.('.sp-scene.is-active .sp-web-comment-text.sp-message-original, .sp-scene.is-active .sp-web-review-text, .sp-scene.is-active .sp-web-qa-answer-text, .sp-scene.is-active .sp-web-qa-question-body.is-question-scene-text, .sp-scene.is-active .sp-web-sns-text, .sp-scene.is-active .sp-web-mail-text, .sp-scene.is-active .sp-web-notification-text');
     if(!activeSubText&&!activeText&&!webText)return;
 
+    const target=activeSubText||activeText||webText;
+    if(liveInlineEditEl===target){e.stopPropagation();return;}
     e.preventDefault();
     e.stopImmediatePropagation();
     setLiveToolbarVisible(true);
-    const target=activeSubText||activeText||webText;
     const memberId=target.closest('.sp-scene')?.dataset.sceneId;
     const memberIndex=workingDocument?.scenes.findIndex(s=>s.id===memberId);
-    if(memberIndex>=0){selectedSceneIndex=memberIndex;if(player)player.index=memberIndex;}
+    if(liveInlineEditEl===target)return;
+    // Commit to the old member before selecting a different member. Do not
+    // redraw the stage: all group members must remain at their authored positions.
+    if(liveInlineEditEl){syncInlineTextToScene();finishInlineTextEdit();}
+    if(memberIndex>=0){
+      const changed=player?.index!==memberIndex;
+      selectedSceneIndex=memberIndex;
+      if(player){
+        player.index=memberIndex;
+        if(player.els?.current)player.els.current.textContent=String(memberIndex+1);
+        if(changed)playerHost.dispatchEvent(new CustomEvent('sceneplayer:scenechange',{detail:{index:memberIndex,scene:player.currentScene,direction:'member-select'}}));
+      }
+    }
     startInlineTextEdit(activeSubText?'subText':'text',target);
   },true);
   playerHost.addEventListener('sceneplayer:coverstart',()=>{

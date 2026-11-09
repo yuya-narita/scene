@@ -7150,6 +7150,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }, cleanupAfter);
     }
 
+    _playTextEntryDirectionOnce(scene, article) {
+      const direction=scene?.presentation?.text?.entryDirection;
+      if(!direction||direction==='auto'||!article||article.dataset.textEntryDirectionPlayed==='true')return;
+      const vector={top:[0,-1],bottom:[0,1],left:[-1,0],right:[1,0],'top-left':[-1,-1],'top-right':[1,-1],'bottom-left':[-1,1],'bottom-right':[1,1]}[direction];
+      const text=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text');
+      if(!vector||!text||typeof text.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+      article.dataset.textEntryDirectionPlayed='true';
+      const width=Math.max(1,this.host?.clientWidth||global.innerWidth||360),height=Math.max(1,this.host?.clientHeight||global.innerHeight||640);
+      const dx=Math.round(Math.max(48,Math.min(240,width*.28))*vector[0]);
+      const dy=Math.round(Math.max(48,Math.min(240,height*.18))*vector[1]);
+      const timing=scene.presentation?.effectTiming||{};
+      const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
+      const delay=Math.max(0,Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600000:6000,(Number(timing.delay)||0)*1000));
+      const animation=text.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
+      animation.onfinish=()=>{try{animation.cancel();}catch{}};
+    }
+
+
     _playSceneImageEffectOnce(scene, article) {
       const image=scene?.presentation?.image;
       const object=article?.querySelector(':scope > .sp-scene-image .sp-scene-image-object')||article?.querySelector('.sp-scene-image-object');
@@ -7188,6 +7206,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Never replay merely because the Scene remains in the visible stack
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article,scene);
+      this._playTextEntryDirectionOnce(scene,article);
       this._playSceneImageEffectOnce(scene, article);
 
       if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
