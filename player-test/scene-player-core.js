@@ -5902,7 +5902,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const text=frame.querySelector(':scope > .sp-text');
         let fitted=false;
         frame.classList.add('sp-frame-measuring');
-        if(text&&frame.dataset.writingMode==='vertical-rl'&&!frame.dataset.inkFitted){
+        if(text&&frame.dataset.writingMode==='vertical-rl'){
+          const liveFrame=this.document?.scenes?.find(item=>item.id===scene.id)?.presentation?.frame||frameOptions;
+          const liveExtraX=Math.max(-80,Math.min(180,Number(liveFrame.extraX)||0));
+          const liveExtraY=Math.max(-80,Math.min(180,Number(liveFrame.extraY)||0));
           text.style.maxWidth='none';
           text.style.width='max-content';
           const measureRects=()=>{try{
@@ -5973,6 +5976,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           else this._positionSceneNodes(presentNodes,presentEntries,0);
         });
       };
+      frame._spDrawHanddrawnFrame=draw;
       requestAnimationFrame(draw);
       if(typeof ResizeObserver==='function'){
         const observer=new ResizeObserver(()=>{

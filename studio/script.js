@@ -7945,6 +7945,7 @@ return flowCommentCard;}
     for(const key of ['fill','stroke'])if(values[key])frame.style.setProperty(`--sp-frame-${key}`,values[key]);
     const runtime=player.document?.scenes?.find(item=>item.id===scene.id);
     if(runtime){runtime.presentation ||= {};runtime.presentation.frame={...values};}
+    frame._spDrawHanddrawnFrame?.();
     return true;
   }
   function buildFrameStyleControls(scene,onPreview=()=>{}){
