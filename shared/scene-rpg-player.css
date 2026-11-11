@@ -12,3 +12,9 @@
 .ahako-rpg-row:active{background:#ffffff18!important}.ahako-rpg-row-value{font-size:13px;flex-shrink:0;font-variant-numeric:tabular-nums}.ahako-rpg-heading{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #888;padding:2px 3px 10px;font-size:15px;font-weight:700}.ahako-rpg-heading span{font-size:13px;font-weight:400}.ahako-rpg-value,.ahako-rpg-empty{padding:12px 4px;font-size:14px}
 @media(max-width:400px){.ahako-rpg-card{width:calc(100% - 35px);left:10px;padding:11px 9px}.ahako-rpg-row{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.ahako-rpg-card{transition:none!important}}
+/* Studio authoring controls are rendered only in its own preview instance. */
+.ahako-rpg-author-tools{display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid #666;margin-top:8px;padding-top:8px}
+.ahako-rpg-author-tools button,.ahako-rpg-inline-editor button{background:#333!important;color:#fff!important;border:1px solid #999!important;border-radius:4px;padding:7px 9px;cursor:pointer}
+.ahako-rpg-inline-editor{position:relative;z-index:3;display:flex;flex-wrap:wrap;gap:7px;padding:9px 0;border-top:1px solid #999;margin-top:8px}
+.ahako-rpg-inline-editor input{flex:1 1 110px;min-width:0;box-sizing:border-box;background:#fff!important;color:#111!important;border:1px solid #aaa;border-radius:4px;padding:8px;font-size:15px;writing-mode:horizontal-tb}
+.ahako-rpg-open-child{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;min-width:30px;min-height:30px;border:1px solid #aaa;border-radius:4px;font-size:20px;cursor:pointer}

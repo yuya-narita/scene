@@ -12,24 +12,28 @@ function attach(player){
  host.appendChild(layer);
  ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null};instances.set(player,ui);
  const onScene=e=>update(player,e.detail?.index);
+ const onCover=()=>{ui.layer.hidden=true;ui.stack=[];};
+ host.addEventListener('sceneplayer:coverstart',onCover);
+ host.addEventListener('sceneplayer:end',onCover);
  host.addEventListener('sceneplayer:scenechange',onScene);
  const onKey=e=>{if(ui.layer.hidden||!ui.stack.length||e.target.closest('input,textarea,select,[contenteditable]'))return;
   if((e.key==='Escape'||e.key==='Backspace'||e.key==='ArrowRight')&&ui.stack.length>1){e.preventDefault();e.stopPropagation();back(player,true);}
  };
  // Only react when focus is in this Player. Avoid capturing Studio editor shortcuts.
  host.addEventListener('keydown',onKey,true);
- ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('keydown',onKey,true);layer.remove();};
+ ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);host.removeEventListener('keydown',onKey,true);layer.remove();};
  return ui;
 }
 function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapshot));return Object.entries(snapshot.nodes).filter(([id])=>visible.has(id));}
 function update(player,index){
  const ui=attach(player),work=player.document;
- if(!work?.extensions?.ahakoRpgCommand||!Object.keys(work.extensions.ahakoRpgCommand.nodes||{}).length){ui.layer.hidden=true;ui.stack=[];return;}
  const i=Number.isInteger(index)?index:player.index;
- if(i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
- let snapshot;
- try{snapshot=API.resolve(work,i);}catch(e){console.warn('[RPG Command] invalid data:',e);ui.layer.hidden=true;return;}
- ui.index=i;ui.snapshot=snapshot;ui.entries=visibleEntries(snapshot);ui.map=new Map(ui.entries);
+ if(!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
+ const local=work.scenes[i]?.extensions?.ahakoRpgScene;
+ // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
+ if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
+ const snapshot={nodes:local.nodes,position:local.position||'center'};
+ ui.index=i;ui.snapshot=snapshot;ui.entries=Object.entries(snapshot.nodes).filter(([id,n])=>{if(n.visible===false)return false;let p=n.parentId;const visited=new Set([id]);while(p){if(visited.has(p)||snapshot.nodes[p]?.visible===false||!snapshot.nodes[p])return false;visited.add(p);p=snapshot.nodes[p].parentId;}return true;});ui.map=new Map(ui.entries);
  if(!ui.entries.length){ui.layer.hidden=true;ui.stack=[];return;}
  // One initial root card, or the configured root with visible descendants.
  ui.stack=[null];ui.lock=false;ui.layer.hidden=false;
@@ -53,16 +57,40 @@ function draw(player){
    const btn=make('button','ahako-rpg-row'+(n===0?' is-selected':''));btn.type='button';
    const label=make('span','ahako-rpg-label',node.label||id);btn.append(label);
    if(node.value!==undefined&&node.value!=='')btn.append(make('span','ahako-rpg-row-value',node.value));
-   if(isTop&&hasChildren)btn.addEventListener('click',e=>{e.stopPropagation();if(ui.lock)return;ui.stack.push(id);draw(player);});
-   else btn.addEventListener('click',e=>e.stopPropagation());
+   if(isTop&&hasChildren)btn.addEventListener('click',e=>{e.stopPropagation();if(ui.lock)return;if(editing(player)){editNode(player,id);return;}ui.stack.push(id);draw(player);});
+   else btn.addEventListener('click',e=>{e.stopPropagation();if(isTop&&editing(player))editNode(player,id);});
    card.append(btn);
+   if(isTop&&hasChildren&&editing(player)){const open=make('span','ahako-rpg-open-child','›');open.title='中のカードを見る';open.addEventListener('click',e=>{e.stopPropagation();ui.stack.push(id);draw(player);});btn.append(open);}
   });
   if(!list.length&&parent===null){card.append(make('div','ahako-rpg-empty','表示項目なし'));}
+  if(isTop&&editing(player)){
+   const tools=make('div','ahako-rpg-author-tools');
+   const plus=make('button','','＋ 項目追加');plus.type='button';plus.addEventListener('click',e=>{e.stopPropagation();global.AhakoRpgSceneEditor.add(parent);});tools.append(plus);
+   if(parent!==null){const edit=make('button','','✎ 見出し');edit.type='button';edit.addEventListener('click',e=>{e.stopPropagation();editNode(player,parent);});tools.append(edit);}
+   card.append(tools);
+  }
   // Each card is interactive; stage/background remains untouched.
   for(const ev of ['click','pointerdown','pointerup','touchstart','touchend'])card.addEventListener(ev,e=>e.stopPropagation());
-  if(isTop&&d>0)bindSwipe(player,card);
+  if(isTop&&d>0&&!editing(player))bindSwipe(player,card);
   layer.append(card);
  }
+}
+function editing(player){return !!(global.__ahakoRpgStudioPlayer===player&&global.AhakoRpgSceneEditor?.active?.());}
+function editNode(player,id){
+ const ui=instances.get(player),node=ui?.map?.get(id);if(!node)return;
+ const card=ui.layer.lastElementChild;
+ const form=make('div','ahako-rpg-inline-editor');
+ const name=make('input');name.value=node.label||'';name.placeholder='項目名';name.setAttribute('aria-label','項目名');
+ const value=make('input');value.value=node.value??'';value.placeholder='値（空欄可）';value.setAttribute('aria-label','値');
+ const save=make('button','','保存');save.type='button';
+ const del=make('button','','削除');del.type='button';
+ const cancel=make('button','','戻る');cancel.type='button';
+ const close=()=>{form.remove();};
+ save.addEventListener('click',e=>{e.stopPropagation();global.AhakoRpgSceneEditor.update(id,{label:name.value,value:value.value});close();});
+ del.addEventListener('click',e=>{e.stopPropagation();if(global.confirm('この項目と子項目を削除しますか？'))global.AhakoRpgSceneEditor.remove(id);close();});
+ cancel.addEventListener('click',e=>{e.stopPropagation();close();});
+ form.append(name,value,save,del,cancel);form.addEventListener('click',e=>e.stopPropagation());
+ card.append(form);name.focus();
 }
 function back(player,animate,offset=0,velocity=0){
  const ui=instances.get(player);if(!ui||ui.stack.length<=1||ui.lock)return;
@@ -98,6 +126,7 @@ function bindSwipe(player,card){
  card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0){global.addEventListener('pointermove',mm);global.addEventListener('pointerup',mu);}});
  card.addEventListener('click',e=>{if(offset>5){e.preventDefault();e.stopImmediatePropagation();}},true);
 }
+global.AhakoRpgPlayer={refresh(player){update(player,player.index);}};
 const oldLoad=proto.load;
 proto.load=function(...args){const result=oldLoad.apply(this,args);attach(this);update(this,this.index);return result;};
 const oldDestroy=proto.destroy;

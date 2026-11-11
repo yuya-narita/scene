@@ -7191,6 +7191,17 @@ return flowCommentCard;}
   function ensurePlayer(){
     if(player)return player;
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
+    window.__ahakoRpgStudioPlayer=player;
+    window.AhakoRpgSceneEditor && (window.AhakoRpgSceneEditor.refreshPreview=()=>{
+      if(!player?.document||!workingDocument)return;
+      const idx=selectedSceneIndex;
+      if(!player.document.scenes?.[idx]||!workingDocument.scenes?.[idx])return;
+      const key='ahakoRpgScene',source=workingDocument.scenes[idx].extensions?.[key];
+      player.document.scenes[idx].extensions ||= {};
+      if(source)player.document.scenes[idx].extensions[key]=JSON.parse(JSON.stringify(source));
+      else delete player.document.scenes[idx].extensions[key];
+      window.AhakoRpgPlayer?.refresh?.(player);
+    });
     installStudioPreviewSeek(player);
     if(!studioPlayerEventsBound){
     studioPlayerEventsBound=true;
@@ -16238,7 +16249,7 @@ function openDesktopTextDetail(){
     rpgDisclosure.className='rpg-editor-disclosure';
     rpgDisclosure.open=window.__ahakoRpgDisclosureOpen===true;
     rpgDisclosure.addEventListener('toggle',()=>{window.__ahakoRpgDisclosureOpen=rpgDisclosure.open;});
-    rpgDisclosure.innerHTML='<summary>RPGコマンド（基本台帳・Scene変更）</summary><section id="rpgCommandEditor" class="rpg-command-editor"></section>';
+    rpgDisclosure.innerHTML='<summary>RPGコマンド</summary><section id="rpgCommandEditor" class="rpg-command-editor"></section>';
     panes.effect.appendChild(rpgDisclosure);
     if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
     panes.image.appendChild(sceneImageCard);
