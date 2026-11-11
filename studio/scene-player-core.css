@@ -3663,3 +3663,6 @@ html.sp-scene-image-open body{
 @keyframes spFxSyncStretchFrame{0%{opacity:0;transform:scaleX(.12)}55%{opacity:1;transform:scaleX(1.18)}100%{opacity:1;transform:scaleX(1)}}
 .sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="stretch"] .sp-handdrawn-frame{animation-name:spFxSyncStretchFrame!important;letter-spacing:inherit!important}
 @media(prefers-reduced-motion:reduce){.sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame{animation:none!important;transform:none!important;translate:none!important;filter:none!important;opacity:1!important}.sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame>.sp-text{animation:none!important;transform:none!important;filter:none!important;opacity:1!important}}
+/* Interpret synced transforms against the text-sized content box, not padded frame bounds. */
+.sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame{transform-box:content-box!important}
+.sp-scene[data-frame-motion="sync"]:not(.sp-fx-play) .sp-handdrawn-frame{animation:none!important;transform:none!important;translate:none!important;filter:none!important;opacity:1!important}
