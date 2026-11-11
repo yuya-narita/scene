@@ -34,3 +34,16 @@
 .ahako-rpg-inline-editor input{min-width:0;flex:auto;width:100%;font-size:13px;padding:6px}
 .ahako-rpg-inline-editor button{font-size:11px;padding:5px 6px}
 @media(max-width:400px){.ahako-rpg-card[data-depth="0"]{width:188px}.ahako-rpg-card[data-depth="1"]{width:calc(100% - 45px)}.ahako-rpg-card[data-depth="2"],.ahako-rpg-card[data-depth="3"]{width:calc(100% - 12px)}}
+
+/* v3: match approved 0.9.1 geometry. Never let a depth-2 card overflow the preview. */
+.ahako-rpg-layer{--rpg-anchor:39%;overflow:hidden;container-type:inline-size}
+.ahako-rpg-card,.ahako-rpg-card[data-depth]{transform:none;box-sizing:border-box;max-width:none;max-height:min(68%,520px);overflow-x:hidden;left:12px;top:clamp(8px,calc(var(--rpg-anchor) - 120px),calc(100% - 115px));width:188px;padding:16px 13px}
+.ahako-rpg-card[data-depth="1"]{left:37px;top:clamp(8px,calc(var(--rpg-anchor) - 46px),calc(100% - 115px));width:calc(100% - 55px);min-height:0}
+.ahako-rpg-card[data-depth="2"],.ahako-rpg-card[data-depth="3"],.ahako-rpg-card[data-depth="4"]{left:5px;top:clamp(8px,calc(var(--rpg-anchor) + 15px),calc(100% - 115px));width:calc(100% - 10px);min-height:0}
+.ahako-rpg-row{min-height:43px;padding:8px 7px 8px 20px;font-size:15px}
+.ahako-rpg-card.is-behind{filter:brightness(.42)}
+.ahako-rpg-card.is-top{filter:brightness(1)}
+.ahako-rpg-inline-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:5px}
+.ahako-rpg-inline-editor input{width:100%;min-width:0}
+.ahako-rpg-author-tools{margin-top:5px}
+@media(max-width:400px){.ahako-rpg-card[data-depth="0"]{left:12px;width:188px}.ahako-rpg-card[data-depth="1"]{left:26px;width:calc(100% - 40px)}.ahako-rpg-card[data-depth="2"],.ahako-rpg-card[data-depth="3"],.ahako-rpg-card[data-depth="4"]{left:3px;width:calc(100% - 6px)}}

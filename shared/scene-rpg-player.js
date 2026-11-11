@@ -71,7 +71,7 @@ function draw(player){
   if(isTop&&editing(player)){
    const tools=make('div','ahako-rpg-author-tools');
    const plus=make('button','','＋ この中に追加');plus.type='button';plus.addEventListener('click',e=>{e.stopPropagation();global.AhakoRpgSceneEditor.add(parent);});tools.append(plus);
-   if(parent!==null){const edit=make('button','','✎ このカード名');edit.type='button';edit.addEventListener('click',e=>{e.stopPropagation();editNode(player,parent);});tools.append(edit);}
+   if(parent!==null){const edit=make('button','','✎ このカード名・値');edit.type='button';edit.addEventListener('click',e=>{e.stopPropagation();editNode(player,parent);});tools.append(edit);}
    card.append(tools);
   }
   // Each card is interactive; stage/background remains untouched.
@@ -80,10 +80,11 @@ function draw(player){
   layer.append(card);
  }
 }
-function editing(player){return !!(global.__ahakoRpgStudioPlayer===player&&global.AhakoRpgSceneEditor?.active?.());}
+function editing(player){return !!(global.AhakoRpgSceneEditor?.active?.() && global.__ahakoRpgStudioPlayer && (global.__ahakoRpgStudioPlayer===player || global.__ahakoRpgStudioPlayer.host===player.host));}
 function editNode(player,id){
  const ui=instances.get(player),node=ui?.map?.get(id);if(!node)return;
  const card=ui.layer.lastElementChild;
+ if(!card)return;
  const form=make('div','ahako-rpg-inline-editor');
  const name=make('input');name.value=node.label||'';name.placeholder='項目名';name.setAttribute('aria-label','項目名');
  const value=make('input');value.value=node.value??'';value.placeholder='値（空欄可）';value.setAttribute('aria-label','値');
