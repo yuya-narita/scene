@@ -1,0 +1,14 @@
+/* RPG Command overlay — transparent outside black windows; no background changes. */
+.ahako-rpg-layer{position:absolute;inset:0;z-index:80;pointer-events:none;isolation:isolate;font-family:system-ui,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;color:#fff;direction:ltr;writing-mode:horizontal-tb}
+.ahako-rpg-layer[hidden]{display:none!important}
+.ahako-rpg-card{position:absolute;left:clamp(12px,5%,36px);top:var(--rpg-top);width:min(84%,420px);max-height:min(68%,540px);overflow:auto;overscroll-behavior:contain;pointer-events:auto;background:#18181b!important;color:#fff!important;border:2px solid #f5f5f5;border-radius:7px;box-shadow:0 0 0 3px #777,0 0 0 6px #111,0 8px 16px #0009;padding:13px 12px;box-sizing:border-box;touch-action:pan-y;user-select:none;-webkit-user-select:none;transition:transform 190ms cubic-bezier(.2,.8,.2,1),opacity 190ms ease,filter 190ms ease}
+.ahako-rpg-layer[data-position="top"]{--rpg-anchor:12%}.ahako-rpg-layer[data-position="center"]{--rpg-anchor:39%}.ahako-rpg-layer[data-position="bottom"]{--rpg-anchor:64%}
+.ahako-rpg-card{--rpg-top:clamp(12px,calc(var(--rpg-anchor,39%) + var(--rpg-depth)*28px),calc(100% - 105px));transform:translate3d(calc(var(--rpg-depth)*11px),0,0)}
+.ahako-rpg-card.is-behind{filter:brightness(.42);pointer-events:none}
+.ahako-rpg-card.is-behind.is-revealing{filter:brightness(1)}
+.ahako-rpg-card.is-dragging{transition:none!important;cursor:grabbing}
+.ahako-rpg-row{display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;width:100%;min-height:42px;padding:8px 6px 8px 20px;background:transparent!important;color:#fff!important;border:0!important;border-radius:2px;text-align:left;font-size:15px;font-weight:600;line-height:1.4;cursor:pointer;writing-mode:horizontal-tb;white-space:normal}
+.ahako-rpg-row.is-selected:before{content:'▶';position:absolute;left:1px;font-size:12px}
+.ahako-rpg-row:active{background:#ffffff18!important}.ahako-rpg-row-value{font-size:13px;flex-shrink:0;font-variant-numeric:tabular-nums}.ahako-rpg-heading{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #888;padding:2px 3px 10px;font-size:15px;font-weight:700}.ahako-rpg-heading span{font-size:13px;font-weight:400}.ahako-rpg-value,.ahako-rpg-empty{padding:12px 4px;font-size:14px}
+@media(max-width:400px){.ahako-rpg-card{width:calc(100% - 35px);left:10px;padding:11px 9px}.ahako-rpg-row{font-size:14px}}
+@media(prefers-reduced-motion:reduce){.ahako-rpg-card{transition:none!important}}
