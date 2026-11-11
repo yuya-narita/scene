@@ -8299,6 +8299,7 @@ return flowCommentCard;}
     const pos=$('#advancedScenePosition'); if(pos)pos.textContent=`Scene ${selectedSceneIndex+1} / ${workingDocument.scenes.length}`;
     renderSceneList();
     loadSceneIntoFields();
+    window.AhakoRpgEditor?.connect(()=>workingDocument,()=>selectedSceneIndex);
     toolboxSceneSummary();
     requestAnimationFrame(()=>{
       const selected=$('#sceneList')?.querySelector('.scene-list-item.is-selected');
