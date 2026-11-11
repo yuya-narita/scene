@@ -129,15 +129,26 @@
       const validAuthorId=/^author_[a-f0-9]{32}$/.test(authorId);
       const validAuthorSlug=/^[a-z0-9][a-z0-9_-]{2,29}$/.test(authorSlug);
       if((!isProductionAuthor&&!isSameSiteAuthor)||(!validAuthorId&&!validAuthorSlug))return null;
-      url.searchParams.delete('book');
+      // Published work URLs can retain an older author-shelf return target.
+      // Keep the destination within the same deployment when possible, but
+      // route readers back to the bookstore entrance instead of the author shelf.
+      if(isProductionAuthor)url.pathname='/scene/bookstore/';
+      else if(isSameSiteAuthor)url=new URL('../bookstore/',url);
+      url.search='';
       url.hash='';
-      return {url:url.toString(),label:'← 作者の本棚へ'};
+      return {url:url.toString(),label:'← あ箱書店へ'};
     }catch(_){return null;}
   }
 
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
-    const returnTo=safeShelfReturn(params.get('returnTo'));
+    // Studio's /work/:id links enter through ?src=... and do not always carry
+    // a returnTo parameter. Give those public works the same bookstore return.
+    const returnTo=safeShelfReturn(params.get('returnTo'))||(
+      params.has('src')
+        ? {url:'https://yuya-narita.github.io/scene/bookstore/',label:'← あ箱書店へ'}
+        : null
+    );
     if(!returnTo){shelfReturnLink.hidden=true;return;}
     shelfReturnLink.href=returnTo.url;
     shelfReturnLink.textContent=returnTo.label;
