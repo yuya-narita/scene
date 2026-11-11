@@ -7195,25 +7195,36 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _startTyping(scene, node, typing) {
       this._stopTyping(true);
-      // Animate the rendered text nodes so rich-text spans and chat formatting
-      // survive typing, skipping and Live Editor refreshes.
+      // Keep the complete string in layout while revealing characters. Hiding
+      // unrevealed glyph spans (instead of deleting text) stabilizes vertical
+      // writing and lets both the frame and typewriter share one final geometry.
       const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
-      const parts=[];
+      const textNodes=[];
       let text;
-      while((text=walker.nextNode())){if(!text.parentElement?.closest('rt,rp'))parts.push({node:text,chars:Array.from(text.data)});}
+      while((text=walker.nextNode())){if(!text.parentElement?.closest('rt,rp'))textNodes.push(text);}
+      const parts=textNodes.map(original=>({original,chars:Array.from(original.data),marker:null,nodes:[]})).filter(part=>part.chars.length);
       const readings=[...node.querySelectorAll('ruby')].map(ruby=>({ruby,rt:ruby.querySelector('rt')}));
       const length=parts.reduce((sum,part)=>sum+part.chars.length,0);
       if(!length)return;
-      const speed = Math.max(10, asNumber(typing.speed, 55));
+      for(const part of parts){
+        const parent=part.original.parentNode;
+        if(!parent)continue;
+        part.marker=document.createComment('typewriter');
+        parent.insertBefore(part.marker,part.original);
+        const fragment=document.createDocumentFragment();
+        part.nodes=part.chars.map(character=>{const span=document.createElement('span');span.className='sp-typing-char';span.style.visibility='hidden';span.textContent=character;fragment.appendChild(span);return span;});
+        parent.insertBefore(fragment,part.original);
+        part.original.remove();
+      }
+      const speed=Math.max(10,asNumber(typing.speed,55));
       const frame=node.closest('.sp-handdrawn-frame');
       const frameSizeBefore=frame?{width:frame.style.width,height:frame.style.height}:null;
-      // offsetWidth/Height report the final, untransformed layout box. Pin it
-      // while glyphs are revealed so the balloon never collapses per character.
       if(frame){
-        const finalWidth=frame.offsetWidth,finalHeight=frame.offsetHeight;
-        if(finalWidth>0&&finalHeight>0){frame.style.width=`${finalWidth}px`;frame.style.height=`${finalHeight}px`;}
+        const width=frame.offsetWidth,height=frame.offsetHeight;
+        if(width>0&&height>0){frame.style.width=`${width}px`;frame.style.height=`${height}px`;}
       }
       const restoreFrameSize=()=>{if(frame&&frameSizeBefore){frame.style.width=frameSizeBefore.width;frame.style.height=frameSizeBefore.height;}};
+      const restoreText=()=>{for(const part of parts){part.nodes.forEach(span=>span.remove());if(part.marker?.parentNode)part.marker.parentNode.replaceChild(part.original,part.marker);}};
       const cursor=document.createElement('span');
       cursor.className='sp-typing-cursor';
       cursor.setAttribute('aria-hidden','true');
@@ -7221,20 +7232,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       let position=0;
       const reveal=count=>{
         let remaining=count,last=null;
+        const visibleRubies=new Set();
         for(const part of parts){
           const shown=Math.min(part.chars.length,Math.max(0,remaining));
-          part.node.data=part.chars.slice(0,shown).join('');
-          if(shown>0)last=part.node;
+          part.nodes.forEach((span,index)=>{const visible=index<shown;span.style.visibility=visible?'':'hidden';if(visible){last=span;const ruby=span.closest('ruby');if(ruby)visibleRubies.add(ruby);}});
           remaining-=part.chars.length;
         }
-        for(const item of readings){if(item.rt)item.rt.style.visibility=item.ruby.querySelector('.sp-ruby-base')?.textContent.length?'':'hidden';}
+        for(const item of readings){if(item.rt)item.rt.style.visibility=visibleRubies.has(item.ruby)?'':'hidden';}
         if(count>=length)cursor.remove();
         else if(last)last.after(cursor);
-        else if(parts[0])parts[0].node.after(cursor);
+        else if(parts[0]?.nodes[0])parts[0].nodes[0].before(cursor);
       };
       node.classList.add('is-typing');
       reveal(0);
-      emit(this.host, 'sceneplayer:typingstart', { index: this.index, scene });
+      emit(this.host,'sceneplayer:typingstart',{index:this.index,scene});
       const timer=setInterval(()=>{
         reveal(++position);
         if(position>=length){
@@ -7247,9 +7258,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           this._scheduleAuto();
         }
       },speed);
-      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>{cursor.remove();readings.forEach(item=>{if(item.rt)item.rt.style.visibility='';});restoreFrameSize();}};
+      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>{cursor.remove();restoreText();readings.forEach(item=>{if(item.rt)item.rt.style.visibility='';});restoreFrameSize();}};
     }
-
     destroy(options = {}) {
       if (this.destroyed) return;
       const preserveHost = options?.preserveHost === true;
