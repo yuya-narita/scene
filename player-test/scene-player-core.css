@@ -2539,9 +2539,7 @@ html.sp-scene-image-open body{
 
 
 /* Sync entrance direction on the wrapper, while keeping the frame at its final text dimensions. */
-.sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame{
-  animation:none!important;transform:none!important;translate:none!important;filter:none!important;opacity:1!important;
-}
+/* Entrance-direction motion is applied to the wrapper by WAAPI; preserve its full layout box. */
 .sp-scene[data-frame-motion="sync"].sp-layout-measuring .sp-handdrawn-frame,
 .sp-scene[data-frame-motion="sync"].is-frame-position-dragging .sp-handdrawn-frame,
 .sp-core.sp-direct-layout-editing .sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame{

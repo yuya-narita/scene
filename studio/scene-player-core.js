@@ -7171,16 +7171,31 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const textNode = article.querySelector('.sp-text');
       const typing = presentation.typing;
 
+      // Reserve the balloon's final full-text size before typewriter removes
+      // characters or entrance keyframes begin changing glyph geometry.
+      const shouldType=!!(textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length);
+      if (shouldType) {
+        this._startTyping(scene, textNode, typing);
+      } else {
+        const frame=article.querySelector(':scope > .sp-handdrawn-frame');
+        if(frame){
+          const previous={width:frame.style.width,height:frame.style.height};
+          const finalWidth=frame.offsetWidth,finalHeight=frame.offsetHeight;
+          if(finalWidth>0&&finalHeight>0){
+            frame.style.width=`${finalWidth}px`;frame.style.height=`${finalHeight}px`;
+            const timing=presentation.effectTiming||{};
+            const holdMs=Math.max(1380,Math.max(0,Number(timing.delay)||0)*1000+Math.max(0,Number(timing.duration)||.8)*1000+140);
+            this._presentationTimeout(()=>{if(frame.isConnected){frame.style.width=previous.width;frame.style.height=previous.height;}},holdMs);
+          }
+        }
+      }
+
       // Entrance effects belong to the moment the Scene first appears.
       // Never replay merely because the Scene remains in the visible stack
       // or because another Scene is revealed above/below it.
       this._playEntranceEffectOnce(article,scene);
       this._playSceneImageEffectOnce(scene, article);
       this._playTextEntryDirectionOnce(scene,article);
-
-      if (textNode && typing?.enabled && !scene.content?.length && typeof scene.text === 'string' && scene.text.length) {
-        this._startTyping(scene, textNode, typing);
-      }
 
       const disappear = presentation.disappear;
       const after = asNumber(disappear?.after, 0);
@@ -7241,6 +7256,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const length=parts.reduce((sum,part)=>sum+part.chars.length,0);
       if(!length)return;
       const speed = Math.max(10, asNumber(typing.speed, 55));
+      const frame=node.closest('.sp-handdrawn-frame');
+      const frameSizeBefore=frame?{width:frame.style.width,height:frame.style.height}:null;
+      // offsetWidth/Height report the final, untransformed layout box. Pin it
+      // while glyphs are revealed so the balloon never collapses per character.
+      if(frame){
+        const finalWidth=frame.offsetWidth,finalHeight=frame.offsetHeight;
+        if(finalWidth>0&&finalHeight>0){frame.style.width=`${finalWidth}px`;frame.style.height=`${finalHeight}px`;}
+      }
+      const restoreFrameSize=()=>{if(frame&&frameSizeBefore){frame.style.width=frameSizeBefore.width;frame.style.height=frameSizeBefore.height;}};
       const cursor=document.createElement('span');
       cursor.className='sp-typing-cursor';
       cursor.setAttribute('aria-hidden','true');
@@ -7266,13 +7290,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         reveal(++position);
         if(position>=length){
           clearInterval(timer);
-          if(this.typingState?.timer===timer)this.typingState=null;
+          const completedState=this.typingState?.timer===timer?this.typingState:null;
+          if(completedState)this.typingState=null;
           node.classList.remove('is-typing');
+          completedState?.cleanup?.();
           emit(this.host,'sceneplayer:typingend',{index:this.index,scene,skipped:false});
           this._scheduleAuto();
         }
       },speed);
-      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>{cursor.remove();readings.forEach(item=>{if(item.rt)item.rt.style.visibility='';});}};
+      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>{cursor.remove();readings.forEach(item=>{if(item.rt)item.rt.style.visibility='';});restoreFrameSize();}};
     }
 
     destroy(options = {}) {
