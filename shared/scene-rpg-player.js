@@ -13,7 +13,9 @@ function attach(player){
  ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true};instances.set(player,ui);
  const onScene=e=>{ui.cover=false;update(player,e.detail?.index);};
  const onCover=()=>{ui.cover=true;ui.layer.hidden=true;ui.stack=[];};
- host.addEventListener('sceneplayer:coverstart',onCover);
+ // coverstart means the reader STARTED Scene 1 (not that Cover opened).
+ const onBegin=e=>{ui.cover=false;update(player,e.detail?.index);};
+ host.addEventListener('sceneplayer:coverstart',onBegin);
  host.addEventListener('sceneplayer:end',onCover);
  host.addEventListener('sceneplayer:scenechange',onScene);
  const onKey=e=>{if(ui.layer.hidden||!ui.stack.length||e.target.closest('input,textarea,select,[contenteditable]'))return;
@@ -21,14 +23,16 @@ function attach(player){
  };
  // Only react when focus is in this Player. Avoid capturing Studio editor shortcuts.
  host.addEventListener('keydown',onKey,true);
- ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);host.removeEventListener('keydown',onKey,true);layer.remove();};
+ ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onBegin);host.removeEventListener('sceneplayer:end',onCover);host.removeEventListener('keydown',onKey,true);layer.remove();};
  return ui;
 }
 function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapshot));return Object.entries(snapshot.nodes).filter(([id])=>visible.has(id));}
 function update(player,index){
  const ui=attach(player),work=player.document;
  const i=Number.isInteger(index)?index:player.index;
- if(ui.cover||!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
+ if((player.host?.classList?.contains('sp-cover-open') || (ui.cover && !global.__ahakoRpgStudioPlayer && player.els?.cover && !player.els.cover.hidden)) || !work?.scenes || i<0 || i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
+ // Studio Live Editor can render a Scene directly without firing coverstart.
+ if(!player.host?.classList?.contains('sp-cover-open'))ui.cover=false;
  const local=work.scenes[i]?.extensions?.ahakoRpgScene;
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
  if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
