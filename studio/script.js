@@ -13027,6 +13027,7 @@ function openDesktopEffectDetail(){
     const p=ensurePresentation(scene);
     const before={
       effect:p.effect,
+      frame:clone(p.frame||null),
       textFlip:p.text?.flip,
       display:p.display,
       view:p.view,
@@ -13040,6 +13041,7 @@ function openDesktopEffectDetail(){
     const apply=()=>{scheduleDraftSave(40);replayCurrentDesktopEffect();};
     const restore=()=>{
       if(before.effect===undefined)delete p.effect;else p.effect=before.effect;
+      if(before.frame===null)delete p.frame;else p.frame=clone(before.frame);
       setSceneTextFlip(scene,before.textFlip);
       if(before.display===undefined)delete p.display;else p.display=before.display;
       if(before.view===undefined)delete p.view;else p.view=before.view;
@@ -13098,6 +13100,7 @@ function openDesktopEffectDetail(){
       desktopDetailSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;apply();}),
       desktopDetailSelect(u('文字の出現方向','Text entrance direction'),TEXT_ENTRY_DIRECTION_OPTIONS,p.text?.entryDirection||'auto',v=>{p.text||={};if(v==='auto')delete p.text.entryDirection;else p.text.entryDirection=v;apply();}),
       desktopDetailSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;apply();}),
+      ...(isFrameType(p.frame?.type)?[desktopDetailSelect(u('枠と文字の動き','Frame and text motion'),[['separate',u('別々に動く（現在）','Separate (current)')],['sync',u('動きを同期','Synchronize motion')]],p.frame.motion==='sync'?'sync':'separate',v=>{if(v==='sync')p.frame={...(p.frame||{}),motion:'sync'};else delete p.frame.motion;apply();})]:[]),
       desktopDetailSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{setSceneTextFlip(scene,v);apply();})
     );
 
@@ -15839,6 +15842,7 @@ function openDesktopTextDetail(){
       desktopMakeSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);if(v==='web-comment')initWebCommentMeta(scene,index);if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);refresh();renderDesktopLivePanel();}),
       desktopMakeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
       desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
+      ...(isFrameType(p.frame?.type)?[desktopMakeSelect(u('枠と文字の動き','Frame and text motion'),[['separate',u('別々に動く（現在）','Separate (current)')],['sync',u('動きを同期','Synchronize motion')]],p.frame.motion==='sync'?'sync':'separate',v=>{if(v==='sync')p.frame={...(p.frame||{}),motion:'sync'};else delete p.frame.motion;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel();})]:[]),
       desktopMakeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);refresh();})
     );
     effectCard.append(effectGrid);
@@ -16894,7 +16898,8 @@ function openDesktopTextDetail(){
           makeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の出現方向','Text entrance direction'),TEXT_ENTRY_DIRECTION_OPTIONS,p.text?.entryDirection||'auto',v=>{p.text||={};if(v==='auto')delete p.text.entryDirection;else p.text.entryDirection=v;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('消え方','Exit motion'),EXIT_MOTION_OPTIONS,p.disappear?.motion||'stay',v=>{p.disappear={...(p.disappear||{}),motion:v};if(!(Number(p.disappear.after)>0))p.disappear.after=2500;if(!(Number(p.disappear.fade)>0))p.disappear.fade=700;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
+          ...(isFrameType(p.frame?.type)?[makeSelect(u('枠と文字の動き','Frame and text motion'),[['separate',u('別々に動く（現在）','Separate (current)')],['sync',u('動きを同期','Synchronize motion')]],p.frame.motion==='sync'?'sync':'separate',v=>{if(v==='sync')p.frame={...(p.frame||{}),motion:'sync'};else delete p.frame.motion;scheduleDraftSave(80);refreshLivePlayer();})]:[]),
           textFlipField
         );
         liveEditSheetBody.append(grid);

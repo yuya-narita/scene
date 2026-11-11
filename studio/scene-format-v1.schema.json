@@ -700,6 +700,9 @@
         "frame": {
           "type": "object",
           "properties": {
+            "motion": {
+              "enum": ["separate", "sync"]
+            },
             "type": {
               "enum": [
                 "handdrawn-voice",

@@ -3061,3 +3061,15 @@ html.sp-scene-image-open body{
 
 /* Scene canvas passes ordinary taps through; URL cards are real link hit targets. */
 .sp-scenes > .sp-scene:not([data-simultaneous-waiting="true"]):not(.sp-layout-leaving) .sp-rich-link-card{pointer-events:auto!important;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+
+
+/* iOS vertical PAST keeps the same horizontal reader flow without promoting every card to a 3D/blur layer. */
+.sp-history.sp-history-ios-lite{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+}
+.sp-history.sp-history-ios-lite .sp-history-item{
+  transform:none!important;
+  filter:none!important;
+  transition:opacity .08s linear!important;
+}

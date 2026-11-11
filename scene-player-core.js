@@ -2730,6 +2730,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.host.classList.add('sp-history-open');
       this._historyHorizontal = this.currentScene?.presentation?.text?.writingMode === 'vertical-rl'
         && !this._hasCredits(this.currentScene?.presentation);
+      // iOS WebKit can run out of compositor memory when a long vertical-reading
+      // PAST turns every visited card into a perspective/blur layer. Keep a URL
+      // escape hatch so the previous rendering remains available for comparison.
+      let useLegacyHistory=false;
+      try{useLegacyHistory=new URLSearchParams(global.location?.search||'').get('pastLegacy')==='1';}catch(_){}
+      this.els.history.classList.toggle('sp-history-ios-lite',this._historyHorizontal&&this._isIOSWebKit()&&!useLegacyHistory);
       this.els.history.classList.toggle('is-horizontal', this._historyHorizontal);
       this._historyAutoCenter = true;
       const help = this.els.history.querySelector('.sp-history-help');
@@ -6732,6 +6738,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (presentation.view && /^[a-zA-Z0-9_-]+$/.test(presentation.view)) article.dataset.view = presentation.view;
       const entryMotion = presentation.entryMotion === 'still' ? 'still' : 'flow';
       article.dataset.entryMotion = entryMotion;
+      if(String(presentation.frame?.type||'').startsWith('handdrawn-'))article.dataset.frameMotion=presentation.frame?.motion==='sync'?'sync':'separate';
       article.dataset.fit = this._resolveAutoFit(scene, presentation.text || {});
 
       if(this._hasCredits(presentation)){article.dataset.credits='on';article.appendChild(this._creditsNode(scene,presentation,active));return article;}
@@ -7157,7 +7164,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(!direction||direction==='auto'||!article||article.dataset.textEntryDirectionPlayed==='true')return;
       const vector={top:[0,-1],bottom:[0,1],left:[-1,0],right:[1,0],'top-left':[-1,-1],'top-right':[1,-1],'bottom-left':[-1,1],'bottom-right':[1,1]}[direction];
       const text=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text');
-      if(!vector||!text||typeof text.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+      const frame=article.querySelector(':scope > .sp-handdrawn-frame');
+      const motionTarget=scene?.presentation?.frame?.motion==='sync'&&frame?frame:text;
+      if(!vector||!text||!motionTarget||typeof motionTarget.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
       article.dataset.textEntryDirectionPlayed='true';
       const width=Math.max(1,this.host?.clientWidth||global.innerWidth||360),height=Math.max(1,this.host?.clientHeight||global.innerHeight||640);
       const dx=Math.round(Math.max(48,Math.min(240,width*.28))*vector[0]);
@@ -7165,7 +7174,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const timing=scene.presentation?.effectTiming||{};
       const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
       const delay=Math.max(0,Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600000:6000,(Number(timing.delay)||0)*1000));
-      const animation=text.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
+      const animation=motionTarget.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
       animation.onfinish=()=>{try{animation.cancel();}catch{}};
     }
 
