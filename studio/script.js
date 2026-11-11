@@ -12768,11 +12768,11 @@ function startInlineTextEdit(field='text',targetEl=null){
       }
       syncLivePosition(p.text.position);
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
-      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('配置を選ぶか、文字をドラッグして調整','Choose a placement or drag the text');
+      const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('矢印で微調整、文字をドラッグして移動','Nudge with arrows or drag the text');
       const controls=document.createElement('div');controls.className='frame-position-fixed-controls';
       const presetGrid=document.createElement('div');presetGrid.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:1px';
-      const placePresets=[['↖',.12,.18,'左上'],['↑',.5,.18,'上'],['↗',.88,.18,'右上'],['←',.12,.5,'左'],['•',.5,.5,'中央'],['→',.88,.5,'右'],['↙',.12,.82,'左下'],['↓',.5,.82,'下'],['↘',.88,.82,'右下']];
-      placePresets.forEach(([glyph,x,y,label])=>{const b=document.createElement('button');b.type='button';b.textContent=glyph;b.title=u(label,({左上:'Top left',上:'Top',右上:'Top right',左:'Left',中央:'Center',右:'Right',左下:'Bottom left',下:'Bottom',右下:'Bottom right'})[label]);b.style.cssText='height:22px;border:1px solid rgba(255,255,255,.22);border-radius:6px;background:rgba(255,255,255,.08);color:#fff;font:700 13px/1 sans-serif;cursor:pointer';b.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();const r=stage.getBoundingClientRect();applyPoint(r.left+r.width*x,r.top+r.height*y);});presetGrid.appendChild(b);});
+      const placePresets=[['↖',-1,-1,'左上'],['↑',0,-1,'上'],['↗',1,-1,'右上'],['←',-1,0,'左'],['•',0,0,'中央'],['→',1,0,'右'],['↙',-1,1,'左下'],['↓',0,1,'下'],['↘',1,1,'右下']];
+      placePresets.forEach(([glyph,dx,dy,label])=>{const b=document.createElement('button');b.type='button';b.textContent=glyph;b.title=u(label,({左上:'Top left',上:'Top',右上:'Top right',左:'Left',中央:'Center',右:'Right',左下:'Bottom left',下:'Bottom',右下:'Bottom right'})[label]);b.style.cssText='height:22px;border:1px solid rgba(255,255,255,.22);border-radius:6px;background:rgba(255,255,255,.08);color:#fff;font:700 13px/1 sans-serif;cursor:pointer';b.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();if(label==='中央'){const r=stage.getBoundingClientRect();applyPoint(r.left+r.width*.5,r.top+r.height*.5);}else nudgePoint(dx,dy);});presetGrid.appendChild(b);});
       controls.appendChild(presetGrid);
       const makeSliderRow=(label,min,max,step,value)=>{
         const row=document.createElement('label');row.className='frame-position-control-row';
@@ -12879,6 +12879,24 @@ function startInlineTextEdit(field='text',targetEl=null){
         article.style.transform=`translate3d(${Math.round(centerX-contentLeft-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
 
       };
+      const nudgeStep=.025;
+      const nudgePoint=(dx,dy,multiplier=1)=>{
+        const r=stage.getBoundingClientRect(),scale=Math.max(.05,Number(player?._layoutScale?.())||1);
+        const width=Math.max(1,stage.clientWidth||r.width/scale),height=Math.max(1,stage.clientHeight||r.height/scale);
+        const position=p.text.position||{};
+        const x=Number.isFinite(Number(position.x))?Number(position.x):.5;
+        const y=Number.isFinite(Number(position.y))?Number(position.y):.5;
+        applyPoint(r.left+(x+dx*nudgeStep*multiplier)*width*scale,r.top+(y+dy*nudgeStep*multiplier)*height*scale);
+      };
+      const blockEditorArrowNudge=event=>{
+        if(!playerHost?.classList.contains('sp-direct-layout-editing')||framePositionDragScene!==scene)return;
+        if(event.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+        const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
+        if(!delta)return;
+        event.preventDefault();event.stopImmediatePropagation();event.stopPropagation();
+        nudgePoint(delta[0],delta[1],event.shiftKey?4:1);
+      };
+      document.addEventListener('keydown',blockEditorArrowNudge,true);
       shield.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();dragging=true;shield.setPointerCapture?.(event.pointerId);applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointermove',event=>{if(!dragging)return;event.preventDefault();applyPoint(event.clientX,event.clientY);});
       shield.addEventListener('pointerup',event=>{event.preventDefault();event.stopPropagation();dragging=false;shield.releasePointerCapture?.(event.pointerId);});
@@ -12886,7 +12904,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       shield.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();});
       [toolbar,controls].forEach(el=>el.addEventListener('pointerdown',event=>event.stopPropagation()));
       framePositionDragCleanup=({save:keep=false,reset=false,skipRefresh=false,keepEditorState=false}={})=>{
-        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
+        stage.removeEventListener('click',blockEditorNavigation,true);stage.removeEventListener('dblclick',blockEditorNavigation,true);playerHost?.removeEventListener('touchend',blockEditorTouchRelease,true);document.removeEventListener('keydown',blockEditorArrowNudge,true);playerHost?.classList.remove('sp-direct-layout-editing');shield.remove();hint.remove();controls.remove();toolbar.remove();article.classList.remove('is-frame-position-dragging');
         if(reset)clearAdjustedPosition();
         else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
         syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
