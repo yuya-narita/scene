@@ -2546,3 +2546,16 @@ html.sp-scene-image-open body{
   animation:none!important;transform:none!important;translate:none!important;filter:none!important;opacity:1!important;
 }
 @media(prefers-reduced-motion:reduce){.sp-scene[data-frame-motion="sync"] .sp-handdrawn-frame{animation:none!important;transform:none!important;translate:none!important;filter:none!important;}}
+
+/* Vertical balloon stretch keeps Japanese glyphs in their final column.
+   Letter-spacing on vertical text changes line height and can force a temporary
+   extra column; scale the whole text/frame vertically instead. */
+@keyframes spFxStretchVerticalAhako{
+  0%{opacity:0;transform:scaleY(.12)}
+  55%{opacity:1;transform:scaleY(1.18)}
+  100%{opacity:1;transform:scaleY(1)}
+}
+.sp-scene.sp-fx-play[data-effect="stretch"] .sp-text[data-writing-mode="vertical-rl"]{
+  animation:spFxStretchVerticalAhako var(--sp-effect-duration,.78s) cubic-bezier(.12,.72,.16,1) 1!important;
+  animation-delay:var(--sp-effect-delay,0s)!important;
+}
