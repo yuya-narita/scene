@@ -13177,7 +13177,7 @@ function openDesktopEffectDetail(){
 
     // Effect panel: keep the top sections compact, without changing their settings.
     // The simultaneous-group card already provides its own disclosure control.
-    const effectFoldState=window.__ahakoEffectFoldState||(window.__ahakoEffectFoldState={basic:true,timing:true});
+    const effectFoldState=window.__ahakoEffectFoldState||(window.__ahakoEffectFoldState={basic:false,timing:true});
     const foldEffectSection=(sectionNode,key,label)=>{
       const heading=sectionNode.querySelector(':scope > h3');
       if(!heading)return;
