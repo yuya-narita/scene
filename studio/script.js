@@ -16232,6 +16232,13 @@ function openDesktopTextDetail(){
     else if(activeFormatCard)panes.effect.appendChild(activeFormatCard);
     if(flowCommentCard)panes.effect.appendChild(flowCommentCard);
     panes.effect.appendChild(buildCreditsEditor(scene));
+    // RPG command editor belongs to the visible Live Editor > Effects tab.
+    // The Advanced inspector is not the editor shown in desktop/iPhone Live mode.
+    const rpgDisclosure=document.createElement('details');
+    rpgDisclosure.className='rpg-editor-disclosure';
+    rpgDisclosure.innerHTML='<summary>RPGコマンド（基本台帳・Scene変更）</summary><section id="rpgCommandEditor" class="rpg-command-editor"></section>';
+    panes.effect.appendChild(rpgDisclosure);
+    window.AhakoRpgEditor?.connect(()=>workingDocument,()=>selectedSceneIndex,()=>scheduleDraftSave(40));
     if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
     panes.image.appendChild(sceneImageCard);
     if(!inlineExistingDetail('audio',panes.audio))panes.audio.appendChild(audioCard);

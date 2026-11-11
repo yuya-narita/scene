@@ -4,7 +4,8 @@
 const KEY='ahakoRpgCommand';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let getWork=()=>null,getIndex=()=>0,mode='book',selected='',installed=false;
+let getWork=()=>null,getIndex=()=>0,onEdit=()=>{},mode='book',selected='';
+const boundPanels=new WeakSet();
 const options=(items,value)=>items.map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('');
 const positionOptions=[['top','上'],['center','中央'],['bottom','下']];
 function ensureBook(work){
@@ -77,7 +78,7 @@ function render(){
   const posOpts=mode==='book'?positionOptions:[['inherit','前Sceneから継承'],...positionOptions];
   const visible=api&&snapshot?new Set(api.visibleNodes(snapshot)):new Set(Object.keys(nodes));
   const preview=Object.entries(snapshot?.nodes||nodes).filter(([id])=>visible.has(id)).map(([,n])=>`<div>${esc(n.label||'項目')}${n.value!==undefined&&n.value!==''?'　'+esc(n.value):''}</div>`).join('');
-  panel.innerHTML=`<div class="rpg-editor-heading"><strong>RPGコマンド</strong><small>Scene ${i+1} / ${work.scenes.length} · 編集専用（Player連携は次工程）</small></div>
+  panel.innerHTML=`<div class="rpg-editor-heading"><strong>RPGコマンド</strong><small>Scene ${i+1} / ${work.scenes.length} · 基本台帳・Scene変更</small></div>
     <div class="rpg-editor-modes"><button type="button" data-rpg-mode="book" class="${mode==='book'?'is-selected':''}">基本台帳</button><button type="button" data-rpg-mode="scene" class="${mode==='scene'?'is-selected':''}">このSceneから変更</button></div>
     ${!book?'<p class="rpg-editor-hint">基本台帳は未作成です。項目を追加すると作成されます。</p>':''}
     <div class="rpg-editor-actions"><button type="button" data-rpg-add>＋ 項目を追加</button>${selected?'<button type="button" data-rpg-delete>選択項目を削除</button>':''}</div>
@@ -89,8 +90,8 @@ function render(){
     <p class="rpg-editor-hint">変更は作業中の.sceneデータに直接反映。通常の保存・書き出し操作を使ってください。</p>`;
 }
 function install(){
-  if(installed)return;installed=true;
-  const panel=$('rpgCommandEditor');if(!panel)return;
+  const panel=$('rpgCommandEditor');if(!panel||boundPanels.has(panel))return;
+  boundPanels.add(panel);
   panel.addEventListener('click',e=>{
     const b=e.target.closest('button');if(!b)return;
     if(b.dataset.rpgMode){mode=b.dataset.rpgMode;render();}
@@ -98,23 +99,25 @@ function install(){
     else if(b.hasAttribute('data-rpg-delete'))removeNode();
     else if(b.dataset.rpgSelect){selected=b.dataset.rpgSelect;render();}
     else if(b.dataset.rpgInherit)setSceneField(b.dataset.rpgInherit,null,true);
+    if(b.hasAttribute('data-rpg-add')||b.hasAttribute('data-rpg-delete')||b.dataset.rpgInherit)onEdit();
   });
   panel.addEventListener('change',e=>{
-    const el=e.target;if(el.hasAttribute('data-rpg-position')){setPosition(el.value);return;}
+    const el=e.target;if(el.hasAttribute('data-rpg-position')){setPosition(el.value);onEdit();return;}
     const key=el.dataset.rpgField;if(!key)return;
     let value=el.value;
     if(key==='visible'){
-      if(value==='inherit'){setSceneField(key,null,true);return;}
+      if(value==='inherit'){setSceneField(key,null,true);onEdit();return;}
       value=value==='true';
     }
     if(key==='parentId'){
       const {work}=current(),nodes=ensureBook(work).nodes;let p=value,cycle=false;
       while(p){if(p===selected){cycle=true;break;}p=nodes[p]?.parentId;}
       if(cycle){window.alert('親子関係を循環させることはできません。');render();return;}
-      if(!value){delete nodes[selected].parentId;render();return;}
+      if(!value){delete nodes[selected].parentId;render();onEdit();return;}
     }
     if(mode==='book')setBookField(key,value);else setSceneField(key,value);
+    onEdit();
   });
 }
-window.AhakoRpgEditor={connect(work,index){getWork=work;getIndex=index;install();render();},render};
+window.AhakoRpgEditor={connect(work,index,changed){getWork=work;getIndex=index;if(changed)onEdit=changed;install();render();},render};
 })();
