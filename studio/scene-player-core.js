@@ -7088,6 +7088,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!this.els?.scenes) return;
       this.els.scenes.querySelectorAll('.sp-scene.sp-fx-play').forEach((node) => {
         node.classList.remove('sp-fx-play');
+        this._finishSyncedFrameEffect(node);
         const text = node.querySelector('.sp-text');
         if (text) {
           // Freeze immediately into the static post-effect appearance.
@@ -7104,6 +7105,13 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       article.classList.remove('sp-fx-play');
       void article.offsetWidth;
       article.classList.add('sp-fx-play');
+      const syncFrame=scene?.presentation?.frame?.motion==='sync'?article.querySelector(':scope > .sp-handdrawn-frame'):null;
+      const syncText=syncFrame?.querySelector(':scope > .sp-text');
+      if(syncFrame&&syncText){
+        requestAnimationFrame(()=>requestAnimationFrame(()=>{
+          if(article.isConnected&&article.classList.contains('sp-fx-play'))this._syncFrameEntranceEffect(article,syncFrame,syncText);
+        }));
+      }
 
       // Longest standard effect is fade/slow at ~1.25s.
       // Remove the trigger class afterwards so later layout changes cannot
@@ -7115,7 +7123,76 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const cleanupAfter=Math.max(1380,customDelay+customDuration+140);
       this._presentationTimeout(() => {
         if (article.isConnected) article.classList.remove('sp-fx-play');
+        this._finishSyncedFrameEffect(article);
       }, cleanupAfter);
+    }
+
+    _syncFrameEntranceEffect(article, frame, text) {
+      if(!article||!frame||!text||article._spSyncedFrameEffect)return;
+      const cssAnimations=[...text.getAnimations()].filter(animation=>animation?.effect&&typeof animation.animationName==='string');
+      if(!cssAnimations.length)return;
+      const spatial=new Set(['transform','translate','scale','rotate','opacity','filter','clipPath','clip-path','transformOrigin','transform-origin']);
+      const state={text,frame,animations:[],restore:{},overrides:new Set()};
+      const remember=(property)=>{
+        if(state.restore[property])return;
+        state.restore[property]={value:text.style.getPropertyValue(property),priority:text.style.getPropertyPriority(property)};
+      };
+      const setTextOverride=(property,value)=>{remember(property);text.style.setProperty(property,value,'important');state.overrides.add(property);};
+      const timingKeys=new Set(['offset','easing','composite']);
+      const pick=(keyframes,allow)=>keyframes.map(keyframe=>{
+        const out={};
+        for(const [property,value] of Object.entries(keyframe)){
+          if(timingKeys.has(property)){out[property]=value;continue;}
+          if(allow.has(property))out[property]=value;
+        }
+        return out;
+      });
+      for(const cssAnimation of cssAnimations){
+        let keyframes,timing,currentTime,playbackRate;
+        try{keyframes=cssAnimation.effect.getKeyframes();timing=cssAnimation.effect.getTiming();currentTime=cssAnimation.currentTime;playbackRate=cssAnimation.playbackRate;}catch{continue;}
+        const hasSpatial=keyframes.some(keyframe=>Object.keys(keyframe).some(property=>spatial.has(property)));
+        if(!hasSpatial)continue;
+        const frameKeys=pick(keyframes,spatial);
+        const textProperties=new Set(keyframes.flatMap(keyframe=>Object.keys(keyframe)).filter(property=>!spatial.has(property)&&!timingKeys.has(property)));
+        const textKeys=pick(keyframes,textProperties);
+        let frameAnimation;
+        try{
+          frameAnimation=frame.animate(frameKeys,timing);
+          frameAnimation.playbackRate=playbackRate||1;
+          if(Number.isFinite(Number(currentTime)))frameAnimation.currentTime=Number(currentTime);
+          state.animations.push(frameAnimation);
+        }catch{continue;}
+        const hasTextProperties=textKeys.some(keyframe=>Object.keys(keyframe).some(property=>!timingKeys.has(property)));
+        if(hasTextProperties){
+          try{const textAnimation=text.animate(textKeys,timing);textAnimation.playbackRate=playbackRate||1;if(Number.isFinite(Number(currentTime)))textAnimation.currentTime=Number(currentTime);state.animations.push(textAnimation);}catch{}
+        }
+        try{cssAnimation.cancel();}catch{}
+        for(const property of spatial){
+          if(keyframes.some(keyframe=>Object.prototype.hasOwnProperty.call(keyframe,property))){
+            if(property==='opacity')setTextOverride('opacity','1');
+            else if(property==='filter')setTextOverride('filter','none');
+            else if(property==='transform')setTextOverride('transform','none');
+            else if(property==='translate'||property==='scale'||property==='rotate')setTextOverride(property,'none');
+            else if(property==='clipPath'||property==='clip-path')setTextOverride('clip-path','none');
+          }
+        }
+      }
+      if(state.animations.length){
+        remember('animation');
+        text.style.setProperty('animation','none','important');
+        article._spSyncedFrameEffect=state;
+      }
+    }
+
+    _finishSyncedFrameEffect(article) {
+      const state=article?._spSyncedFrameEffect;
+      if(!state)return;
+      state.animations.forEach(animation=>{try{animation.cancel();}catch{}});
+      for(const [property,previous] of Object.entries(state.restore)){
+        if(previous.value)state.text.style.setProperty(property,previous.value,previous.priority);
+        else state.text.style.removeProperty(property);
+      }
+      delete article._spSyncedFrameEffect;
     }
 
     _playTextEntryDirectionOnce(scene, article) {
@@ -7246,25 +7323,36 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _startTyping(scene, node, typing) {
       this._stopTyping(true);
-      // Animate the rendered text nodes so rich-text spans and chat formatting
-      // survive typing, skipping and Live Editor refreshes.
+      // Keep the complete string in layout while revealing characters. Hiding
+      // unrevealed glyph spans (instead of deleting text) stabilizes vertical
+      // writing and lets both the frame and typewriter share one final geometry.
       const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
-      const parts=[];
+      const textNodes=[];
       let text;
-      while((text=walker.nextNode())){if(!text.parentElement?.closest('rt,rp'))parts.push({node:text,chars:Array.from(text.data)});}
+      while((text=walker.nextNode())){if(!text.parentElement?.closest('rt,rp'))textNodes.push(text);}
+      const parts=textNodes.map(original=>({original,chars:Array.from(original.data),marker:null,nodes:[]})).filter(part=>part.chars.length);
       const readings=[...node.querySelectorAll('ruby')].map(ruby=>({ruby,rt:ruby.querySelector('rt')}));
       const length=parts.reduce((sum,part)=>sum+part.chars.length,0);
       if(!length)return;
-      const speed = Math.max(10, asNumber(typing.speed, 55));
+      for(const part of parts){
+        const parent=part.original.parentNode;
+        if(!parent)continue;
+        part.marker=document.createComment('typewriter');
+        parent.insertBefore(part.marker,part.original);
+        const fragment=document.createDocumentFragment();
+        part.nodes=part.chars.map(character=>{const span=document.createElement('span');span.className='sp-typing-char';span.style.visibility='hidden';span.textContent=character;fragment.appendChild(span);return span;});
+        parent.insertBefore(fragment,part.original);
+        part.original.remove();
+      }
+      const speed=Math.max(10,asNumber(typing.speed,55));
       const frame=node.closest('.sp-handdrawn-frame');
       const frameSizeBefore=frame?{width:frame.style.width,height:frame.style.height}:null;
-      // offsetWidth/Height report the final, untransformed layout box. Pin it
-      // while glyphs are revealed so the balloon never collapses per character.
       if(frame){
-        const finalWidth=frame.offsetWidth,finalHeight=frame.offsetHeight;
-        if(finalWidth>0&&finalHeight>0){frame.style.width=`${finalWidth}px`;frame.style.height=`${finalHeight}px`;}
+        const width=frame.offsetWidth,height=frame.offsetHeight;
+        if(width>0&&height>0){frame.style.width=`${width}px`;frame.style.height=`${height}px`;}
       }
       const restoreFrameSize=()=>{if(frame&&frameSizeBefore){frame.style.width=frameSizeBefore.width;frame.style.height=frameSizeBefore.height;}};
+      const restoreText=()=>{for(const part of parts){part.nodes.forEach(span=>span.remove());if(part.marker?.parentNode)part.marker.parentNode.replaceChild(part.original,part.marker);}};
       const cursor=document.createElement('span');
       cursor.className='sp-typing-cursor';
       cursor.setAttribute('aria-hidden','true');
@@ -7272,20 +7360,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       let position=0;
       const reveal=count=>{
         let remaining=count,last=null;
+        const visibleRubies=new Set();
         for(const part of parts){
           const shown=Math.min(part.chars.length,Math.max(0,remaining));
-          part.node.data=part.chars.slice(0,shown).join('');
-          if(shown>0)last=part.node;
+          part.nodes.forEach((span,index)=>{const visible=index<shown;span.style.visibility=visible?'':'hidden';if(visible){last=span;const ruby=span.closest('ruby');if(ruby)visibleRubies.add(ruby);}});
           remaining-=part.chars.length;
         }
-        for(const item of readings){if(item.rt)item.rt.style.visibility=item.ruby.querySelector('.sp-ruby-base')?.textContent.length?'':'hidden';}
+        for(const item of readings){if(item.rt)item.rt.style.visibility=visibleRubies.has(item.ruby)?'':'hidden';}
         if(count>=length)cursor.remove();
         else if(last)last.after(cursor);
-        else if(parts[0])parts[0].node.after(cursor);
+        else if(parts[0]?.nodes[0])parts[0].nodes[0].before(cursor);
       };
       node.classList.add('is-typing');
       reveal(0);
-      emit(this.host, 'sceneplayer:typingstart', { index: this.index, scene });
+      emit(this.host,'sceneplayer:typingstart',{index:this.index,scene});
       const timer=setInterval(()=>{
         reveal(++position);
         if(position>=length){
@@ -7298,9 +7386,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           this._scheduleAuto();
         }
       },speed);
-      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>{cursor.remove();readings.forEach(item=>{if(item.rt)item.rt.style.visibility='';});restoreFrameSize();}};
+      this.typingState={timer,node,text:scene.text,sceneId:scene.id,complete:()=>reveal(length),cleanup:()=>{cursor.remove();restoreText();readings.forEach(item=>{if(item.rt)item.rt.style.visibility='';});restoreFrameSize();}};
     }
-
     destroy(options = {}) {
       if (this.destroyed) return;
       this.destroyed = true;
