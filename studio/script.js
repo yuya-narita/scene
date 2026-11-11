@@ -12671,7 +12671,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       .frame-position-drag-toolbar button{appearance:none;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:transparent;color:#fff;font:600 11px/1 sans-serif;padding:7px 10px}
       .frame-position-drag-toolbar button[data-save]{background:#fff;color:#17181b}
       .frame-position-drag-hint{position:absolute;z-index:91;top:14px;left:50%;transform:translateX(-50%);padding:6px 10px;border-radius:999px;background:rgba(25,26,29,.72);color:#fff;font:600 11px/1.25 sans-serif;white-space:nowrap;pointer-events:none}
-      .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(124px,calc(env(safe-area-inset-bottom) + 108px));transform:translateX(-50%);width:min(300px,calc(100% - 58px));display:grid;gap:6px;padding:8px 9px;border-radius:12px;background:rgba(25,26,29,.82);box-shadow:0 6px 22px rgba(0,0,0,.18);color:#fff;font:600 10px/1.15 sans-serif}
+      .frame-position-fixed-controls{position:absolute;z-index:94;left:50%;bottom:max(124px,calc(env(safe-area-inset-bottom) + 108px));transform:translateX(-50%);width:min(300px,calc(100% - 58px));display:grid;gap:5px;padding:7px 8px;border-radius:12px;background:rgba(25,26,29,.68);box-shadow:0 6px 22px rgba(0,0,0,.18);color:#fff;font:600 10px/1.15 sans-serif}
       .frame-position-control-row{display:grid;grid-template-columns:54px minmax(0,1fr) 46px;gap:6px;align-items:center}
       .frame-position-control-row > span{white-space:nowrap;word-break:keep-all}
       .frame-position-control-row input[type="range"]{width:100%;margin:0;accent-color:#fff;touch-action:none;-webkit-user-select:none;user-select:none}
@@ -12707,6 +12707,12 @@ function startInlineTextEdit(field='text',targetEl=null){
       const frame=article?.querySelector('.sp-handdrawn-frame');
       const target=frame||article?.querySelector(':scope > .sp-text');
       if(!stage||!scenes||!article||!target){appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
+      // Stop entry motion before measuring. A filled CSS/WAAPI transform can move
+      // the measured frame box away from its authored placement and bake that
+      // temporary offset into the next drag position.
+      article.classList.add('is-frame-position-dragging');
+      playerHost?.classList.add('sp-direct-layout-editing');
+      article.querySelectorAll('.sp-handdrawn-frame,.sp-text').forEach(node=>node.getAnimations?.().forEach(animation=>{try{animation.cancel();}catch{}}));
       const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
       const beforeSize=p.text.size;
@@ -12761,14 +12767,12 @@ function startInlineTextEdit(field='text',targetEl=null){
         setAdjustedPosition({preset:'custom',x:Number(existingPosition.x),y:Number(existingPosition.y)});
       }
       syncLivePosition(p.text.position);
-      playerHost?.classList.add('sp-direct-layout-editing');
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
       const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('配置を選ぶか、文字をドラッグして調整','Choose a placement or drag the text');
       const controls=document.createElement('div');controls.className='frame-position-fixed-controls';
-      const presetLabel=document.createElement('div');presetLabel.textContent=u('配置の目安（ドラッグで微調整）','Placement presets (drag to fine-tune)');presetLabel.style.cssText='font:600 10px/1.2 sans-serif;color:rgba(255,255,255,.78);text-align:center;margin-bottom:1px';controls.appendChild(presetLabel);
-      const presetGrid=document.createElement('div');presetGrid.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:2px';
+      const presetGrid=document.createElement('div');presetGrid.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:1px';
       const placePresets=[['↖',.12,.18,'左上'],['↑',.5,.18,'上'],['↗',.88,.18,'右上'],['←',.12,.5,'左'],['•',.5,.5,'中央'],['→',.88,.5,'右'],['↙',.12,.82,'左下'],['↓',.5,.82,'下'],['↘',.88,.82,'右下']];
-      placePresets.forEach(([glyph,x,y,label])=>{const b=document.createElement('button');b.type='button';b.textContent=glyph;b.title=u(label,({左上:'Top left',上:'Top',右上:'Top right',左:'Left',中央:'Center',右:'Right',左下:'Bottom left',下:'Bottom',右下:'Bottom right'})[label]);b.style.cssText='height:25px;border:1px solid rgba(255,255,255,.22);border-radius:6px;background:rgba(255,255,255,.08);color:#fff;font:700 13px/1 sans-serif;cursor:pointer';b.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();const r=stage.getBoundingClientRect();applyPoint(r.left+r.width*x,r.top+r.height*y);});presetGrid.appendChild(b);});
+      placePresets.forEach(([glyph,x,y,label])=>{const b=document.createElement('button');b.type='button';b.textContent=glyph;b.title=u(label,({左上:'Top left',上:'Top',右上:'Top right',左:'Left',中央:'Center',右:'Right',左下:'Bottom left',下:'Bottom',右下:'Bottom right'})[label]);b.style.cssText='height:22px;border:1px solid rgba(255,255,255,.22);border-radius:6px;background:rgba(255,255,255,.08);color:#fff;font:700 13px/1 sans-serif;cursor:pointer';b.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();const r=stage.getBoundingClientRect();applyPoint(r.left+r.width*x,r.top+r.height*y);});presetGrid.appendChild(b);});
       controls.appendChild(presetGrid);
       const makeSliderRow=(label,min,max,step,value)=>{
         const row=document.createElement('label');row.className='frame-position-control-row';
@@ -12781,7 +12785,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       const auto=document.createElement('button');auto.type='button';auto.textContent=u('自動','Auto');
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent=u('取消','Cancel');
       const save=document.createElement('button');save.type='button';save.dataset.save='';save.textContent=u('決定','Done');
-      toolbar.append(auto,cancel,save);stage.append(shield,hint,controls,toolbar);article.classList.add('is-frame-position-dragging');
+      toolbar.append(auto,cancel,save);stage.append(shield,hint,controls,toolbar);
       const textNode=article.querySelector(':scope > .sp-text')||article.querySelector('.sp-text')||target;
       // Preview-only: resizing should not change line breaks while this direct editor is open.
       
