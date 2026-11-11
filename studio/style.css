@@ -14531,3 +14531,13 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .desktop-simultaneous-card>h3{margin:0;font:600 12px/1.5 system-ui,sans-serif}
 .desktop-simultaneous-card .desktop-collapsible-head{display:block;width:100%;min-height:24px;padding:0;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
 .desktop-simultaneous-card .desktop-collapsible-content{padding-top:8px}
+
+/* Effect tab: collapsible Basic effects / Timing, preserving existing controls. */
+.desktop-effect-basic-section>.desktop-effect-fold-content,
+.desktop-effect-timing-section>.desktop-effect-fold-content{display:grid;gap:13px;min-width:0}
+.desktop-effect-basic-section.is-effect-folded>.desktop-effect-fold-content,
+.desktop-effect-timing-section.is-effect-folded>.desktop-effect-fold-content{display:none!important}
+.desktop-effect-basic-section.is-effect-folded,
+.desktop-effect-timing-section.is-effect-folded{gap:0!important}
+.desktop-effect-fold-toggle{display:block;width:100%;padding:2px 0;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+.desktop-effect-fold-toggle:focus-visible{outline:2px solid #64748b;outline-offset:3px;border-radius:3px}

@@ -13175,6 +13175,31 @@ function openDesktopEffectDetail(){
       typingGrid.append(speed,cursor);typingInline.append(typingTitle,typingGrid);basic.appendChild(typingInline);
     }
 
+    // Effect panel: keep the top sections compact, without changing their settings.
+    // The simultaneous-group card already provides its own disclosure control.
+    const effectFoldState=window.__ahakoEffectFoldState||(window.__ahakoEffectFoldState={basic:true,timing:true});
+    const foldEffectSection=(sectionNode,key,label)=>{
+      const heading=sectionNode.querySelector(':scope > h3');
+      if(!heading)return;
+      const content=document.createElement('div');
+      content.className='desktop-effect-fold-content';
+      while(heading.nextSibling)content.appendChild(heading.nextSibling);
+      sectionNode.appendChild(content);
+      const toggle=document.createElement('button');
+      toggle.type='button';toggle.className='desktop-effect-fold-toggle';
+      toggle.setAttribute('aria-expanded',String(!effectFoldState[key]));
+      const sync=()=>{
+        const collapsed=!!effectFoldState[key];
+        sectionNode.classList.toggle('is-effect-folded',collapsed);
+        toggle.setAttribute('aria-expanded',String(!collapsed));
+        toggle.textContent=`${label} ${collapsed?'▸':'▾'}`;
+      };
+      toggle.addEventListener('click',()=>{effectFoldState[key]=!effectFoldState[key];sync();});
+      heading.replaceChildren(toggle);sync();
+    };
+    foldEffectSection(basic,'basic',u('基本演出','Basic effects'));
+    foldEffectSection(timing,'timing',u('タイミング','Timing'));
+
     if(!desktopLiveActive()){body.appendChild(buildFlowCommentEditor(scene,index));body.appendChild(buildCreditsEditor(scene));}
 
     const foot=document.createElement('footer');foot.className='desktop-text-detail-foot';
