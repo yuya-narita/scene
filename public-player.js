@@ -97,61 +97,12 @@
   const COMMERCE_ORDER_TOKEN_PREFIX='ahako:commerce-order-token:';
   const COMMERCE_CHECKOUT_RETURN_KEY='ahako:commerce-checkout-return:v157';
 
-  function safeShelfReturn(raw){
-    try{
-      const url=new URL(String(raw||''),location.href);
-      if(url.protocol!=='https:'&&url.protocol!=='http:')return null;
-      const path=url.pathname.replace(/\/+$/,'');
-      const isProductionAuthor=url.hostname==='yuya-narita.github.io'&&path==='/scene/author';
-      const isSameSiteAuthor=url.origin===location.origin&&/\/author$/.test(path);
-      const isProductionBookshelf=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookshelf';
-      const isSameSiteBookshelf=url.origin===location.origin&&/\/bookshelf$/.test(path);
-      const isProductionBookstore=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookstore';
-      const isSameSiteBookstore=url.origin===location.origin&&/\/bookstore$/.test(path);
-      const isProductionReaderStatusShare=url.hostname==='yuya-narita.github.io'&&path==='/scene/bookstore/reader-status-share.html';
-      const isSameSiteReaderStatusShare=url.origin===location.origin&&/\/bookstore\/reader-status-share\.html$/.test(path);
-      if(isProductionReaderStatusShare||isSameSiteReaderStatusShare){
-        // Older share links returned to the profile document itself. Send the
-        // Player return control to the bookstore entrance, without a profile ID.
-        url=new URL('./',url);
-      }
-      if(isProductionBookstore||isSameSiteBookstore||isProductionReaderStatusShare||isSameSiteReaderStatusShare){
-        url.search='';
-        url.hash='';
-        return {url:url.toString(),label:'← あ箱書店へ'};
-      }
-      if(isProductionBookshelf||isSameSiteBookshelf){
-        url.hash='';
-        return {url:url.toString(),label:'← あ箱の本へ'};
-      }
-      const authorId=String(url.searchParams.get('id')||url.searchParams.get('author')||'').toLowerCase();
-      const authorSlug=String(url.searchParams.get('u')||'').trim().toLowerCase();
-      const validAuthorId=/^author_[a-f0-9]{32}$/.test(authorId);
-      const validAuthorSlug=/^[a-z0-9][a-z0-9_-]{2,29}$/.test(authorSlug);
-      if((!isProductionAuthor&&!isSameSiteAuthor)||(!validAuthorId&&!validAuthorSlug))return null;
-      // Published work URLs can retain an older author-shelf return target.
-      // Keep the destination within the same deployment when possible, but
-      // route readers back to the bookstore entrance instead of the author shelf.
-      if(isProductionAuthor)url.pathname='/scene/bookstore/';
-      else if(isSameSiteAuthor)url=new URL('../bookstore/',url);
-      url.search='';
-      url.hash='';
-      return {url:url.toString(),label:'← あ箱書店へ'};
-    }catch(_){return null;}
-  }
-
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
-    // Studio's /work/:id links enter through ?src=... and do not always carry
-    // a returnTo parameter. Give those public works the same bookstore return.
-    const returnTo=safeShelfReturn(params.get('returnTo'))||(
-      params.has('src')
-        ? {url:'https://yuya-narita.github.io/scene/bookstore/',label:'← あ箱書店へ'}
-        : null
-    );
-    if(!returnTo){shelfReturnLink.hidden=true;return;}
-    shelfReturnLink.href=returnTo.url;
-    shelfReturnLink.textContent=returnTo.label;
+    // Every public Player entry (TOP, Studio publication, and shared work)
+    // returns to the same bookstore entrance regardless of its origin URL.
+    shelfReturnLink.href='https://yuya-narita.github.io/scene/bookstore/';
+    shelfReturnLink.textContent='← あ箱書店へ';
     shelfReturnLink.hidden=false;
     if(window.matchMedia?.('(max-width:520px)').matches){
       shelfReturnLink.style.width='max-content';
