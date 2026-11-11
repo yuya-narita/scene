@@ -3075,103 +3075,10 @@ html.sp-scene-image-open body{
 }
 
 
-/* Sync frame entrance effects: keep the authored frame fixed as the layout anchor. */
-/* Original Shino timings/strength. */
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="pulse"] .sp-handdrawn-frame{
-  animation:spOriginalPulse .95s ease-out 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="shake"] .sp-handdrawn-frame{
-  animation:spOriginalShake .48s ease-out 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="blur"] .sp-handdrawn-frame{
-  animation:spOriginalBlur 1.05s ease-out 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="loud"] .sp-handdrawn-frame{
-  animation:spOriginalLoud .58s ease-out 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="fade"] .sp-handdrawn-frame{
-  animation:spOriginalFade 1.2s ease-out 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="pop"] .sp-handdrawn-frame{
-  animation:spOriginalPop .68s cubic-bezier(.18,.82,.2,1) 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="slow"] .sp-handdrawn-frame{
-  animation:spOriginalSlow 1.25s cubic-bezier(.18,.78,.16,1) 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="whisper"] .sp-handdrawn-frame{
-  animation:spOriginalWhisperEnter .78s ease-out 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="tilt"] .sp-handdrawn-frame{
-  animation:spOriginalTiltEnter .68s cubic-bezier(.18,.82,.2,1) 1;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="fadeRise"] .sp-handdrawn-frame{animation:spAutoFadeRise13 .62s ease-out 1}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="softRise"] .sp-handdrawn-frame{animation:spAutoSoftRise13 .72s ease-out 1}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="settle"] .sp-handdrawn-frame{animation:spAutoSettle13 .82s ease-out 1}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="whisperIn"] .sp-handdrawn-frame{animation:spAutoWhisper13 .86s ease-out 1}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="emphasis"] .sp-handdrawn-frame{animation:spAutoEmphasis13 .7s ease-out 1;font-weight:700}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-auto-transition="true"] .sp-handdrawn-frame{
-  animation:spDefaultAutoReveal .72s cubic-bezier(.22,.72,.22,1) 1!important;
-  transform:none!important;
-  filter:none!important;
-}
-/* Custom Scene effect timing from presentation.effectTiming. */
+/* Sync entrance direction on the wrapper, while keeping the frame at its final text dimensions. */
 .sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame{
-  animation-delay:var(--sp-effect-delay,0s)!important;
+  animation:none!important;transform:none!important;translate:none!important;filter:none!important;opacity:1!important;
 }
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="pulse"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.95s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="shake"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.48s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="blur"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,1.05s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="loud"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.58s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="fade"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,1.2s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="pop"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.68s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="slow"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,1.25s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="whisper"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.78s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="tilt"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.68s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="fadeRise"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.62s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="softRise"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.72s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="settle"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.82s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="whisperIn"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.86s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="emphasis"] .sp-handdrawn-frame{animation-duration:var(--sp-effect-duration,.7s)!important}
-then jumps to the first keyframe (e.g. blur/opacity) when animation starts. */
-.sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame{
-  animation-fill-mode:both!important;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="slam"] .sp-handdrawn-frame{animation:spFxSlam var(--sp-effect-duration,.52s) cubic-bezier(.12,.82,.18,1) 1}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="burst"] .sp-handdrawn-frame{animation:spFxBurst var(--sp-effect-duration,.62s) cubic-bezier(.12,.84,.16,1) 1}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="glitchHit"] .sp-handdrawn-frame{animation:spFxGlitchHit var(--sp-effect-duration,.46s) steps(7,end) 1}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="rush"] .sp-handdrawn-frame{animation:spFxRush var(--sp-effect-duration,.48s) cubic-bezier(.08,.78,.18,1) 1}
-/* Keep custom author delay compatible with the new effects. */
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="slam"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="burst"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="glitchHit"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="rush"] .sp-handdrawn-frame{animation-delay:var(--sp-effect-delay,0s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="slam"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="burst"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="glitchHit"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="rush"] .sp-handdrawn-frame{animation:spOriginalFade .18s linear 1!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="slam"] .sp-handdrawn-frame{transform-origin:50% 100%;animation-name:spFxSlamV2!important;animation-timing-function:cubic-bezier(.08,.78,.13,1)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="burst"] .sp-handdrawn-frame{animation-name:spFxBurstV2!important;animation-timing-function:cubic-bezier(.1,.8,.14,1)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="glitchHit"] .sp-handdrawn-frame{animation-name:spFxGlitchHitV2!important;animation-timing-function:steps(8,end)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="rush"] .sp-handdrawn-frame{animation-name:spFxRushV2!important;animation-timing-function:cubic-bezier(.06,.78,.12,1)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="glitchHitRight"] .sp-handdrawn-frame{animation:spFxGlitchHitRightV2 var(--sp-effect-duration,.46s) steps(8,end) 1!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="impact"] .sp-handdrawn-frame{animation:spFxImpactAhako var(--sp-effect-duration,.58s) cubic-bezier(.08,.82,.16,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="scream"] .sp-handdrawn-frame{animation:spFxScreamAhako var(--sp-effect-duration,.72s) cubic-bezier(.1,.78,.18,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="stretch"] .sp-handdrawn-frame{animation:spFxStretchAhako var(--sp-effect-duration,.78s) cubic-bezier(.12,.72,.16,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important;transform-origin:50% 50%}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="murmur"] .sp-handdrawn-frame{animation:spFxMurmurAhako var(--sp-effect-duration,1.05s) ease-out 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="flash"] .sp-handdrawn-frame{animation:spFxFlashAhako var(--sp-effect-duration,.7s) ease-out 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="break"] .sp-handdrawn-frame{animation:spFxBreakAhako var(--sp-effect-duration,.7s) cubic-bezier(.1,.75,.2,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="bounce"] .sp-handdrawn-frame{animation:spFxBounceAhako var(--sp-effect-duration,.82s) cubic-bezier(.16,.8,.18,1) 1!important;animation-delay:var(--sp-effect-delay,0s)!important}
-/* V3 landing stabilization: entrance effects must finish on the exact static text geometry. */
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="impact"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="scream"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="stretch"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="murmur"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="flash"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="break"] .sp-handdrawn-frame,
-.sp-scene[data-frame-motion="sync"].sp-fx-play[data-effect="bounce"] .sp-handdrawn-frame{
-  animation-fill-mode:both!important;
-}
-.sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame>.sp-text{animation:none!important}
 .sp-scene[data-frame-motion="sync"].sp-layout-measuring .sp-handdrawn-frame,
 .sp-scene[data-frame-motion="sync"].is-frame-position-dragging .sp-handdrawn-frame,
 .sp-core.sp-direct-layout-editing .sp-scene[data-frame-motion="sync"].sp-fx-play .sp-handdrawn-frame{
