@@ -33,10 +33,12 @@ function update(player,index){
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
  if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
  const snapshot={nodes:local.nodes,position:local.position||'center'};
- ui.index=i;ui.snapshot=snapshot;ui.entries=Object.entries(snapshot.nodes).filter(([id,n])=>{if(n.visible===false)return false;let p=n.parentId;const visited=new Set([id]);while(p){if(visited.has(p)||snapshot.nodes[p]?.visible===false||!snapshot.nodes[p])return false;visited.add(p);p=snapshot.nodes[p].parentId;}return true;});ui.map=new Map(ui.entries);
+ const sameScene=ui.index===i;ui.index=i;ui.snapshot=snapshot;ui.entries=Object.entries(snapshot.nodes).filter(([id,n])=>{if(n.visible===false)return false;let p=n.parentId;const visited=new Set([id]);while(p){if(visited.has(p)||snapshot.nodes[p]?.visible===false||!snapshot.nodes[p])return false;visited.add(p);p=snapshot.nodes[p].parentId;}return true;});ui.map=new Map(ui.entries);
  if(!ui.entries.length){ui.layer.hidden=true;ui.stack=[];return;}
  // One initial root card, or the configured root with visible descendants.
- ui.stack=[null];ui.lock=false;ui.layer.hidden=false;
+ const previousStack=(sameScene&&ui.stack.length)?ui.stack.slice():[null];
+ ui.stack=[null];for(const id of previousStack.slice(1)){if(ui.map.has(id)&&children(ui,ui.stack[ui.stack.length-1]).some(([key])=>key===id))ui.stack.push(id);else break;}
+ ui.lock=false;ui.layer.hidden=false;
  ui.layer.dataset.position=['top','center','bottom'].includes(snapshot.position)?snapshot.position:'center';
  draw(player);
 }
@@ -48,7 +50,7 @@ function draw(player){
  for(let d=0;d<stack.length;d++){
   const parent=stack[d], isTop=d===stack.length-1, list=children(ui,parent);
   const card=make('section','ahako-rpg-card'+(isTop?' is-top':' is-behind'));
-  card.style.setProperty('--rpg-depth',String(d));card.style.zIndex=String(100+d);
+  card.style.setProperty('--rpg-depth',String(d));card.dataset.depth=String(d);card.style.zIndex=String(100+d);
   card.setAttribute('aria-label',parent===null?'コマンド':ui.map.get(parent)?.label||'詳細');
   if(parent!==null){const heading=ui.map.get(parent);if(heading){const head=make('div','ahako-rpg-heading',heading.label||'');if(heading.value!==undefined&&heading.value!=='')head.append(make('span','',heading.value));card.append(head);}}
   if(!list.length&&parent!==null){const node=ui.map.get(parent);if(node&&node.value!==undefined&&node.value!=='')card.append(make('div','ahako-rpg-value',node.value));}
@@ -57,16 +59,19 @@ function draw(player){
    const btn=make('button','ahako-rpg-row'+(n===0?' is-selected':''));btn.type='button';
    const label=make('span','ahako-rpg-label',node.label||id);btn.append(label);
    if(node.value!==undefined&&node.value!=='')btn.append(make('span','ahako-rpg-row-value',node.value));
-   if(isTop&&hasChildren)btn.addEventListener('click',e=>{e.stopPropagation();if(ui.lock)return;if(editing(player)){editNode(player,id);return;}ui.stack.push(id);draw(player);});
-   else btn.addEventListener('click',e=>{e.stopPropagation();if(isTop&&editing(player))editNode(player,id);});
+      btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;if(hasChildren){ui.stack.push(id);draw(player);}else if(editing(player)){editNode(player,id);}});
    card.append(btn);
-   if(isTop&&hasChildren&&editing(player)){const open=make('span','ahako-rpg-open-child','›');open.title='中のカードを見る';open.addEventListener('click',e=>{e.stopPropagation();ui.stack.push(id);draw(player);});btn.append(open);}
+   if(isTop&&editing(player)){
+    const pencil=make('span','ahako-rpg-edit-pencil','✎');pencil.setAttribute('role','button');pencil.tabIndex=0;pencil.title='名前・値を編集';pencil.setAttribute('aria-label',node.label+'を編集');
+    pencil.addEventListener('click',e=>{e.stopPropagation();editNode(player,id);});pencil.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();editNode(player,id);}});btn.append(pencil);
+    if(hasChildren){const open=make('span','ahako-rpg-open-child','›');open.title='中の項目を開く';btn.append(open);}
+   }
   });
   if(!list.length&&parent===null){card.append(make('div','ahako-rpg-empty','表示項目なし'));}
   if(isTop&&editing(player)){
    const tools=make('div','ahako-rpg-author-tools');
-   const plus=make('button','','＋ 項目追加');plus.type='button';plus.addEventListener('click',e=>{e.stopPropagation();global.AhakoRpgSceneEditor.add(parent);});tools.append(plus);
-   if(parent!==null){const edit=make('button','','✎ 見出し');edit.type='button';edit.addEventListener('click',e=>{e.stopPropagation();editNode(player,parent);});tools.append(edit);}
+   const plus=make('button','','＋ この中に追加');plus.type='button';plus.addEventListener('click',e=>{e.stopPropagation();global.AhakoRpgSceneEditor.add(parent);});tools.append(plus);
+   if(parent!==null){const edit=make('button','','✎ このカード名');edit.type='button';edit.addEventListener('click',e=>{e.stopPropagation();editNode(player,parent);});tools.append(edit);}
    card.append(tools);
   }
   // Each card is interactive; stage/background remains untouched.
@@ -90,7 +95,7 @@ function editNode(player,id){
  del.addEventListener('click',e=>{e.stopPropagation();if(global.confirm('この項目と子項目を削除しますか？'))global.AhakoRpgSceneEditor.remove(id);close();});
  cancel.addEventListener('click',e=>{e.stopPropagation();close();});
  form.append(name,value,save,del,cancel);form.addEventListener('click',e=>e.stopPropagation());
- card.append(form);name.focus();
+ card.querySelector('.ahako-rpg-inline-editor')?.remove();card.append(form);name.focus();
 }
 function back(player,animate,offset=0,velocity=0){
  const ui=instances.get(player);if(!ui||ui.stack.length<=1||ui.lock)return;
