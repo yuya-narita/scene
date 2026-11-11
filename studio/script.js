@@ -16236,9 +16236,10 @@ function openDesktopTextDetail(){
     // The Advanced inspector is not the editor shown in desktop/iPhone Live mode.
     const rpgDisclosure=document.createElement('details');
     rpgDisclosure.className='rpg-editor-disclosure';
+    rpgDisclosure.open=window.__ahakoRpgDisclosureOpen===true;
+    rpgDisclosure.addEventListener('toggle',()=>{window.__ahakoRpgDisclosureOpen=rpgDisclosure.open;});
     rpgDisclosure.innerHTML='<summary>RPGコマンド（基本台帳・Scene変更）</summary><section id="rpgCommandEditor" class="rpg-command-editor"></section>';
     panes.effect.appendChild(rpgDisclosure);
-    window.AhakoRpgEditor?.connect(()=>workingDocument,()=>selectedSceneIndex,()=>scheduleDraftSave(40));
     if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
     panes.image.appendChild(sceneImageCard);
     if(!inlineExistingDetail('audio',panes.audio))panes.audio.appendChild(audioCard);
@@ -16272,6 +16273,8 @@ function openDesktopTextDetail(){
     tabShell.append(tabRail,tabStage);
     desktopLivePanelBody.innerHTML='';
     desktopLivePanelBody.append(tabShell);
+    // Connect only after the panel is in the document; getElementById cannot find detached panes.
+    window.AhakoRpgEditor?.connect(()=>workingDocument,()=>selectedSceneIndex,()=>scheduleDraftSave(40));
     activate(activeTab);
     desktopSceneUnderlaySnapshot=desktopLivePanelBody.cloneNode(true);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;

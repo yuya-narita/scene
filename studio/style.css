@@ -14562,3 +14562,17 @@ body.desktop-live-edit .desktop-v2-frequent-editor-row button{width:30px!importa
 .rpg-editor-preview{display:grid;gap:8px;font-size:12px}
 .rpg-editor-window{background:#050505;color:#fff;border:2px solid #fff;outline:1px solid #222;border-radius:9px;padding:12px;display:grid;gap:8px;max-height:190px;overflow:auto}
 .rpg-editor-error{color:#b22;font-size:12px}
+
+/* RPG command: match the other collapsible Effect cards. */
+body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .rpg-editor-disclosure{
+  display:block;box-sizing:border-box;width:100%;margin:0 0 10px;
+  background:#fff;border:1px solid #d6dce5;border-radius:13px;overflow:visible;
+}
+body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .rpg-editor-disclosure>summary{
+  display:block;list-style:none;cursor:pointer;padding:17px 13px;
+  font:700 12px/1.4 inherit;color:#141820;outline-offset:-4px;
+}
+body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .rpg-editor-disclosure>summary::-webkit-details-marker{display:none}
+body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .rpg-editor-disclosure>summary::after{content:' ▸'}
+body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .rpg-editor-disclosure[open]>summary::after{content:' ▾'}
+body.desktop-live-edit .desktop-v2-tab-pane[data-editor-tab="effect"] .rpg-command-editor{padding:0 13px 15px;min-width:0}
