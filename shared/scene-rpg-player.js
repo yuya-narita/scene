@@ -10,9 +10,9 @@ function attach(player){
  let ui=instances.get(player);if(ui)return ui;
  const host=player.host, layer=document.createElement('div');layer.className='ahako-rpg-layer';layer.hidden=true;
  host.appendChild(layer);
- ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null};instances.set(player,ui);
- const onScene=e=>update(player,e.detail?.index);
- const onCover=()=>{ui.layer.hidden=true;ui.stack=[];};
+ ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true};instances.set(player,ui);
+ const onScene=e=>{ui.cover=false;update(player,e.detail?.index);};
+ const onCover=()=>{ui.cover=true;ui.layer.hidden=true;ui.stack=[];};
  host.addEventListener('sceneplayer:coverstart',onCover);
  host.addEventListener('sceneplayer:end',onCover);
  host.addEventListener('sceneplayer:scenechange',onScene);
@@ -28,7 +28,7 @@ function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapsho
 function update(player,index){
  const ui=attach(player),work=player.document;
  const i=Number.isInteger(index)?index:player.index;
- if(!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
+ if(ui.cover||!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
  const local=work.scenes[i]?.extensions?.ahakoRpgScene;
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
  if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
@@ -52,31 +52,22 @@ function draw(player){
   const card=make('section','ahako-rpg-card'+(isTop?' is-top':' is-behind'));
   card.style.setProperty('--rpg-depth',String(d));card.dataset.depth=String(d);card.style.zIndex=String(100+d);
   card.setAttribute('aria-label',parent===null?'コマンド':ui.map.get(parent)?.label||'詳細');
-  if(parent!==null){const heading=ui.map.get(parent);if(heading){const head=make('div','ahako-rpg-heading',heading.label||'');if(heading.value!==undefined&&heading.value!=='')head.append(make('span','',heading.value));card.append(head);}}
+  if(parent!==null&&d>=2){const heading=ui.map.get(parent);if(heading){const head=make('div','ahako-rpg-heading',heading.label||'');if(heading.value!==undefined&&heading.value!=='')head.append(make('span','',heading.value));card.append(head);}}
   if(!list.length&&parent!==null){const node=ui.map.get(parent);if(node&&node.value!==undefined&&node.value!=='')card.append(make('div','ahako-rpg-value',node.value));}
   list.forEach(([id,node],n)=>{
    const hasChildren=children(ui,id).length>0;
    const btn=make('button','ahako-rpg-row'+(n===0?' is-selected':''));btn.type='button';
    const label=make('span','ahako-rpg-label',node.label||id);btn.append(label);
    if(node.value!==undefined&&node.value!=='')btn.append(make('span','ahako-rpg-row-value',node.value));
-      btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;if(hasChildren){ui.stack.push(id);draw(player);}else if(editing(player)){editNode(player,id);}});
+      btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;if(hasChildren){ui.stack.push(id);draw(player);if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);}else if(editing(player)){global.AhakoRpgSceneEditor?.select?.(id);}});
    card.append(btn);
-   if(isTop&&editing(player)){
-    const pencil=make('span','ahako-rpg-edit-pencil','✎');pencil.setAttribute('role','button');pencil.tabIndex=0;pencil.title='名前・値を編集';pencil.setAttribute('aria-label',node.label+'を編集');
-    pencil.addEventListener('click',e=>{e.stopPropagation();editNode(player,id);});pencil.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();editNode(player,id);}});btn.append(pencil);
-    if(hasChildren){const open=make('span','ahako-rpg-open-child','›');open.title='中の項目を開く';btn.append(open);}
-   }
+   // Authoring: select any row in the sidebar; never insert controls in the card.
+
   });
   if(!list.length&&parent===null){card.append(make('div','ahako-rpg-empty','表示項目なし'));}
-  if(isTop&&editing(player)){
-   const tools=make('div','ahako-rpg-author-tools');
-   const plus=make('button','','＋ この中に追加');plus.type='button';plus.addEventListener('click',e=>{e.stopPropagation();global.AhakoRpgSceneEditor.add(parent);});tools.append(plus);
-   if(parent!==null){const edit=make('button','','✎ このカード名・値');edit.type='button';edit.addEventListener('click',e=>{e.stopPropagation();editNode(player,parent);});tools.append(edit);}
-   card.append(tools);
-  }
   // Each card is interactive; stage/background remains untouched.
   for(const ev of ['click','pointerdown','pointerup','touchstart','touchend'])card.addEventListener(ev,e=>e.stopPropagation());
-  if(isTop&&d>0&&!editing(player))bindSwipe(player,card);
+  if(isTop&&d>0)bindSwipe(player,card);
   layer.append(card);
  }
 }
