@@ -7,6 +7,7 @@ const proto=Core.prototype;proto.__ahakoRpgInstalled=true;
 const instances=new WeakMap();
 // Keep the currently opened card across Studio preview rebuilds.
 const studioViewByHost=new WeakMap();
+let activeKeyboardPlayer=null;
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 function attach(player){
  let ui=instances.get(player);if(ui)return ui;
@@ -19,12 +20,35 @@ function attach(player){
  host.addEventListener('sceneplayer:coverstart',onCover);
  host.addEventListener('sceneplayer:end',onCover);
  host.addEventListener('sceneplayer:scenechange',onScene);
- const onKey=e=>{if(ui.layer.hidden||!ui.stack.length||e.target.closest('input,textarea,select,[contenteditable]'))return;
-  if((e.key==='Escape'||e.key==='Backspace'||e.key==='ArrowRight')&&ui.stack.length>1){e.preventDefault();e.stopPropagation();back(player,true);}
+ const onKey=e=>{
+  if(ui.layer.hidden||!ui.stack.length||activeKeyboardPlayer!==player||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
+  const card=ui.layer.lastElementChild;
+  const rows=[...card.querySelectorAll('.ahako-rpg-row')];
+  const tabs=[...card.querySelectorAll('.ahako-rpg-tab')];
+  const isTab=card.classList.contains('is-character-detail');
+  let handled=true;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+   if(rows.length){const index=Math.max(0,rows.findIndex(b=>b.classList.contains('is-selected')));
+    const next=(index+(e.key==='ArrowDown'?1:-1)+rows.length)%rows.length;
+    rows.forEach((b,i)=>b.classList.toggle('is-selected',i===next));
+   }
+  }else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+   if(isTab&&tabs.length){
+    const index=Math.max(0,tabs.findIndex(b=>b.classList.contains('is-active')));
+    tabs[(index+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length].click();
+   }else if(e.key==='ArrowRight'&&ui.stack.length>1){back(player,true);}
+   else handled=false;
+  }else if(e.key==='Enter'||e.key===' '){
+   const row=rows.find(b=>b.classList.contains('is-selected'));if(row)row.click();else handled=false;
+  }else if((e.key==='Escape'||e.key==='Backspace')&&ui.stack.length>1){back(player,true);}
+  else handled=false;
+  if(handled){e.preventDefault();e.stopPropagation();}
  };
  // Only react when focus is in this Player. Avoid capturing Studio editor shortcuts.
- host.addEventListener('keydown',onKey,true);
- ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);host.removeEventListener('keydown',onKey,true);layer.remove();};
+ document.addEventListener('keydown',onKey,true);
+ layer.addEventListener('pointerdown',()=>{activeKeyboardPlayer=player;});
+ layer.addEventListener('touchstart',()=>{activeKeyboardPlayer=player;},{passive:true});
+ ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);document.removeEventListener('keydown',onKey,true);layer.remove();};
  return ui;
 }
 function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapshot));return Object.entries(snapshot.nodes).filter(([id])=>visible.has(id));}
@@ -75,13 +99,13 @@ function draw(player){
   if(isDetail)card.classList.add('has-stats');
   list.forEach(([id,item],n)=>{
    const hasChildren=children(ui,id).length>0;
-   const btn=make('button','ahako-rpg-row'+(n===0&&!isDetail?' is-selected':''));btn.type='button';
+   const btn=make('button','ahako-rpg-row'+(n===0?' is-selected':''));btn.type='button';
    btn.append(make('span','ahako-rpg-label',item.label||id));
    if(item.value!==undefined&&item.value!==''){
     const display=(item.type==='list'&&String(item.value).includes('|'))?String(item.value).split('|')[0]:item.value;
     btn.append(make('span','ahako-rpg-row-value',display));
    }
-   btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;
+   btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;activeKeyboardPlayer=player;
     if(hasChildren){ui.stack.push(id);draw(player);}
     if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);
    });card.append(btn);
@@ -126,21 +150,21 @@ function bindSwipe(player,card){
  const behind=card.previousElementSibling;
  function begin(x,y){if(ui.lock)return;active=true;swiping=false;sx=lastX=x;sy=y;lastT=performance.now();velocity=offset=0;}
  function move(x,y,e){if(!active)return;const dx=x-sx,dy=y-sy;
-  if(!swiping){if(Math.abs(dy)>Math.abs(dx)&&Math.abs(dy)>9){active=false;return;}if(dx>5&&dx>Math.abs(dy)*1.05){swiping=true;card.classList.add('is-dragging');}}
+  if(!swiping){if(Math.abs(dy)>Math.abs(dx)&&Math.abs(dy)>9){active=false;return;}if(dx>3&&dx>Math.abs(dy)*.85){swiping=true;card.classList.add('is-dragging');}}
   if(!swiping)return;if(e?.cancelable)e.preventDefault();offset=Math.max(0,dx);const now=performance.now(),dt=now-lastT;
   if(dt>0)velocity=velocity*.35+((x-lastX)/dt)*.65;lastX=x;lastT=now;
   card.style.transform=`translate3d(${offset}px,0,0)`;card.style.opacity=String(Math.max(.85,1-offset/1800));
   if(behind)behind.style.filter=`brightness(${Math.min(1,.42+offset/190)})`;
  }
  function end(cancel=false){if(!active&&!swiping)return;active=false;if(!swiping)return;swiping=false;card.classList.remove('is-dragging');
-  if(!cancel&&(offset>Math.min(90,card.offsetWidth*.24)||(offset>18&&velocity>.45))){back(player,true,offset,Math.max(0,velocity));return;}
+  if(!cancel&&(offset>Math.min(72,card.offsetWidth*.20)||(offset>15&&velocity>.35))){back(player,true,offset,Math.max(0,velocity));return;}
   card.style.transition='transform 220ms cubic-bezier(.2,.85,.25,1),opacity 220ms ease';card.style.transform='translate3d(0,0,0)';card.style.opacity='1';if(behind)behind.style.filter='brightness(.42)';
  }
  card.addEventListener('touchstart',e=>{if(e.touches.length===1)begin(e.touches[0].clientX,e.touches[0].clientY)},{passive:true});
  card.addEventListener('touchmove',e=>{if(e.touches.length===1)move(e.touches[0].clientX,e.touches[0].clientY,e)},{passive:false});
  card.addEventListener('touchend',()=>end(),{passive:true});card.addEventListener('touchcancel',()=>end(true),{passive:true});
  card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0&&!e.target.closest('button,input,select,textarea'))begin(e.clientX,e.clientY)});
- const mm=e=>{if(e.pointerType==='mouse'&&active){if(!card.contains(e.target)&&!swiping){active=false;return;}move(e.clientX,e.clientY,e)}};
+ const mm=e=>{if(e.pointerType==='mouse'&&active){move(e.clientX,e.clientY,e)}};
  const mu=e=>{if(e.pointerType==='mouse'&&active){end();global.removeEventListener('pointermove',mm);global.removeEventListener('pointerup',mu);}};
  card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0&&active){global.addEventListener('pointermove',mm);global.addEventListener('pointerup',mu);}});
  card.addEventListener('click',e=>{if(offset>5){e.preventDefault();e.stopImmediatePropagation();}},true);

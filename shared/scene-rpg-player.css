@@ -34,3 +34,15 @@
 .ahako-rpg-card.has-stats .ahako-rpg-row.is-selected:before{display:none}
 .ahako-rpg-card.has-stats .ahako-rpg-row-value{font:14px system-ui,sans-serif}
 .ahako-rpg-card[data-depth="1"]{min-height:0}
+
+/* Responsive viewport: never expand cards to desktop Player width. */
+.ahako-rpg-layer{inset:auto!important;top:0!important;left:0!important;width:min(100%,480px)!important;height:100%!important;max-width:100%!important;overflow:visible!important}
+.ahako-rpg-card{max-width:calc(100% - 26px)!important;overflow-x:hidden!important}
+.ahako-rpg-card[data-depth="0"]{left:clamp(14px,4%,22px)!important;width:min(188px,calc(100% - 36px))!important}
+.ahako-rpg-card[data-depth="1"]{left:clamp(32px,9%,44px)!important;width:calc(100% - clamp(52px,13%,62px))!important}
+.ahako-rpg-card[data-depth="2"],.ahako-rpg-card[data-depth="3"],.ahako-rpg-card[data-depth="4"]{left:clamp(14px,4%,22px)!important;width:calc(100% - clamp(28px,8%,44px))!important}
+.ahako-rpg-card.is-character-detail{min-height:330px!important}
+.ahako-rpg-row.is-selected:before,.ahako-rpg-tab.is-active:before{animation:ahakoRpgCursorBlink .85s steps(1,end) infinite}
+.ahako-rpg-card.has-stats .ahako-rpg-row.is-selected:before{display:none}
+@keyframes ahakoRpgCursorBlink{0%,54%{opacity:1}55%,100%{opacity:0}}
+@media(prefers-reduced-motion:reduce){.ahako-rpg-row.is-selected:before,.ahako-rpg-tab.is-active:before{animation:none}}
