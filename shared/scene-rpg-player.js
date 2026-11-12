@@ -88,9 +88,9 @@ function draw(player){
    card.classList.add('is-character-detail');
    const head=make('div','ahako-rpg-heading');const name=make('span','',node.label||'');
    const [level,job]=String(node.value||'').split('|');if(level)name.textContent+=' '+(/^Lv\s*/i.test(level)?level:'Lv '+level);
-   head.append(name,make('span','',job||''));card.append(head);
+   head.append(name,make('span','',job||''));if(editing(player)){head.classList.add('ahako-rpg-edit-target');head.title='見出しを編集';head.onclick=e=>{e.stopPropagation();editNode(player,parent);};}card.append(head);
    const nav=make('div','ahako-rpg-tabs');let current=ui.tabs[parent];if(!tabs.some(([id])=>id===current))current=tabs[0][0];ui.tabs[parent]=current;
-   tabs.forEach(([id,t])=>{const btn=make('button','ahako-rpg-tab'+(id===current?' is-active':''),t.label);btn.type='button';btn.onclick=e=>{e.stopPropagation();if(!isTop)return;ui.tabs[parent]=id;draw(player);if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);};nav.append(btn);});card.append(nav);
+   tabs.forEach(([id,t])=>{const btn=make('button','ahako-rpg-tab'+(id===current?' is-active':''),t.label);btn.type='button';btn.onclick=e=>{e.stopPropagation();if(!isTop)return;ui.tabs[parent]=id;draw(player);if(editing(player)){global.AhakoRpgSceneEditor?.select?.(id);editNode(player,id);}};nav.append(btn);});card.append(nav);
   }else if(node&&d>=2){
    // Non-character detail cards show the selected item only when it has children.
    const direct=children(ui,parent);if(direct.length){const head=make('div','ahako-rpg-heading',node.label||'');card.append(head);}
@@ -107,11 +107,15 @@ function draw(player){
    }
    btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;activeKeyboardPlayer=player;
     if(hasChildren){ui.stack.push(id);draw(player);}
-    if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);
+    if(editing(player)){global.AhakoRpgSceneEditor?.select?.(id);if(!hasChildren)editNode(player,id);}
    });card.append(btn);
   });
   if(!list.length&&node?.value&&!isDetail)card.append(make('div','ahako-rpg-value',node.value));
   if(!list.length&&parent===null)card.append(make('div','ahako-rpg-empty','表示項目なし'));
+  if(isTop&&editing(player)){
+   const tools=make('div','ahako-rpg-author-tools'),plus=make('button','ahako-rpg-author-add','＋ このカードに追加');plus.type='button';
+   plus.onclick=e=>{e.stopPropagation();global.AhakoRpgSceneEditor?.add?.(isDetail?ui.tabs[parent]:parent);};tools.append(plus);card.append(tools);
+  }
   for(const ev of ['click','pointerdown','pointerup','touchstart','touchend'])card.addEventListener(ev,e=>e.stopPropagation());
   if(isTop&&d>0)bindSwipe(player,card);
   layer.append(card);
@@ -119,21 +123,22 @@ function draw(player){
 }
 function editing(player){return !!(global.AhakoRpgSceneEditor?.active?.() && global.__ahakoRpgStudioPlayer && (global.__ahakoRpgStudioPlayer===player || global.__ahakoRpgStudioPlayer.host===player.host));}
 function editNode(player,id){
- const ui=instances.get(player),node=ui?.map?.get(id);if(!node)return;
- const card=ui.layer.lastElementChild;
- if(!card)return;
+ const ui=instances.get(player),node=ui?.map?.get(id);if(!node||!editing(player))return;
+ const card=ui.layer.lastElementChild;if(!card)return;
+ card.querySelector('.ahako-rpg-inline-editor')?.remove();
  const form=make('div','ahako-rpg-inline-editor');
- const name=make('input');name.value=node.label||'';name.placeholder='項目名';name.setAttribute('aria-label','項目名');
- const value=make('input');value.value=node.value??'';value.placeholder='値（空欄可）';value.setAttribute('aria-label','値');
- const save=make('button','','保存');save.type='button';
- const del=make('button','','削除');del.type='button';
- const cancel=make('button','','戻る');cancel.type='button';
- const close=()=>{form.remove();};
- save.addEventListener('click',e=>{e.stopPropagation();global.AhakoRpgSceneEditor.update(id,{label:name.value,value:value.value});close();});
- del.addEventListener('click',e=>{e.stopPropagation();if(global.confirm('この項目と子項目を削除しますか？'))global.AhakoRpgSceneEditor.remove(id);close();});
- cancel.addEventListener('click',e=>{e.stopPropagation();close();});
- form.append(name,value,save,del,cancel);form.addEventListener('click',e=>e.stopPropagation());
- card.querySelector('.ahako-rpg-inline-editor')?.remove();card.append(form);name.focus();
+ const field=(label,v)=>{const wrap=make('label','ahako-rpg-edit-field');wrap.append(make('span','',label));const input=make('input');input.value=v??'';wrap.append(input);form.append(wrap);return input;};
+ const name=field('名前',node.label||'');let value,level,job;
+ if(node.type==='list'){const parts=String(node.value||'').split('|');level=field('レベル',parts[0]?.replace(/^Lv\s*/i,'')||'');job=field('職業',parts.slice(1).join('|'));}
+ else value=field('値（空欄でもOK）',node.value??'');
+ const actions=make('div','ahako-rpg-edit-actions');
+ const save=make('button','','保存'),del=make('button','','削除'),cancel=make('button','','閉じる');
+ [save,del,cancel].forEach(b=>{b.type='button';actions.append(b);});
+ save.onclick=e=>{e.stopPropagation();global.AhakoRpgSceneEditor.update(id,{label:name.value,value:level?('Lv '+level.value+'|'+job.value):value.value});};
+ del.onclick=e=>{e.stopPropagation();if(global.confirm('この項目と子項目を削除しますか？'))global.AhakoRpgSceneEditor.remove(id);};
+ cancel.onclick=e=>{e.stopPropagation();form.remove();};form.append(actions);
+ for(const ev of ['click','pointerdown','pointerup','touchstart','touchend'])form.addEventListener(ev,e=>e.stopPropagation());
+ card.append(form);name.focus();
 }
 function back(player,animate,offset=0,velocity=0){
  const ui=instances.get(player);if(!ui||ui.stack.length<=1||ui.lock)return;

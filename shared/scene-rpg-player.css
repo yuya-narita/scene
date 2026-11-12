@@ -69,3 +69,13 @@
  .ahako-rpg-card.is-top .ahako-rpg-row.is-selected::before,
  .ahako-rpg-card.is-top .ahako-rpg-tab.is-active::before{animation:none!important}
 }
+
+/* Studio-only authoring affordances */
+.ahako-rpg-author-tools{border-top:1px solid #555;margin-top:10px;padding-top:8px}
+.ahako-rpg-author-add{background:#29292c!important;color:#fff!important;border:1px solid #888!important;border-radius:4px;padding:6px 9px;font-size:12px;cursor:pointer}
+.ahako-rpg-edit-target{cursor:pointer}
+.ahako-rpg-inline-editor{position:relative;z-index:5;background:#202024;border-top:1px solid #888;margin-top:9px;padding:10px 0;display:grid;gap:8px;user-select:text}
+.ahako-rpg-edit-field{display:grid;gap:4px;font-size:12px;color:#eee}
+.ahako-rpg-edit-field input{box-sizing:border-box;width:100%;min-width:0;border:1px solid #888!important;border-radius:4px;background:#fff!important;color:#171717!important;padding:8px!important;font:14px system-ui,sans-serif!important}
+.ahako-rpg-edit-actions{display:flex;gap:6px;flex-wrap:wrap}
+.ahako-rpg-edit-actions button{background:#303036!important;color:#fff!important;border:1px solid #888!important;border-radius:4px;padding:6px 9px;font-size:12px}
