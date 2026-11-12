@@ -109,3 +109,11 @@
 .ahako-rpg-card.ahako-rpg-kind-choice .ahako-rpg-row{border-bottom:1px solid #ffffff30!important}
 .ahako-rpg-card.ahako-rpg-kind-list .ahako-rpg-row{min-height:35px}
 .ahako-rpg-edit-pencil{color:white;background:#333;border:1px solid #777;border-radius:4px;padding:4px 9px;cursor:pointer}
+
+/* Command card design settings: scoped to this scene layer only. */
+.ahako-rpg-layer{--rpg-bg:#18181b;--rpg-border:#f5f5f5;--rpg-text:#fff;--rpg-accent:#fff;--rpg-divider:#888;--rpg-shadow:#111;--rpg-opacity:1;--rpg-radius:7px}
+.ahako-rpg-layer .ahako-rpg-card{background:color-mix(in srgb,var(--rpg-bg) calc(var(--rpg-opacity)*100%),transparent)!important;color:var(--rpg-text)!important;border-color:var(--rpg-border)!important;border-radius:var(--rpg-radius)!important;box-shadow:0 0 0 3px var(--rpg-divider),0 0 0 6px var(--rpg-shadow),0 8px 16px #0009!important}
+.ahako-rpg-layer .ahako-rpg-row,.ahako-rpg-layer .ahako-rpg-tab,.ahako-rpg-layer .ahako-rpg-heading,.ahako-rpg-layer .ahako-rpg-value,.ahako-rpg-layer .ahako-rpg-empty{color:var(--rpg-text)!important}
+.ahako-rpg-layer .ahako-rpg-row-value{color:var(--rpg-text)!important}
+.ahako-rpg-layer .ahako-rpg-row.is-selected::before,.ahako-rpg-layer .ahako-rpg-tab.is-active::before{color:var(--rpg-accent)!important}
+.ahako-rpg-layer .ahako-rpg-heading,.ahako-rpg-layer .ahako-rpg-tabs{border-bottom-color:var(--rpg-divider)!important}

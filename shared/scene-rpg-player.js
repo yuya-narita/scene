@@ -75,7 +75,7 @@ function update(player,index){
  const local=work.scenes[i]?.extensions?.ahakoRpgScene;
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
  if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
- const snapshot={nodes:local.nodes,position:local.position||'center'};
+ const snapshot={nodes:local.nodes,position:local.position||'center',style:local.style||null};
  const sameScene=ui.index===i;ui.index=i;ui.snapshot=snapshot;ui.entries=Object.entries(snapshot.nodes).filter(([id,n])=>{if(n.visible===false)return false;let p=n.parentId;const visited=new Set([id]);while(p){if(visited.has(p)||snapshot.nodes[p]?.visible===false||!snapshot.nodes[p])return false;visited.add(p);p=snapshot.nodes[p].parentId;}return true;});ui.map=new Map(ui.entries);
  if(!ui.entries.length){ui.layer.hidden=true;ui.stack=[];return;}
  // One initial root card, or the configured root with visible descendants.
@@ -83,8 +83,17 @@ function update(player,index){
  ui.stack=[null];for(const id of previousStack.slice(1)){if(ui.map.has(id)&&children(ui,ui.stack[ui.stack.length-1]).some(([key])=>key===id))ui.stack.push(id);else break;}
  ui.lock=false;ui.layer.hidden=false;
  if(global.__ahakoRpgStudioPlayer===player)studioViewByHost.set(player.host,{stack:ui.stack.slice(),tabs:{...ui.tabs},index:i});
+ applyCardStyle(ui.layer,snapshot.style);
  ui.layer.dataset.position=({top:'left',bottom:'right'}[snapshot.position]||(['left','center','right'].includes(snapshot.position)?snapshot.position:'center'));
  draw(player);
+}
+function applyCardStyle(layer,style){
+ const keys={background:'--rpg-bg',border:'--rpg-border',text:'--rpg-text',accent:'--rpg-accent',divider:'--rpg-divider',shadow:'--rpg-shadow'};
+ for(const [key,css] of Object.entries(keys)){
+  const val=style?.[key];layer.style.setProperty(css,typeof val==='string'&&/^#[0-9a-fA-F]{6}$/.test(val)?val:'');
+ }
+ const opacity=Number(style?.opacity);layer.style.setProperty('--rpg-opacity',Number.isFinite(opacity)?Math.max(0,Math.min(100,opacity))/100:1);
+ const radius=Number(style?.radius);layer.style.setProperty('--rpg-radius',Number.isFinite(radius)?Math.max(0,Math.min(24,radius))+'px':'7px');
 }
 function children(ui,parent){return ui.entries.filter(([id,node])=>(node.parentId||null)===parent);}
 function make(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=String(text);return e;}
