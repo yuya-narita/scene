@@ -15,12 +15,13 @@ function attach(player){
  host.appendChild(layer);
  ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true,tabs:{}};instances.set(player,ui);
  if(global.__ahakoRpgStudioPlayer===player){const saved=studioViewByHost.get(host);if(saved){ui.stack=saved.stack.slice();ui.tabs={...saved.tabs};ui.index=saved.index;}}
- const onScene=e=>{ui.cover=false;const previous=ui.index;update(player,e.detail?.index);if(previous!==ui.index)animateEntrance(ui,player);};
+ const onScene=e=>{ui.cover=false;update(player,e.detail?.index);animateEntrance(ui,player);};
  // PAST is a separate history surface: hide the active card until history closes.
  const onHistoryOpen=()=>{ui.layer.hidden=true;};
  const onHistoryClose=()=>{if(!ui.cover){update(player,player.index);animateEntrance(ui,player);}};
  const onCover=()=>{ui.cover=true;ui.layer.hidden=true;ui.stack=[];};
- host.addEventListener('sceneplayer:coverstart',onCover);
+ const onCoverStart=()=>{ui.cover=false;const reveal=()=>{if(ui.cover)return;if(player.els?.cover?.hidden===false){requestAnimationFrame(reveal);return;}update(player,player.index);animateEntrance(ui,player);};requestAnimationFrame(reveal);};
+ host.addEventListener('sceneplayer:coverstart',onCoverStart);
  host.addEventListener('sceneplayer:end',onCover);
  host.addEventListener('sceneplayer:scenechange',onScene);
  host.addEventListener('sceneplayer:historyopen',onHistoryOpen);
@@ -53,11 +54,11 @@ function attach(player){
  document.addEventListener('keydown',onKey,true);
  layer.addEventListener('pointerdown',()=>{activeKeyboardPlayer=player;});
  layer.addEventListener('touchstart',()=>{activeKeyboardPlayer=player;},{passive:true});
- ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:historyopen',onHistoryOpen);host.removeEventListener('sceneplayer:historyclose',onHistoryClose);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);document.removeEventListener('keydown',onKey,true);layer.remove();};
+ ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:historyopen',onHistoryOpen);host.removeEventListener('sceneplayer:historyclose',onHistoryClose);host.removeEventListener('sceneplayer:coverstart',onCoverStart);host.removeEventListener('sceneplayer:end',onCover);document.removeEventListener('keydown',onKey,true);layer.remove();};
  return ui;
 }
 function animateEntrance(ui,player){
- if(ui.layer.hidden||global.__ahakoRpgStudioPlayer===player)return;
+ if(ui.layer.hidden)return;
  // Restart the animation even when revisiting a previously displayed Scene.
  for(const card of ui.layer.querySelectorAll('.ahako-rpg-card')){
   card.classList.remove('ahako-rpg-enter-card');
@@ -212,7 +213,7 @@ function historySnapshot(scene){
 const oldHistoryRender=proto._renderHistory;
 if(typeof oldHistoryRender==='function')proto._renderHistory=function(...args){
  const result=oldHistoryRender.apply(this,args);
- if(global.__ahakoRpgStudioPlayer===this)return result;
+ // Studio and Public Player both need the same read-only PAST snapshot.
  if(this.els?.historyList&&Array.isArray(this.document?.scenes)){
   for(const item of this.els.historyList.querySelectorAll('.sp-history-item[data-index]')){
    const scene=this.document.scenes[Number(item.dataset.index)];
