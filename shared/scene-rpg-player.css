@@ -79,3 +79,13 @@
 .ahako-rpg-edit-field input{box-sizing:border-box;width:100%;min-width:0;border:1px solid #888!important;border-radius:4px;background:#fff!important;color:#171717!important;padding:8px!important;font:14px system-ui,sans-serif!important}
 .ahako-rpg-edit-actions{display:flex;gap:6px;flex-wrap:wrap}
 .ahako-rpg-edit-actions button{background:#303036!important;color:#fff!important;border:1px solid #888!important;border-radius:4px;padding:6px 9px;font-size:12px}
+
+/* Read-only command cards are part of each PAST item, not the live overlay. */
+.sp-history-item.ahako-rpg-history-item .sp-history-body{min-width:0}
+.ahako-rpg-history-snapshot{display:block!important;box-sizing:border-box;width:min(100%,310px);max-width:100%;margin:14px auto!important;padding:4px;background:#111;border:2px solid #777;border-radius:9px;box-shadow:0 0 0 2px #171717;color:#fff!important;writing-mode:horizontal-tb!important;direction:ltr;text-align:left!important;transform:none!important;filter:none!important;opacity:1!important}
+.ahako-rpg-history-panel{display:block!important;border:2px solid #eee;border-radius:5px;background:#18181b;padding:12px 10px}
+.ahako-rpg-history-row{display:flex!important;justify-content:space-between;align-items:center;gap:10px;padding:8px 5px;font:600 13px/1.5 system-ui,sans-serif;color:#fff!important;white-space:normal!important}
+.ahako-rpg-history-value{font:12px monospace;color:#ddd!important}
+.ahako-rpg-layer.ahako-rpg-entering .ahako-rpg-card.is-top{animation:ahakoRpgEnter .32s ease-out both}
+@keyframes ahakoRpgEnter{from{opacity:0;translate:0 9px}to{opacity:1;translate:0 0}}
+@media(prefers-reduced-motion:reduce){.ahako-rpg-layer.ahako-rpg-entering .ahako-rpg-card.is-top{animation:none}}
