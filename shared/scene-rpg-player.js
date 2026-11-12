@@ -67,7 +67,7 @@ function update(player,index){
  ui.stack=[null];for(const id of previousStack.slice(1)){if(ui.map.has(id)&&children(ui,ui.stack[ui.stack.length-1]).some(([key])=>key===id))ui.stack.push(id);else break;}
  ui.lock=false;ui.layer.hidden=false;
  if(global.__ahakoRpgStudioPlayer===player)studioViewByHost.set(player.host,{stack:ui.stack.slice(),tabs:{...ui.tabs},index:i});
- ui.layer.dataset.position=['top','center','bottom'].includes(snapshot.position)?snapshot.position:'center';
+ ui.layer.dataset.position=({top:'left',bottom:'right'}[snapshot.position]||(['left','center','right'].includes(snapshot.position)?snapshot.position:'center'));
  draw(player);
 }
 function children(ui,parent){return ui.entries.filter(([id,node])=>(node.parentId||null)===parent);}

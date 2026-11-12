@@ -46,3 +46,26 @@
 .ahako-rpg-card.has-stats .ahako-rpg-row.is-selected:before{display:none}
 @keyframes ahakoRpgCursorBlink{0%,54%{opacity:1}55%,100%{opacity:0}}
 @media(prefers-reduced-motion:reduce){.ahako-rpg-row.is-selected:before,.ahako-rpg-tab.is-active:before{animation:none}}
+
+/* Cursor belongs exclusively to the foreground card. */
+.ahako-rpg-card.is-behind .ahako-rpg-row.is-selected::before,
+.ahako-rpg-card.is-behind .ahako-rpg-tab.is-active::before{content:none!important;animation:none!important}
+.ahako-rpg-card.is-top .ahako-rpg-row.is-selected::before,
+.ahako-rpg-card.is-top .ahako-rpg-tab.is-active::before{animation:ahakoRpgCursorBlink .85s steps(1,end) infinite}
+/* Keep the stack vertically centered, even when the selected panel is tall. */
+.ahako-rpg-card[data-depth="0"]{top:calc(50% - 225px)!important}
+.ahako-rpg-card[data-depth="1"]{top:calc(50% - 152px)!important}
+.ahako-rpg-card[data-depth="2"],.ahako-rpg-card[data-depth="3"],.ahako-rpg-card[data-depth="4"]{top:calc(50% - 82px)!important}
+.ahako-rpg-layer{overflow:hidden!important;max-height:100%!important}
+.ahako-rpg-card{max-height:min(68%,520px)!important}
+/* Horizontal placement of the whole 480px stack, not individual cards. */
+.ahako-rpg-layer[data-position="left"],.ahako-rpg-layer[data-position="top"]{left:0!important;right:auto!important;transform:none!important}
+.ahako-rpg-layer[data-position="center"]{left:50%!important;right:auto!important;transform:translateX(-50%)!important}
+.ahako-rpg-layer[data-position="right"],.ahako-rpg-layer[data-position="bottom"]{left:auto!important;right:0!important;transform:none!important}
+@media(max-width:480px){
+ .ahako-rpg-layer[data-position="center"]{left:0!important;transform:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+ .ahako-rpg-card.is-top .ahako-rpg-row.is-selected::before,
+ .ahako-rpg-card.is-top .ahako-rpg-tab.is-active::before{animation:none!important}
+}
