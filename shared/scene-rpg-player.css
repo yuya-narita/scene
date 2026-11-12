@@ -22,3 +22,15 @@
 .ahako-rpg-value,.ahako-rpg-empty{padding:12px 4px;font-size:14px}
 @media(max-width:400px){.ahako-rpg-card[data-depth="1"]{left:26px;width:calc(100% - 40px)}.ahako-rpg-card[data-depth="2"],.ahako-rpg-card[data-depth="3"],.ahako-rpg-card[data-depth="4"]{left:3px;width:calc(100% - 6px)}}
 @media(prefers-reduced-motion:reduce){.ahako-rpg-card{transition:none!important}}
+
+/* Sample v0.9.1: only character status gets the tall 3-tab card. */
+.ahako-rpg-card[data-depth="2"],.ahako-rpg-card[data-depth="3"],.ahako-rpg-card[data-depth="4"]{min-height:0}
+.ahako-rpg-card.is-character-detail{min-height:330px!important}
+.ahako-rpg-card.is-character-detail .ahako-rpg-heading{padding-bottom:12px}
+.ahako-rpg-tabs{display:flex;gap:4px;border-bottom:1px solid #777;padding:9px 0}
+.ahako-rpg-tab{flex:1;min-width:0;background:transparent!important;border:0!important;color:#fff!important;padding:9px 1px;font:650 13px system-ui,sans-serif;white-space:nowrap;cursor:pointer}
+.ahako-rpg-tab.is-active:before{content:'▶';font-size:9px;margin-right:3px}
+.ahako-rpg-card.has-stats .ahako-rpg-row{min-height:0;padding:5px 1px;font-size:14px;font-weight:400}
+.ahako-rpg-card.has-stats .ahako-rpg-row.is-selected:before{display:none}
+.ahako-rpg-card.has-stats .ahako-rpg-row-value{font:14px system-ui,sans-serif}
+.ahako-rpg-card[data-depth="1"]{min-height:0}

@@ -10,12 +10,10 @@ function attach(player){
  let ui=instances.get(player);if(ui)return ui;
  const host=player.host, layer=document.createElement('div');layer.className='ahako-rpg-layer';layer.hidden=true;
  host.appendChild(layer);
- ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true};instances.set(player,ui);
+ ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true,tabs:{}};instances.set(player,ui);
  const onScene=e=>{ui.cover=false;update(player,e.detail?.index);};
  const onCover=()=>{ui.cover=true;ui.layer.hidden=true;ui.stack=[];};
- // coverstart means the reader STARTED Scene 1 (not that Cover opened).
- const onBegin=e=>{ui.cover=false;update(player,e.detail?.index);};
- host.addEventListener('sceneplayer:coverstart',onBegin);
+ host.addEventListener('sceneplayer:coverstart',onCover);
  host.addEventListener('sceneplayer:end',onCover);
  host.addEventListener('sceneplayer:scenechange',onScene);
  const onKey=e=>{if(ui.layer.hidden||!ui.stack.length||e.target.closest('input,textarea,select,[contenteditable]'))return;
@@ -23,16 +21,14 @@ function attach(player){
  };
  // Only react when focus is in this Player. Avoid capturing Studio editor shortcuts.
  host.addEventListener('keydown',onKey,true);
- ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onBegin);host.removeEventListener('sceneplayer:end',onCover);host.removeEventListener('keydown',onKey,true);layer.remove();};
+ ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);host.removeEventListener('keydown',onKey,true);layer.remove();};
  return ui;
 }
 function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapshot));return Object.entries(snapshot.nodes).filter(([id])=>visible.has(id));}
 function update(player,index){
  const ui=attach(player),work=player.document;
  const i=Number.isInteger(index)?index:player.index;
- if((player.host?.classList?.contains('sp-cover-open') || (ui.cover && !global.__ahakoRpgStudioPlayer && player.els?.cover && !player.els.cover.hidden)) || !work?.scenes || i<0 || i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
- // Studio Live Editor can render a Scene directly without firing coverstart.
- if(!player.host?.classList?.contains('sp-cover-open'))ui.cover=false;
+ if(ui.cover||!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
  const local=work.scenes[i]?.extensions?.ahakoRpgScene;
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
  if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
@@ -52,24 +48,41 @@ function draw(player){
  const ui=instances.get(player);if(!ui||ui.layer.hidden)return;
  const {layer,stack}=ui;layer.replaceChildren();
  for(let d=0;d<stack.length;d++){
-  const parent=stack[d], isTop=d===stack.length-1, list=children(ui,parent);
+  const parent=stack[d],isTop=d===stack.length-1,node=parent===null?null:ui.map.get(parent);
   const card=make('section','ahako-rpg-card'+(isTop?' is-top':' is-behind'));
   card.style.setProperty('--rpg-depth',String(d));card.dataset.depth=String(d);card.style.zIndex=String(100+d);
-  card.setAttribute('aria-label',parent===null?'コマンド':ui.map.get(parent)?.label||'詳細');
-  if(parent!==null&&d>=2){const heading=ui.map.get(parent);if(heading){const head=make('div','ahako-rpg-heading',heading.label||'');if(heading.value!==undefined&&heading.value!=='')head.append(make('span','',heading.value));card.append(head);}}
-  if(!list.length&&parent!==null){const node=ui.map.get(parent);if(node&&node.value!==undefined&&node.value!=='')card.append(make('div','ahako-rpg-value',node.value));}
-  list.forEach(([id,node],n)=>{
+  card.setAttribute('aria-label',node?.label||'コマンド');
+  const tabs=node?children(ui,parent).filter(([,n])=>n.type==='tab'):[];
+  const isDetail=tabs.length>0;
+  // Character status uses the sample's compact heading, three horizontal tabs and stat rows.
+  if(isDetail){
+   card.classList.add('is-character-detail');
+   const head=make('div','ahako-rpg-heading');const name=make('span','',node.label||'');
+   const [level,job]=String(node.value||'').split('|');if(level)name.textContent+=' '+level;
+   head.append(name,make('span','',job||''));card.append(head);
+   const nav=make('div','ahako-rpg-tabs');let current=ui.tabs[parent];if(!tabs.some(([id])=>id===current))current=tabs[0][0];ui.tabs[parent]=current;
+   tabs.forEach(([id,t])=>{const btn=make('button','ahako-rpg-tab'+(id===current?' is-active':''),t.label);btn.type='button';btn.onclick=e=>{e.stopPropagation();if(!isTop)return;ui.tabs[parent]=id;draw(player);if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);};nav.append(btn);});card.append(nav);
+  }else if(node&&d>=2){
+   // Non-character detail cards show the selected item only when it has children.
+   const direct=children(ui,parent);if(direct.length){const head=make('div','ahako-rpg-heading',node.label||'');card.append(head);}
+  }
+  const list=isDetail?children(ui,ui.tabs[parent]):children(ui,parent);
+  if(isDetail)card.classList.add('has-stats');
+  list.forEach(([id,item],n)=>{
    const hasChildren=children(ui,id).length>0;
-   const btn=make('button','ahako-rpg-row'+(n===0?' is-selected':''));btn.type='button';
-   const label=make('span','ahako-rpg-label',node.label||id);btn.append(label);
-   if(node.value!==undefined&&node.value!=='')btn.append(make('span','ahako-rpg-row-value',node.value));
-      btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;if(hasChildren){ui.stack.push(id);draw(player);if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);}else if(editing(player)){global.AhakoRpgSceneEditor?.select?.(id);}});
-   card.append(btn);
-   // Authoring: select any row in the sidebar; never insert controls in the card.
-
+   const btn=make('button','ahako-rpg-row'+(n===0&&!isDetail?' is-selected':''));btn.type='button';
+   btn.append(make('span','ahako-rpg-label',item.label||id));
+   if(item.value!==undefined&&item.value!==''){
+    const display=(item.type==='list'&&String(item.value).includes('|'))?String(item.value).split('|')[0]:item.value;
+    btn.append(make('span','ahako-rpg-row-value',display));
+   }
+   btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;
+    if(hasChildren){ui.stack.push(id);draw(player);}
+    if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);
+   });card.append(btn);
   });
-  if(!list.length&&parent===null){card.append(make('div','ahako-rpg-empty','表示項目なし'));}
-  // Each card is interactive; stage/background remains untouched.
+  if(!list.length&&node?.value&&!isDetail)card.append(make('div','ahako-rpg-value',node.value));
+  if(!list.length&&parent===null)card.append(make('div','ahako-rpg-empty','表示項目なし'));
   for(const ev of ['click','pointerdown','pointerup','touchstart','touchend'])card.addEventListener(ev,e=>e.stopPropagation());
   if(isTop&&d>0)bindSwipe(player,card);
   layer.append(card);
