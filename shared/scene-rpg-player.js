@@ -123,6 +123,8 @@ function directText(player,element,id,key,initial,convert){
   input.focus();input.select();
  };
  element.addEventListener('dblclick',openEditor);
+ // Keep the first click from navigating away before a double-click can be recognized.
+ element.addEventListener('click',e=>{e.stopPropagation();});
  let holdTimer=null,holdStart=null;
  element.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;holdStart={x:e.clientX,y:e.clientY};holdTimer=setTimeout(()=>{holdTimer=null;openEditor(e);},520);});
  element.addEventListener('pointermove',e=>{if(holdStart&&Math.hypot(e.clientX-holdStart.x,e.clientY-holdStart.y)>12){clearTimeout(holdTimer);holdTimer=null;}});
@@ -173,7 +175,15 @@ function draw(player){
     if(!display&&editing(player)){valueSpan.textContent='＋ 値';valueSpan.classList.add('ahako-rpg-empty-value');}
     directText(player,valueSpan,id,'value',display,v=>item.type==='list'?({levelText:v}):({value:v}));
    }
-   btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock||e.target.closest('input'))return;activeKeyboardPlayer=player;
+   btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock||e.target.closest('input'))return;
+    if(editing(player)&&e.detail>0){
+     if(e.detail>=2){clearTimeout(btn._rpgClickTimer);return;}
+     clearTimeout(btn._rpgClickTimer);
+     btn._rpgClickTimer=setTimeout(()=>{if(!btn.isConnected)return;btn._rpgClickTimer=null;btn.dispatchEvent(new CustomEvent('rpg-single-navigate'));},290);return;
+    }
+    btn.dispatchEvent(new CustomEvent('rpg-single-navigate'));
+   });
+   btn.addEventListener('rpg-single-navigate',()=>{if(!isTop||ui.lock)return;activeKeyboardPlayer=player;
     if(hasChildren){ui.stack.push(id);draw(player);}
     else if(editing(player)){
      // A leaf is allowed; offer an optional next card instead of silently doing nothing.
@@ -192,7 +202,7 @@ function draw(player){
    const tools=make('div','ahako-rpg-author-tools'),plus=make('button','ahako-rpg-author-add','＋ このカードに追加');plus.type='button';
    plus.onclick=e=>{e.stopPropagation();global.AhakoRpgSceneEditor?.add?.(isDetail?ui.tabs[parent]:parent);};tools.append(plus);card.append(tools);
   }
-  for(const ev of ['click','pointerdown','pointerup','touchstart','touchend'])card.addEventListener(ev,e=>e.stopPropagation());
+  for(const ev of ['click','dblclick','pointerdown','pointerup','touchstart','touchend'])card.addEventListener(ev,e=>e.stopPropagation());
   if(isTop&&d>0)bindSwipe(player,card);
   layer.append(card);
  }
