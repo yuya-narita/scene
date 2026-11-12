@@ -15,10 +15,10 @@ function attach(player){
  host.appendChild(layer);
  ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true,tabs:{}};instances.set(player,ui);
  if(global.__ahakoRpgStudioPlayer===player){const saved=studioViewByHost.get(host);if(saved){ui.stack=saved.stack.slice();ui.tabs={...saved.tabs};ui.index=saved.index;}}
- const onScene=e=>{ui.cover=false;const previous=ui.index;update(player,e.detail?.index);if(previous!==ui.index&&!ui.layer.hidden&&global.__ahakoRpgStudioPlayer!==player){const top=ui.layer.querySelector('.ahako-rpg-card.is-top');if(top){top.classList.remove('ahako-rpg-enter-card');void top.offsetWidth;top.classList.add('ahako-rpg-enter-card');}}};
+ const onScene=e=>{ui.cover=false;const previous=ui.index;update(player,e.detail?.index);if(previous!==ui.index)animateEntrance(ui,player);};
  // PAST is a separate history surface: hide the active card until history closes.
  const onHistoryOpen=()=>{ui.layer.hidden=true;};
- const onHistoryClose=()=>{if(!ui.cover)update(player,player.index);};
+ const onHistoryClose=()=>{if(!ui.cover){update(player,player.index);animateEntrance(ui,player);}};
  const onCover=()=>{ui.cover=true;ui.layer.hidden=true;ui.stack=[];};
  host.addEventListener('sceneplayer:coverstart',onCover);
  host.addEventListener('sceneplayer:end',onCover);
@@ -55,6 +55,15 @@ function attach(player){
  layer.addEventListener('touchstart',()=>{activeKeyboardPlayer=player;},{passive:true});
  ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:historyopen',onHistoryOpen);host.removeEventListener('sceneplayer:historyclose',onHistoryClose);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);document.removeEventListener('keydown',onKey,true);layer.remove();};
  return ui;
+}
+function animateEntrance(ui,player){
+ if(ui.layer.hidden||global.__ahakoRpgStudioPlayer===player)return;
+ // Restart the animation even when revisiting a previously displayed Scene.
+ for(const card of ui.layer.querySelectorAll('.ahako-rpg-card')){
+  card.classList.remove('ahako-rpg-enter-card');
+  card.style.animation='none';void card.offsetWidth;card.style.animation='';
+  card.classList.add('ahako-rpg-enter-card');
+ }
 }
 function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapshot));return Object.entries(snapshot.nodes).filter(([id])=>visible.has(id));}
 function update(player,index){
@@ -180,7 +189,7 @@ function bindSwipe(player,card){
  card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0&&active){global.addEventListener('pointermove',mm);global.addEventListener('pointerup',mu);}});
  card.addEventListener('click',e=>{if(offset>5){e.preventDefault();e.stopImmediatePropagation();}},true);
 }
-global.AhakoRpgPlayer={refresh(player){if(player){const ui=attach(player);update(player,player.index);}}};
+global.AhakoRpgPlayer={refresh(player,index){if(player){const ui=attach(player);if(global.__ahakoRpgStudioPlayer===player&&player.els?.cover?.hidden!==false)ui.cover=false;update(player,Number.isInteger(index)?index:player.index);}}};
 // Render a read-only command-card snapshot inside its own PAST Scene item.
 // Never reuse the live overlay: PAST has a separate scrollable DOM.
 function historySnapshot(scene){

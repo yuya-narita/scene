@@ -7193,14 +7193,15 @@ return flowCommentCard;}
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
     window.__ahakoRpgStudioPlayer=player;
     window.AhakoRpgSceneEditor && (window.AhakoRpgSceneEditor.refreshPreview=()=>{
-      if(!player?.document||!workingDocument||player.ended||player.els?.cover?.hidden===false)return;
-      const idx=selectedSceneIndex;
+      if(!player?.document||!workingDocument||player.ended)return;
+      const idx=Number.isInteger(player.index)&&player.index>=0?player.index:selectedSceneIndex;
+      if(player.els?.cover?.hidden===false)return;
       if(!player.document.scenes?.[idx]||!workingDocument.scenes?.[idx])return;
       const key='ahakoRpgScene',source=workingDocument.scenes[idx].extensions?.[key];
       player.document.scenes[idx].extensions ||= {};
       if(source)player.document.scenes[idx].extensions[key]=JSON.parse(JSON.stringify(source));
       else delete player.document.scenes[idx].extensions[key];
-      window.AhakoRpgPlayer?.refresh?.(player);
+      window.AhakoRpgPlayer?.refresh?.(player,idx);
     });
     installStudioPreviewSeek(player);
     if(!studioPlayerEventsBound){
