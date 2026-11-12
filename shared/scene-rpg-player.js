@@ -124,7 +124,17 @@ function draw(player){
    btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;activeKeyboardPlayer=player;
     if(hasChildren){ui.stack.push(id);draw(player);}
     if(editing(player)){global.AhakoRpgSceneEditor?.select?.(id);if(!hasChildren)editNode(player,id);}
-   });card.append(btn);
+   });
+   // In authoring mode every row, including a parent with children, has a
+   // dedicated edit target. The row itself still navigates the hierarchy.
+   if(isTop&&editing(player)){
+    const edit=make('span','ahako-rpg-row-edit','✎');
+    edit.setAttribute('role','button');edit.setAttribute('tabindex','0');edit.setAttribute('aria-label',`${item.label||id}を編集`);
+    edit.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();global.AhakoRpgSceneEditor?.select?.(id);editNode(player,id);});
+    edit.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();edit.click();}});
+    btn.append(edit);
+   }
+   card.append(btn);
   });
   if(!list.length&&node?.value&&!isDetail)card.append(make('div','ahako-rpg-value',node.value));
   if(!list.length&&parent===null)card.append(make('div','ahako-rpg-empty','表示項目なし'));

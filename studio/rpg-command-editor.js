@@ -44,7 +44,7 @@ function render(){const panel=$('rpgCommandEditor');if(!panel)return;const d=dat
 }
 function install(){const panel=$('rpgCommandEditor');if(!panel||panels.has(panel))return;panels.add(panel);
  panel.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
- if(b.hasAttribute('data-rpg-mode')){editing=!editing;render();}
+ if(b.hasAttribute('data-rpg-mode')){editing=!editing;render();global.AhakoRpgSceneEditor?.refreshPreview?.();}
  if(b.hasAttribute('data-rpg-structure')){details=!details;render();}
  if(b.hasAttribute('data-rpg-insert')){selectedId=null;setData(template());}
  if(b.hasAttribute('data-rpg-add-root'))add(null);

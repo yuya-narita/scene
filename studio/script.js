@@ -11472,6 +11472,10 @@ function startInlineTextEdit(field='text',targetEl=null){
     if(player.els?.cover)player.els.cover.hidden=true;
     player.host?.classList.remove('sp-cover-open');
     selectedSceneIndex=target;
+    // Core.refreshCurrent does not always emit scenechange (notably when a
+    // .scene package is reopened at a saved position). Sync the RPG overlay
+    // explicitly from the newly restored document, not from stale DOM state.
+    window.AhakoRpgPlayer?.refresh?.(player,target);
     if(!preserveSheet||!wasOpen)closeLiveEditSheet();
     if(desktopLiveActive()&&!preserveDesktopEditor)requestAnimationFrame(renderDesktopLivePanel);
     requestAnimationFrame(cleanupDesktopV2BuilderOverlays);
