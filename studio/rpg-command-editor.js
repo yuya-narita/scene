@@ -50,7 +50,7 @@ function install(){const panel=$('rpgCommandEditor');if(!panel||panels.has(panel
  if(b.hasAttribute('data-rpg-add-root'))add(null);
  if(b.hasAttribute('data-rpg-select')){selectedId=b.getAttribute('data-rpg-select');render();}
  if(b.hasAttribute('data-rpg-add-child')&&selectedId){const d=data(),node=d?.nodes?.[selectedId];if(node?.type==='detail'){alert('表示項目の中には追加できません。人物・コマンド・タブを選んでください。');}else add(selectedId);}
- if(b.hasAttribute('data-rpg-save-node')&&selectedId){const d=data();if(d?.nodes?.[selectedId]){beforeEdit();d.nodes[selectedId].label=panel.querySelector('[data-rpg-label]').value;d.nodes[selectedId].value=panel.querySelector('[data-rpg-value]').value;changed();}}
+ if(b.hasAttribute('data-rpg-save-node')&&selectedId){const d=data();if(d?.nodes?.[selectedId]){beforeEdit();d.nodes[selectedId].label=panel.querySelector('[data-rpg-label]').value;d.nodes[selectedId].value=panel.querySelector('[data-rpg-value]').value;if(d.nodes[selectedId].type==='list')delete d.nodes[selectedId].levelText;changed();}}
  if(b.hasAttribute('data-rpg-remove-node')&&selectedId){if(confirm('この項目と子項目を削除しますか？'))remove(selectedId);}
  if(b.hasAttribute('data-rpg-remove')){if(confirm('このSceneのRPGコマンドを削除しますか？'))setData(null);}
  if(b.hasAttribute('data-rpg-copy')){selectedId=null;const {w,i}=current();let prior=null;for(let j=i-1;j>=0;j--){if(w.scenes[j]?.extensions?.[KEY]){prior=w.scenes[j].extensions[KEY];break;}}setData(prior?JSON.parse(JSON.stringify(prior)):template());}
