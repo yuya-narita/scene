@@ -7193,7 +7193,7 @@ return flowCommentCard;}
     player=new ScenePlayerCore(playerHost,{allowPrevious:true,keyboard:true,swipe:true,endOnNextAction:true,maxStackVisible:4,autoDelay:2600,uiLanguage});
     window.__ahakoRpgStudioPlayer=player;
     window.AhakoRpgSceneEditor && (window.AhakoRpgSceneEditor.refreshPreview=()=>{
-      if(!player?.document||!workingDocument)return;
+      if(!player?.document||!workingDocument||player.ended||player.els?.cover?.hidden===false)return;
       const idx=selectedSceneIndex;
       if(!player.document.scenes?.[idx]||!workingDocument.scenes?.[idx])return;
       const key='ahakoRpgScene',source=workingDocument.scenes[idx].extensions?.[key];
@@ -16285,7 +16285,7 @@ function openDesktopTextDetail(){
     desktopLivePanelBody.innerHTML='';
     desktopLivePanelBody.append(tabShell);
     // Connect only after the panel is in the document; getElementById cannot find detached panes.
-    window.AhakoRpgEditor?.connect(()=>workingDocument,()=>selectedSceneIndex,()=>scheduleDraftSave(40));
+    window.AhakoRpgEditor?.connect(()=>workingDocument,()=>selectedSceneIndex,()=>scheduleDraftSave(40),()=>captureUndo('コマンドカードの変更を元に戻せます'));
     activate(activeTab);
     desktopSceneUnderlaySnapshot=desktopLivePanelBody.cloneNode(true);
     if(desktopShortcutButton)desktopShortcutButton.hidden=false;

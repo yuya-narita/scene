@@ -2,7 +2,7 @@
 (function(global){
 'use strict';
 const KEY='ahakoRpgScene', $=id=>document.getElementById(id);
-let getWork=()=>null,getIndex=()=>0,onEdit=()=>{},editing=true,selectedId=null,details=false;
+let getWork=()=>null,getIndex=()=>0,onEdit=()=>{},beforeEdit=()=>{},editing=true,selectedId=null,details=false;
 const panels=new WeakSet();
 // Scene-local presets. All fields remain editable; no inherited data is required.
 const presetNames={party:'RPGパーティ（4人・3タブ）',status:'人物ステータス（1人・3タブ）',items:'どうぐ・持ち物',record:'冒険の記録',daily:'きょうのおれ',blank:'空のコマンド'};
@@ -31,9 +31,9 @@ const template=()=>preset('party');
 function current(){const w=getWork(),i=getIndex();return {w,i,s:w?.scenes?.[i]};}
 function data(){return current().s?.extensions?.[KEY];}
 function changed(){onEdit();global.AhakoRpgSceneEditor?.refreshPreview?.();render();}
-function setData(v){const {s}=current();if(!s)return;s.extensions ||= {};if(v)s.extensions[KEY]=v;else delete s.extensions[KEY];changed();}
-function add(parentId){const d=data();if(!d)return;let id;do{id='node_'+Math.random().toString(36).slice(2,10)}while(d.nodes[id]);d.nodes[id]={type:parentId?'detail':'menu',label:'新しい項目',value:'',visible:true,...(parentId?{parentId}:{})};selectedId=id;changed();}
-function remove(id){const d=data();if(!d)return;const removeIds=new Set([id]);let more=true;while(more){more=false;for(const [key,n] of Object.entries(d.nodes)){if(n.parentId&&removeIds.has(n.parentId)&&!removeIds.has(key)){removeIds.add(key);more=true;}}}for(const k of removeIds)delete d.nodes[k];if(removeIds.has(selectedId))selectedId=null;changed();}
+function setData(v){const {s}=current();if(!s)return;beforeEdit();s.extensions ||= {};if(v)s.extensions[KEY]=v;else delete s.extensions[KEY];changed();}
+function add(parentId){const d=data();if(!d)return;beforeEdit();let id;do{id='node_'+Math.random().toString(36).slice(2,10)}while(d.nodes[id]);d.nodes[id]={type:parentId?'detail':'menu',label:'新しい項目',value:'',visible:true,...(parentId?{parentId}:{})};selectedId=id;changed();}
+function remove(id){const d=data();if(!d)return;beforeEdit();const removeIds=new Set([id]);let more=true;while(more){more=false;for(const [key,n] of Object.entries(d.nodes)){if(n.parentId&&removeIds.has(n.parentId)&&!removeIds.has(key)){removeIds.add(key);more=true;}}}for(const k of removeIds)delete d.nodes[k];if(removeIds.has(selectedId))selectedId=null;changed();}
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function render(){const panel=$('rpgCommandEditor');if(!panel)return;const d=data();
  const nodes=d?.nodes||{};
@@ -50,14 +50,14 @@ function install(){const panel=$('rpgCommandEditor');if(!panel||panels.has(panel
  if(b.hasAttribute('data-rpg-add-root'))add(null);
  if(b.hasAttribute('data-rpg-select')){selectedId=b.getAttribute('data-rpg-select');render();}
  if(b.hasAttribute('data-rpg-add-child')&&selectedId){const d=data(),node=d?.nodes?.[selectedId];if(node?.type==='detail'){alert('表示項目の中には追加できません。人物・コマンド・タブを選んでください。');}else add(selectedId);}
- if(b.hasAttribute('data-rpg-save-node')&&selectedId){const d=data();if(d?.nodes?.[selectedId]){d.nodes[selectedId].label=panel.querySelector('[data-rpg-label]').value;d.nodes[selectedId].value=panel.querySelector('[data-rpg-value]').value;changed();}}
+ if(b.hasAttribute('data-rpg-save-node')&&selectedId){const d=data();if(d?.nodes?.[selectedId]){beforeEdit();d.nodes[selectedId].label=panel.querySelector('[data-rpg-label]').value;d.nodes[selectedId].value=panel.querySelector('[data-rpg-value]').value;changed();}}
  if(b.hasAttribute('data-rpg-remove-node')&&selectedId){if(confirm('この項目と子項目を削除しますか？'))remove(selectedId);}
  if(b.hasAttribute('data-rpg-remove')){if(confirm('このSceneのRPGコマンドを削除しますか？'))setData(null);}
  if(b.hasAttribute('data-rpg-copy')){selectedId=null;const {w,i}=current();let prior=null;for(let j=i-1;j>=0;j--){if(w.scenes[j]?.extensions?.[KEY]){prior=w.scenes[j].extensions[KEY];break;}}setData(prior?JSON.parse(JSON.stringify(prior)):template());}
  });
- panel.addEventListener('change',e=>{if(e.target.hasAttribute('data-rpg-preset')&&e.target.value){if(!data()||confirm('このSceneのコマンドを選択したプリセットで置き換えますか？')){selectedId=null;setData(preset(e.target.value));}else{e.target.value='';}}if(e.target.hasAttribute('data-rpg-position')){const d=data();if(d){d.position=e.target.value;changed();}}if(e.target.hasAttribute('data-rpg-edit')){editing=e.target.checked;changed();}});
+ panel.addEventListener('change',e=>{if(e.target.hasAttribute('data-rpg-preset')&&e.target.value){if(!data()||confirm('このSceneのコマンドを選択したプリセットで置き換えますか？')){selectedId=null;setData(preset(e.target.value));}else{e.target.value='';}}if(e.target.hasAttribute('data-rpg-position')){const d=data();if(d){beforeEdit();d.position=e.target.value;changed();}}if(e.target.hasAttribute('data-rpg-edit')){editing=e.target.checked;changed();}});
 }
-global.AhakoRpgSceneEditor={select(id){if(!data()?.nodes?.[id])return;selectedId=id;render();},connect(work,index,cb){getWork=work;getIndex=index;if(cb)onEdit=cb;install();render();},render,active:()=>!!data()&&editing,scene:()=>data(),refreshPreview:null,update(id,fields){const d=data();if(!d?.nodes?.[id])return;Object.assign(d.nodes[id],fields);changed();},add,remove};
+global.AhakoRpgSceneEditor={select(id){if(!data()?.nodes?.[id])return;selectedId=id;render();},connect(work,index,cb,pre){getWork=work;getIndex=index;if(cb)onEdit=cb;if(pre)beforeEdit=pre;install();render();},render,active:()=>!!data()&&editing,scene:()=>data(),refreshPreview:null,update(id,fields){const d=data();if(!d?.nodes?.[id])return;beforeEdit();Object.assign(d.nodes[id],fields);changed();},add,remove};
 // Preserve old Studio connection points while replacing the former advanced data editor.
 global.AhakoRpgEditor={connect:(...args)=>global.AhakoRpgSceneEditor.connect(...args),render:()=>global.AhakoRpgSceneEditor.render()};
 })(window);

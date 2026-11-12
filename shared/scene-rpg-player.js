@@ -55,7 +55,7 @@ function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapsho
 function update(player,index){
  const ui=attach(player),work=player.document;
  const i=Number.isInteger(index)?index:player.index;
- if((ui.cover&&!global.__ahakoRpgStudioPlayer)||!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
+ if(ui.cover||player.els?.cover?.hidden===false||!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
  const local=work.scenes[i]?.extensions?.ahakoRpgScene;
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
  if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
@@ -174,7 +174,7 @@ function bindSwipe(player,card){
  card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0&&active){global.addEventListener('pointermove',mm);global.addEventListener('pointerup',mu);}});
  card.addEventListener('click',e=>{if(offset>5){e.preventDefault();e.stopImmediatePropagation();}},true);
 }
-global.AhakoRpgPlayer={refresh(player){if(player){const ui=attach(player);if(global.__ahakoRpgStudioPlayer===player)ui.cover=false;update(player,player.index);}}};
+global.AhakoRpgPlayer={refresh(player){if(player){const ui=attach(player);update(player,player.index);}}};
 const oldLoad=proto.load;
 proto.load=function(...args){const result=oldLoad.apply(this,args);attach(this);update(this,this.index);return result;};
 const oldDestroy=proto.destroy;
