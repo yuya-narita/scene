@@ -100,3 +100,12 @@
 .ahako-rpg-card .ahako-rpg-direct-input{box-sizing:border-box;max-width:100%;min-width:52px;background:#fff;color:#171717;border:1px solid #8daaff;border-radius:3px;padding:2px 4px;font:inherit;line-height:1.3;outline:2px solid #8daaff;outline-offset:1px}
 .ahako-rpg-card .ahako-rpg-empty-value{opacity:.55;font-size:.85em}
 .ahako-rpg-card .ahako-rpg-heading-level{margin-inline-start:.35em}
+
+/* Card kinds and explicit author pencil controls. Existing card layouts remain unchanged. */
+.ahako-rpg-row-pencil{margin-left:auto;flex:0 0 auto;font-size:13px;color:#eee;border:1px solid #777;border-radius:4px;padding:3px 7px;line-height:1.1;cursor:pointer}
+.ahako-rpg-row-pencil:hover{background:#ffffff25}
+.ahako-rpg-card.ahako-rpg-kind-message .ahako-rpg-message{white-space:pre-wrap;line-height:1.9;padding:12px 5px;font-size:15px}
+.ahako-rpg-card.ahako-rpg-kind-message{min-height:0!important}
+.ahako-rpg-card.ahako-rpg-kind-choice .ahako-rpg-row{border-bottom:1px solid #ffffff30!important}
+.ahako-rpg-card.ahako-rpg-kind-list .ahako-rpg-row{min-height:35px}
+.ahako-rpg-edit-pencil{color:white;background:#333;border:1px solid #777;border-radius:4px;padding:4px 9px;cursor:pointer}
