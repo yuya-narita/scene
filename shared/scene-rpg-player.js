@@ -5,12 +5,15 @@ const API=global.AhakoRpgCommand, Core=global.ScenePlayerCore;
 if(!API||!Core||Core.prototype.__ahakoRpgInstalled)return;
 const proto=Core.prototype;proto.__ahakoRpgInstalled=true;
 const instances=new WeakMap();
+// Keep the currently opened card across Studio preview rebuilds.
+const studioViewByHost=new WeakMap();
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 function attach(player){
  let ui=instances.get(player);if(ui)return ui;
  const host=player.host, layer=document.createElement('div');layer.className='ahako-rpg-layer';layer.hidden=true;
  host.appendChild(layer);
  ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true,tabs:{}};instances.set(player,ui);
+ if(global.__ahakoRpgStudioPlayer===player){const saved=studioViewByHost.get(host);if(saved){ui.stack=saved.stack.slice();ui.tabs={...saved.tabs};ui.index=saved.index;}}
  const onScene=e=>{ui.cover=false;update(player,e.detail?.index);};
  const onCover=()=>{ui.cover=true;ui.layer.hidden=true;ui.stack=[];};
  host.addEventListener('sceneplayer:coverstart',onCover);
@@ -36,9 +39,10 @@ function update(player,index){
  const sameScene=ui.index===i;ui.index=i;ui.snapshot=snapshot;ui.entries=Object.entries(snapshot.nodes).filter(([id,n])=>{if(n.visible===false)return false;let p=n.parentId;const visited=new Set([id]);while(p){if(visited.has(p)||snapshot.nodes[p]?.visible===false||!snapshot.nodes[p])return false;visited.add(p);p=snapshot.nodes[p].parentId;}return true;});ui.map=new Map(ui.entries);
  if(!ui.entries.length){ui.layer.hidden=true;ui.stack=[];return;}
  // One initial root card, or the configured root with visible descendants.
- const previousStack=(sameScene&&ui.stack.length)?ui.stack.slice():[null];
+ const previousStack=((sameScene||global.__ahakoRpgStudioPlayer===player)&&ui.stack.length)?ui.stack.slice():[null];
  ui.stack=[null];for(const id of previousStack.slice(1)){if(ui.map.has(id)&&children(ui,ui.stack[ui.stack.length-1]).some(([key])=>key===id))ui.stack.push(id);else break;}
  ui.lock=false;ui.layer.hidden=false;
+ if(global.__ahakoRpgStudioPlayer===player)studioViewByHost.set(player.host,{stack:ui.stack.slice(),tabs:{...ui.tabs},index:i});
  ui.layer.dataset.position=['top','center','bottom'].includes(snapshot.position)?snapshot.position:'center';
  draw(player);
 }
@@ -47,6 +51,7 @@ function make(tag,cls,text){const e=document.createElement(tag);if(cls)e.classNa
 function draw(player){
  const ui=instances.get(player);if(!ui||ui.layer.hidden)return;
  const {layer,stack}=ui;layer.replaceChildren();
+ if(global.__ahakoRpgStudioPlayer===player)studioViewByHost.set(player.host,{stack:stack.slice(),tabs:{...ui.tabs},index:ui.index});
  for(let d=0;d<stack.length;d++){
   const parent=stack[d],isTop=d===stack.length-1,node=parent===null?null:ui.map.get(parent);
   const card=make('section','ahako-rpg-card'+(isTop?' is-top':' is-behind'));
@@ -134,10 +139,10 @@ function bindSwipe(player,card){
  card.addEventListener('touchstart',e=>{if(e.touches.length===1)begin(e.touches[0].clientX,e.touches[0].clientY)},{passive:true});
  card.addEventListener('touchmove',e=>{if(e.touches.length===1)move(e.touches[0].clientX,e.touches[0].clientY,e)},{passive:false});
  card.addEventListener('touchend',()=>end(),{passive:true});card.addEventListener('touchcancel',()=>end(true),{passive:true});
- card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0)begin(e.clientX,e.clientY)});
- const mm=e=>{if(e.pointerType==='mouse'&&active)move(e.clientX,e.clientY,e)};
+ card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0&&!e.target.closest('button,input,select,textarea'))begin(e.clientX,e.clientY)});
+ const mm=e=>{if(e.pointerType==='mouse'&&active){if(!card.contains(e.target)&&!swiping){active=false;return;}move(e.clientX,e.clientY,e)}};
  const mu=e=>{if(e.pointerType==='mouse'&&active){end();global.removeEventListener('pointermove',mm);global.removeEventListener('pointerup',mu);}};
- card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0){global.addEventListener('pointermove',mm);global.addEventListener('pointerup',mu);}});
+ card.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0&&active){global.addEventListener('pointermove',mm);global.addEventListener('pointerup',mu);}});
  card.addEventListener('click',e=>{if(offset>5){e.preventDefault();e.stopImmediatePropagation();}},true);
 }
 global.AhakoRpgPlayer={refresh(player){if(player){const ui=attach(player);if(global.__ahakoRpgStudioPlayer===player)ui.cover=false;update(player,player.index);}}};
