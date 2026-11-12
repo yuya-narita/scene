@@ -58,7 +58,7 @@ function draw(player){
   if(isDetail){
    card.classList.add('is-character-detail');
    const head=make('div','ahako-rpg-heading');const name=make('span','',node.label||'');
-   const [level,job]=String(node.value||'').split('|');if(level)name.textContent+=' '+level;
+   const [level,job]=String(node.value||'').split('|');if(level)name.textContent+=' '+(/^Lv\s*/i.test(level)?level:'Lv '+level);
    head.append(name,make('span','',job||''));card.append(head);
    const nav=make('div','ahako-rpg-tabs');let current=ui.tabs[parent];if(!tabs.some(([id])=>id===current))current=tabs[0][0];ui.tabs[parent]=current;
    tabs.forEach(([id,t])=>{const btn=make('button','ahako-rpg-tab'+(id===current?' is-active':''),t.label);btn.type='button';btn.onclick=e=>{e.stopPropagation();if(!isTop)return;ui.tabs[parent]=id;draw(player);if(editing(player))global.AhakoRpgSceneEditor?.select?.(id);};nav.append(btn);});card.append(nav);
