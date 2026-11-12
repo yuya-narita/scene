@@ -93,8 +93,8 @@ function make(tag,cls,text){const e=document.createElement(tag);if(cls)e.classNa
 function directText(player,element,id,key,initial,convert){
  if(!editing(player))return;
  element.classList.add('ahako-rpg-edit-target');
- element.title='クリックして直接編集';
- element.addEventListener('click',e=>{
+ element.title='ダブルクリック（スマホは長押し）で編集';
+ const openEditor=e=>{
   e.preventDefault();e.stopPropagation();
   if(element.querySelector('input'))return;
   const original=String(initial??'');
@@ -121,7 +121,13 @@ function directText(player,element,id,key,initial,convert){
   });
   input.addEventListener('blur',()=>finish(true),{once:true});
   input.focus();input.select();
- });
+ };
+ element.addEventListener('dblclick',openEditor);
+ let holdTimer=null,holdStart=null;
+ element.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;holdStart={x:e.clientX,y:e.clientY};holdTimer=setTimeout(()=>{holdTimer=null;openEditor(e);},520);});
+ element.addEventListener('pointermove',e=>{if(holdStart&&Math.hypot(e.clientX-holdStart.x,e.clientY-holdStart.y)>12){clearTimeout(holdTimer);holdTimer=null;}});
+ for(const ev of ['pointerup','pointercancel','pointerleave'])element.addEventListener(ev,()=>{clearTimeout(holdTimer);holdTimer=null;});
+ element.addEventListener('contextmenu',e=>{e.preventDefault();openEditor(e);});
 }
 function draw(player){
  const ui=instances.get(player);if(!ui||ui.layer.hidden)return;
@@ -167,13 +173,20 @@ function draw(player){
     if(!display&&editing(player)){valueSpan.textContent='＋ 値';valueSpan.classList.add('ahako-rpg-empty-value');}
     directText(player,valueSpan,id,'value',display,v=>item.type==='list'?({levelText:v}):({value:v}));
    }
-   btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock)return;activeKeyboardPlayer=player;
+   btn.addEventListener('click',e=>{e.stopPropagation();if(!isTop||ui.lock||e.target.closest('input'))return;activeKeyboardPlayer=player;
     if(hasChildren){ui.stack.push(id);draw(player);}
+    else if(editing(player)){
+     // A leaf is allowed; offer an optional next card instead of silently doing nothing.
+     ui.stack.push(id);draw(player);
+    }
     if(editing(player)){global.AhakoRpgSceneEditor?.select?.(id);}
    });
    card.append(btn);
   });
   if(!list.length&&node?.value&&!isDetail){const val=make('div','ahako-rpg-value',node.value);directText(player,val,parent,'value',node.value);card.append(val);}
+  if(!list.length&&parent!==null&&editing(player)){
+   const empty=make('div','ahako-rpg-empty','ここで終了（次のカードはありません）');card.append(empty);
+  }
   if(!list.length&&parent===null)card.append(make('div','ahako-rpg-empty','表示項目なし'));
   if(isTop&&editing(player)){
    const tools=make('div','ahako-rpg-author-tools'),plus=make('button','ahako-rpg-author-add','＋ このカードに追加');plus.type='button';
