@@ -16,10 +16,15 @@ function attach(player){
  ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true,tabs:{}};instances.set(player,ui);
  if(global.__ahakoRpgStudioPlayer===player){const saved=studioViewByHost.get(host);if(saved){ui.stack=saved.stack.slice();ui.tabs={...saved.tabs};ui.index=saved.index;}}
  const onScene=e=>{ui.cover=false;update(player,e.detail?.index);};
+ // PAST is a separate history surface: hide the active card until history closes.
+ const onHistoryOpen=()=>{ui.layer.hidden=true;};
+ const onHistoryClose=()=>{if(!ui.cover)update(player,player.index);};
  const onCover=()=>{ui.cover=true;ui.layer.hidden=true;ui.stack=[];};
  host.addEventListener('sceneplayer:coverstart',onCover);
  host.addEventListener('sceneplayer:end',onCover);
  host.addEventListener('sceneplayer:scenechange',onScene);
+ host.addEventListener('sceneplayer:historyopen',onHistoryOpen);
+ host.addEventListener('sceneplayer:historyclose',onHistoryClose);
  const onKey=e=>{
   if(ui.layer.hidden||!ui.stack.length||activeKeyboardPlayer!==player||e.target.closest?.('input,textarea,select,[contenteditable]'))return;
   const card=ui.layer.lastElementChild;
@@ -48,13 +53,14 @@ function attach(player){
  document.addEventListener('keydown',onKey,true);
  layer.addEventListener('pointerdown',()=>{activeKeyboardPlayer=player;});
  layer.addEventListener('touchstart',()=>{activeKeyboardPlayer=player;},{passive:true});
- ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);document.removeEventListener('keydown',onKey,true);layer.remove();};
+ ui.cleanup=()=>{host.removeEventListener('sceneplayer:scenechange',onScene);host.removeEventListener('sceneplayer:historyopen',onHistoryOpen);host.removeEventListener('sceneplayer:historyclose',onHistoryClose);host.removeEventListener('sceneplayer:coverstart',onCover);host.removeEventListener('sceneplayer:end',onCover);document.removeEventListener('keydown',onKey,true);layer.remove();};
  return ui;
 }
 function visibleEntries(snapshot){const visible=new Set(API.visibleNodes(snapshot));return Object.entries(snapshot.nodes).filter(([id])=>visible.has(id));}
 function update(player,index){
  const ui=attach(player),work=player.document;
  const i=Number.isInteger(index)?index:player.index;
+ if(player.historyOpen){ui.layer.hidden=true;return;}
  if(ui.cover||player.els?.cover?.hidden===false||!work?.scenes||i<0||i>=work.scenes.length){ui.layer.hidden=true;ui.stack=[];return;}
  const local=work.scenes[i]?.extensions?.ahakoRpgScene;
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
