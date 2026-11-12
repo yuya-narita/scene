@@ -15,7 +15,7 @@ function attach(player){
  host.appendChild(layer);
  ui={layer,stack:[],index:-1,dragging:false,lock:false,handlers:[],selected:null,cover:true,tabs:{}};instances.set(player,ui);
  if(global.__ahakoRpgStudioPlayer===player){const saved=studioViewByHost.get(host);if(saved){ui.stack=saved.stack.slice();ui.tabs={...saved.tabs};ui.index=saved.index;}}
- const onScene=e=>{ui.cover=false;const before=ui.index;update(player,e.detail?.index);if(before!==ui.index&&!ui.layer.hidden&&!global.__ahakoRpgStudioPlayer)ui.layer.classList.add('ahako-rpg-entering');};
+ const onScene=e=>{ui.cover=false;const previous=ui.index;update(player,e.detail?.index);if(previous!==ui.index&&!ui.layer.hidden&&global.__ahakoRpgStudioPlayer!==player){const top=ui.layer.querySelector('.ahako-rpg-card.is-top');if(top){top.classList.remove('ahako-rpg-enter-card');void top.offsetWidth;top.classList.add('ahako-rpg-enter-card');}}};
  // PAST is a separate history surface: hide the active card until history closes.
  const onHistoryOpen=()=>{ui.layer.hidden=true;};
  const onHistoryClose=()=>{if(!ui.cover)update(player,player.index);};
@@ -66,7 +66,7 @@ function update(player,index){
  // Only explicitly inserted scenes show a command. Never inherit it to other scenes.
  if(!local?.nodes||!Object.keys(local.nodes).length){ui.layer.hidden=true;ui.stack=[];return;}
  const snapshot={nodes:local.nodes,position:local.position||'center'};
- const sameScene=ui.index===i;ui.layer.classList.remove('ahako-rpg-entering');ui.index=i;ui.snapshot=snapshot;ui.entries=Object.entries(snapshot.nodes).filter(([id,n])=>{if(n.visible===false)return false;let p=n.parentId;const visited=new Set([id]);while(p){if(visited.has(p)||snapshot.nodes[p]?.visible===false||!snapshot.nodes[p])return false;visited.add(p);p=snapshot.nodes[p].parentId;}return true;});ui.map=new Map(ui.entries);
+ const sameScene=ui.index===i;ui.index=i;ui.snapshot=snapshot;ui.entries=Object.entries(snapshot.nodes).filter(([id,n])=>{if(n.visible===false)return false;let p=n.parentId;const visited=new Set([id]);while(p){if(visited.has(p)||snapshot.nodes[p]?.visible===false||!snapshot.nodes[p])return false;visited.add(p);p=snapshot.nodes[p].parentId;}return true;});ui.map=new Map(ui.entries);
  if(!ui.entries.length){ui.layer.hidden=true;ui.stack=[];return;}
  // One initial root card, or the configured root with visible descendants.
  const previousStack=((sameScene||global.__ahakoRpgStudioPlayer===player)&&ui.stack.length)?ui.stack.slice():[null];
@@ -203,11 +203,12 @@ function historySnapshot(scene){
 const oldHistoryRender=proto._renderHistory;
 if(typeof oldHistoryRender==='function')proto._renderHistory=function(...args){
  const result=oldHistoryRender.apply(this,args);
- if(this.els?.historyList&&this.document?.scenes){
+ if(global.__ahakoRpgStudioPlayer===this)return result;
+ if(this.els?.historyList&&Array.isArray(this.document?.scenes)){
   for(const item of this.els.historyList.querySelectorAll('.sp-history-item[data-index]')){
    const scene=this.document.scenes[Number(item.dataset.index)];
    const snapshot=historySnapshot(scene);
-   if(snapshot){const body=item.querySelector('.sp-history-body');if(body){body.append(snapshot);item.classList.add('ahako-rpg-history-item');}}
+   if(snapshot&&!item.querySelector('.ahako-rpg-history-snapshot')){const body=item.querySelector('.sp-history-body');if(body){body.append(snapshot);item.classList.add('ahako-rpg-history-item');}}
   }
  }
  return result;
