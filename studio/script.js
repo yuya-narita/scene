@@ -16254,7 +16254,7 @@ function openDesktopTextDetail(){
     rpgDisclosure.className='rpg-editor-disclosure';
     rpgDisclosure.open=window.__ahakoRpgDisclosureOpen===true;
     rpgDisclosure.addEventListener('toggle',()=>{window.__ahakoRpgDisclosureOpen=rpgDisclosure.open;});
-    rpgDisclosure.innerHTML='<summary>RPGコマンド</summary><section id="rpgCommandEditor" class="rpg-command-editor"></section>';
+    rpgDisclosure.innerHTML='<summary>コマンドカード</summary><section id="rpgCommandEditor" class="rpg-command-editor"></section>';
     panes.effect.appendChild(rpgDisclosure);
     if(!inlineExistingDetail('background',panes.background))panes.background.appendChild(bgCard);
     panes.image.appendChild(sceneImageCard);
