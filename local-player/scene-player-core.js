@@ -4234,19 +4234,36 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(this._motionBound)return; this._motionBound=true;
       this._on(global,'deviceorientation',(e)=>{
         if(!this._isSpatialBackground() || !this._motionAllowed || this.backgroundState?.motionSensor===false || this._panoViewLocked)return;
-        const alpha=Number(e.alpha), beta=Number(e.beta);
-        if(!Number.isFinite(alpha)||!Number.isFinite(beta))return;
-        if(this._motionLastAlpha==null){
-          this._motionLastAlpha=alpha; this._motionBaseBeta=beta;
+        const {alpha,beta,gamma}=e;
+        if(!Number.isFinite(beta))return;
+        const previousHeading=this._motionLastHeading;
+        const radians=Math.PI/180;
+        // Project the screen normal onto the horizontal plane in the device's
+        // Z-X'-Y'' rotation order. Alpha alone also changes with device roll.
+        const roll=Number.isFinite(gamma)?gamma*radians:0;
+        const horizontalX=Math.sin(roll);
+        const horizontalY=Math.sin(beta*radians)*Math.cos(roll);
+        const horizontalLength=Math.hypot(horizontalX,horizontalY);
+        // Hysteresis keeps the heading from toggling near a vertical sightline.
+        const minimumLength=Math.sin((previousHeading==null?18:12)*radians);
+        const heading=Number.isFinite(alpha)&&horizontalLength>=minimumLength
+          ?(alpha+Math.atan2(horizontalX,horizontalY)/radians+360)%360
+          :null;
+        this._motionLastHeading=heading;
+        if(this._motionBaseBeta==null){
+          this._motionBaseBeta=beta;
           this._panoSensorYaw=Number(this._panoSensorYaw)||0;
           this._panoSensorPitch=Number(this._panoSensorPitch)||0;
           return;
         }
-        // alpha is heading/yaw. Use the shortest incremental delta so crossing
-        // 359° -> 0° stays continuous and a chair can rotate through full 360°.
-        let da=alpha-this._motionLastAlpha;
-        if(da>180)da-=360; else if(da<-180)da+=360;
-        this._motionLastAlpha=alpha;
+        let da=0;
+        if(heading==null||previousHeading==null){
+          // Drop residual velocity and rebase at the first reliable heading.
+          // Pitch can continue updating while the horizontal position is held.
+          this._panoYawVelocity=0;
+        }else{
+          da=((heading-previousHeading+540)%360)-180;
+        }
         // Ignore tiny sensor chatter, then low-pass the intentional rotation.
         if(Math.abs(da)<.28)da=0;
         da=Math.max(-8,Math.min(8,da));
@@ -4318,7 +4335,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._panoPitch=Math.max(-40,Math.min(40,(Number(this._panoPitch)||0)+(Number(this._panoSensorPitch)||0)));
       }
       this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
-      this._motionLastAlpha=null;this._motionBaseBeta=null;
+      this._motionLastHeading=null;this._motionBaseBeta=null;
       this._panoViewLocked=locked;
       this._render360Background();
       this._show360ViewLockControl();
@@ -4326,7 +4343,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _reset360Home(){
       this._panoYaw=Number(this.backgroundState?.homeYaw)||0;
       this._panoPitch=Number(this.backgroundState?.homePitch)||0;
-      this._motionLastAlpha=null;this._motionBaseBeta=null;
+      this._motionLastHeading=null;this._motionBaseBeta=null;
       this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
       this._render360Background();
     }
@@ -4347,7 +4364,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
               if(w>h)this._panoYaw=0;
             }
             this._panoSensorYaw=0;this._panoSensorPitch=0;this._panoYawVelocity=0;
-            this._motionLastAlpha=null;this._motionBaseBeta=null;
+            this._motionLastHeading=null;this._motionBaseBeta=null;
             requestAnimationFrame(()=>requestAnimationFrame(()=>{
               if(this._isSpatialBackground())this._render360Background();
             }));
@@ -4563,7 +4580,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(this._panoYaw==null || enteringSpatial)this._reset360Home();
         this._bind360Gestures(); this._bind360Motion(); this._bindSpatialViewportStability();
       } else {
-        this._motionLastAlpha=null; this._panoYawVelocity=0;
+        this._motionLastHeading=null; this._panoYawVelocity=0;
         this._panoViewLocked=false;
         clearTimeout(this._panoViewLockHideTimer);
         if(this.els?.panoViewLock)this.els.panoViewLock.hidden=true;
