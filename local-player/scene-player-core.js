@@ -3687,13 +3687,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       return {preset:'auto'};
     }
 
+    _textPlacementArea(stageWidth) {
+      // Match the Studio tablet preview. Keep the stage and background full width.
+      const width=Math.min(stageWidth,768);
+      return {left:(stageWidth-width)/2,width};
+    }
+
     _customPositionTransform(item, position, stageWidth, stageHeight, margin) {
+      const placement=this._textPlacementArea(stageWidth);
       const contentWidth=Math.max(1,item.node.clientWidth||item.node.getBoundingClientRect().width);
       const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
       const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
       // Custom means custom: do not force the glyph box back inside the viewport.
       // A broad safety bound still keeps a lost element recoverable in Studio.
-      const centerX=Math.max(-stageWidth*.35,Math.min(stageWidth*1.35,stageWidth*position.x));
+      const centerX=placement.left+placement.width*clamp(position.x,-.35,1.35);
       const centerY=Math.max(-stageHeight*.35,Math.min(stageHeight*1.35,stageHeight*position.y));
       return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
     }
@@ -3714,7 +3721,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       for(let g=groups.length-2;g>=0;g-=1){
         const current=groups[g],next=groups[g+1],currentBounds=bounds(current),nextBounds=bounds(next),currentLast=metrics[current[current.length-1]],nextFirst=metrics[next[0]],flow=nextFirst.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         let dx=0,dy=0;
-        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),stageWidth*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
+        if(flow==='horizontal'){const gap=Math.max(this._sceneGap(currentLast.scene,nextFirst.scene),this._textPlacementArea(stageWidth).width*.09)+extraGap,verticalReading=nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl';dx=verticalReading?nextBounds.right+gap-currentBounds.left:nextBounds.left-gap-currentBounds.right;dy=nextBounds.centerY-currentBounds.centerY;}
         else{const eitherVertical=currentLast.scene?.presentation?.text?.writingMode==='vertical-rl'||nextFirst.scene?.presentation?.text?.writingMode==='vertical-rl',gap=this._sceneGap(currentLast.scene,nextFirst.scene)+(eitherVertical?Math.max(28,Math.min(56,stageHeight*.05)):0)+extraGap;dx=0;dy=nextBounds.top-gap-currentBounds.bottom;}
         current.forEach(i=>{positions[i].x+=dx;positions[i].y+=dy;});
       }
@@ -3756,7 +3763,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const flow=next.scene?.presentation?.flow==='horizontal'?'horizontal':'vertical';
         const eitherVertical=current.scene?.presentation?.text?.writingMode==='vertical-rl'||next.scene?.presentation?.text?.writingMode==='vertical-rl';
         if(flow==='horizontal'){
-          const gap=Math.max(this._sceneGap(current.scene,next.scene),stageWidth*.09)+extraGap;
+          const gap=Math.max(this._sceneGap(current.scene,next.scene),this._textPlacementArea(stageWidth).width*.09)+extraGap;
           const verticalReading=next.scene?.presentation?.text?.writingMode==='vertical-rl';
           positions[i]={
             x:verticalReading

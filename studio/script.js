@@ -12778,6 +12778,12 @@ function startInlineTextEdit(field='text',targetEl=null){
         liveScene.presentation||={};liveScene.presentation.text||={};
         if(!Number.isFinite(Number(angle))||Math.abs(Number(angle))<.5)delete liveScene.presentation.text.angle;else liveScene.presentation.text.angle=Number(angle);
       };
+      const placementBounds=rect=>{
+        const stageWidth=Math.max(1,stage.clientWidth);
+        const area=player._textPlacementArea(stageWidth);
+        const scale=rect.width/stageWidth;
+        return {left:rect.left+area.left*scale,width:Math.max(1,area.width*scale)};
+      };
       const applySavedPosition=()=>{
         const rect=stage.getBoundingClientRect();
         const geometry=player._measureSceneGeometry(article,rect);
@@ -12792,8 +12798,9 @@ function startInlineTextEdit(field='text',targetEl=null){
       if(existingPosition.preset==='auto'){
         const scaleX=stageRect.width/Math.max(1,stage.clientWidth);
         const scaleY=stageRect.height/Math.max(1,stage.clientHeight);
+        const horizontal=placementBounds(stageRect);
         setAdjustedPosition({preset:'custom',
-          x:Math.max(-.35,Math.min(1.35,(articleRect.left-stageRect.left+geometry.inkCenterX*scaleX)/Math.max(1,stageRect.width))),
+          x:Math.max(-.35,Math.min(1.35,(articleRect.left-horizontal.left+geometry.inkCenterX*scaleX)/horizontal.width)),
           y:Math.max(-.35,Math.min(1.35,(articleRect.top-stageRect.top+geometry.inkCenterY*scaleY)/Math.max(1,stageRect.height)))
         });
       }else setAdjustedPosition({preset:'custom',x:existingPosition.x,y:existingPosition.y});
@@ -12901,8 +12908,9 @@ function startInlineTextEdit(field='text',targetEl=null){
       let dragging=false;
       const applyPoint=(clientX,clientY)=>{
         const rect=stage.getBoundingClientRect();
+        const horizontal=placementBounds(rect);
         setAdjustedPosition({preset:'custom',
-          x:Math.max(-.35,Math.min(1.35,(clientX-rect.left)/Math.max(1,rect.width))),
+          x:Math.max(-.35,Math.min(1.35,(clientX-horizontal.left)/horizontal.width)),
           y:Math.max(-.35,Math.min(1.35,(clientY-rect.top)/Math.max(1,rect.height)))
         });
         syncLivePosition(p.text.position);
@@ -12912,7 +12920,8 @@ function startInlineTextEdit(field='text',targetEl=null){
       const nudgePoint=(dx,dy,multiplier=1)=>{
         const rect=stage.getBoundingClientRect();
         const position=p.text.position;
-        applyPoint(rect.left+(position.x+dx*nudgeStep*multiplier)*rect.width,
+        const horizontal=placementBounds(rect);
+        applyPoint(horizontal.left+(position.x+dx*nudgeStep*multiplier)*horizontal.width,
           rect.top+(position.y+dy*nudgeStep*multiplier)*rect.height);
       };
       const blockEditorArrowNudge=event=>{
