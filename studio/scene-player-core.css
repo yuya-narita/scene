@@ -787,6 +787,7 @@
 .sp-scene.sp-layout-measuring .sp-text{
   animation:none!important;
   transform:none!important;
+  translate:none!important;
   filter:none!important;
   opacity:1!important;
   transition:none!important;

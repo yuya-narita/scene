@@ -3196,7 +3196,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // renderer and replay its presentation immediately, but do not seek/restart
       // persistent audio unless the caller explicitly asks for it.
       this._audioRenderMode = options.preserveAudio === false ? 'restore' : 'preview';
-      this._render();
+      const previewEntrance=options.previewEntrance===true;
+      this._render({previewEntrance,staticPresentation:options.previewEntrance===false});
       emit(this.host, 'sceneplayer:refresh', {
         index: this.index,
         scene: this.currentScene,
@@ -3357,7 +3358,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // skips one-shots, which made Scene 1 SE silent.
       this._audioRenderMode='load';
       this.playbackTimelineStartedAt=performance.now();
-      this._render();
+      this._render({previewEntrance:true});
       // Commit the fully styled Scene 1 before removing the opaque Cover.
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         if(coverToReveal){ coverToReveal.hidden=true; this.host.classList.remove('sp-cover-open'); }
@@ -3694,14 +3695,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _customPositionTransform(item, position, stageWidth, stageHeight, margin) {
+      const stage=this.els.stage;
+      const canvas=this.els.scenes;
       const contentWidth=Math.max(1,item.node.clientWidth);
-      const contentLeft=Math.max(0,(stageWidth-contentWidth)/2);
-      const width=item.inkRight-item.inkLeft,height=item.inkBottom-item.inkTop;
+      let contentLeft=Math.max(0,(stageWidth-contentWidth)/2),contentTop=0;
+      if(item.node.parentElement===canvas){
+        const stageRect=stage.getBoundingClientRect();
+        const canvasRect=canvas.getBoundingClientRect();
+        contentLeft=(canvasRect.left-stageRect.left)*stageWidth/Math.max(1,stageRect.width);
+        contentTop=(canvasRect.top-stageRect.top)*stageHeight/Math.max(1,stageRect.height);
+      }
       // Custom means custom: do not force the glyph box back inside the viewport.
       // A broad safety bound still keeps a lost element recoverable in Studio.
       const centerX=Math.max(-stageWidth*.35,Math.min(stageWidth*1.35,stageWidth*position.x));
       const centerY=Math.max(-stageHeight*.35,Math.min(stageHeight*1.35,stageHeight*position.y));
-      return {x:centerX-contentLeft-item.inkCenterX,y:centerY-item.inkCenterY};
+      return {x:centerX-contentLeft-item.inkCenterX,y:centerY-contentTop-item.inkCenterY};
     }
 
     _measureCarriedOverlayPositions(metrics, sceneEntries, stageWidth, stageHeight, focusY, extraGap = 0) {
@@ -3912,7 +3920,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // before it is ever revealed; only older Scene nodes are allowed to travel.
       // This avoids even a single painted frame at the stage origin.
       if (incomingStill) {
-        const final = this._measureScenePositions(nodes, visible, 0);
+        const final = active?.presentation?.display==='overlay'
+          ? this._positionOverlayNodes(nodes,visible)
+          : this._measureScenePositions(nodes,visible,0);
         const newestMetric = final[final.length - 1];
         if (newestMetric) {
           newestCreated.style.transition = 'none';
@@ -3965,6 +3975,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         requestAnimationFrame(() => {
           if(!isCurrent())return;
           requestAnimationFrame(() => {
+            if(!isCurrent())return;
             this.host.classList.remove('sp-whitespace-inhale');
             this.host.classList.add('sp-whitespace-exhale');
 
@@ -3987,11 +3998,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
 
-    _render() {
+    _render({previewEntrance=false,staticPresentation=false}={}) {
       if (!this.document) return;
       this._simultaneousLayoutPending=false;this._simultaneousEpoch=(this._simultaneousEpoch||0)+1;
       this._resetPresentationRuntime();
       this._clearLayoutTimers();
+      this.host.classList.remove('sp-whitespace-inhale','sp-whitespace-exhale');
 
       const scenes = this.document.scenes;
       const active = scenes[this._simultaneousBounds(this.index).start];
@@ -4034,7 +4046,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
 
       if (visible.some(entry=>this._simultaneousBounds(entry.index).id)) {
-        this._renderSimultaneousVisible(visible,active,display,isForwardStack);
+        this._renderSimultaneousVisible(visible,active,display,isForwardStack,{staticPresentation});
       } else if (isForwardStack) {
         this._renderStackWithBreathing(visible, active);
       } else {
@@ -4062,7 +4074,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if (display === 'overlay') this._positionOverlayNodes(nodes, visible);
         else this._positionSceneNodes(nodes, visible, 0);
         const newest = nodes[nodes.length - 1];
-        if (newest) this._activatePresentation(active, newest);
+        if(newest&&!staticPresentation){
+          if(previewEntrance||this._audioRenderMode==='advance')this._playSceneLanding(active,newest);
+          this._activatePresentation(active,newest);
+        }
         if (stillNodes.length) {
           // Keep transition suppression through the first painted frame. Restore it
           // afterwards so later stack reflow/history movement behaves normally.
@@ -6058,7 +6073,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));
         const article=frame.closest('.sp-scene');if(vertical&&relayout&&article?.parentNode===this.els.scenes&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this._simultaneousBounds().start],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay'&&!presentEntries.some(entry=>this._simultaneousBounds(entry.index).id))this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});
       };
-      frame._spDrawHanddrawnFrame=()=>draw(true);
+      frame._spDrawHanddrawnFrame=(relayout=true)=>draw(true,relayout);
       frame._spFitHanddrawnFrame=()=>{if(frame.dataset.writingMode==='vertical-rl')draw(false,false);};
       requestAnimationFrame(()=>draw());
       if(frame.dataset.writingMode==='vertical-rl'&&document.fonts?.status==='loading'){
@@ -7230,6 +7245,18 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       delete article._spSyncedFrameEffect;
     }
 
+    _playSceneLanding(scene,article) {
+      if(article.dataset.entryMotion==='still'||typeof article.animate!=='function'||global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)return;
+      const horizontal=scene.presentation?.flow==='horizontal';
+      const vertical=scene.presentation?.text?.writingMode==='vertical-rl';
+      const dx=horizontal?(vertical?-13:13):0,dy=horizontal?0:13;
+      const timing=scene.presentation?.effectTiming||{};
+      article._spLandingAnimation=article.animate(
+        [{translate:`${dx}px ${dy}px`,opacity:0},{translate:'0px 0px',opacity:1}],
+        {duration:Math.max(80,(Number(timing.duration)||.8)*1000),delay:Math.max(0,Number(timing.delay)||0)*1000,fill:'backwards',easing:'cubic-bezier(.16,.72,.17,1)'}
+      );
+    }
+
     _playTextEntryDirectionOnce(scene, article) {
       const direction=scene?.presentation?.text?.entryDirection;
       if(!direction||direction==='auto'||!article||article.dataset.textEntryDirectionPlayed==='true')return;
@@ -7246,7 +7273,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const duration=Math.max(180,Math.min(6000,(Number(timing.duration)||.8)*1000));
       const delay=Math.max(0,Math.min(this._simultaneousBounds(this.document.scenes.indexOf(scene)).id?600000:6000,(Number(timing.delay)||0)*1000));
       const animation=motionTarget.animate([{translate:`${dx}px ${dy}px`},{translate:'0px 0px'}],{duration,delay,easing:'cubic-bezier(.18,.72,.24,1)',fill:'both'});
-      animation.onfinish=()=>{try{animation.cancel();}catch{}};
+      article._spTextEntryDirectionAnimation=animation;
+      animation.onfinish=()=>{
+        animation.cancel();
+        if(article._spTextEntryDirectionAnimation===animation)delete article._spTextEntryDirectionAnimation;
+      };
     }
 
     _playSceneImageEffectOnce(scene, article) {
@@ -7544,7 +7575,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     positions.forEach(p=>p.node.style.transform=`translate3d(${Math.round(p.x)}px,${Math.round(p.y)}px,0)`);
     return positions;
   };
-  P._renderSimultaneousVisible=function(visible,active,display,isForward){
+  P._renderSimultaneousVisible=function(visible,active,display,isForward,{staticPresentation=false}={}){
     this._simultaneousLayoutPending=true;
     const g=this._simultaneousBounds(),old=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(n=>[n.dataset.sceneId,n]));
     if(!isForward){this.els.scenes.innerHTML='';old.clear();}
@@ -7559,7 +7590,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         node.style.transition='none';node.style.opacity='';
         // Suppress the entire member before its delay, including balloons and images.
         // Directional WAAPI animations can otherwise expose their initial position.
-        if(Number(scene.presentation?.effectTiming?.delay)>0)node.dataset.simultaneousWaiting='true';
+        if(!staticPresentation&&Number(scene.presentation?.effectTiming?.delay)>0)node.dataset.simultaneousWaiting='true';
         else delete node.dataset.simultaneousWaiting;
       }
       if(node.parentNode!==this.els.scenes)this.els.scenes.appendChild(node);
@@ -7579,13 +7610,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(wait>0)this._presentationTimeout(()=>{
           if(node.isConnected&&this._simultaneousEpoch===epoch)delete node.dataset.simultaneousWaiting;
         },wait);
-        if(node.dataset.entryMotion!=='still'&&typeof node.animate==='function'&&!global.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches){
-          const horizontal=member.presentation?.flow==='horizontal',vertical=member.presentation?.text?.writingMode==='vertical-rl';
-          const dx=horizontal?(vertical?-13:13):0,dy=horizontal?0:13;
-          const final=node.style.transform;
-          node._simultaneousEntryAnimation=node.animate([{transform:`${final} translate(${dx}px,${dy}px)`,opacity:0},{transform:final,opacity:1}],{duration:Math.max(80,(Number(timing.duration)||.8)*1000),delay:Math.max(0,Number(timing.delay)||0)*1000,fill:'backwards',easing:'cubic-bezier(.16,.72,.17,1)'});
+        if(!staticPresentation){
+          this._playSceneLanding(member,node);
+          this._activatePresentation(member,node);
         }
-        this._activatePresentation(visible[i].scene,nodes[i]);
         requestAnimationFrame(()=>{if(nodes[i].isConnected)nodes[i].style.transition='';});
       }
       this._scheduleAuto();
@@ -7598,7 +7626,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
   };
   const originalFinish=P._finishVisibleEntranceEffects;
   P._finishVisibleEntranceEffects=function(){
-    this.els?.scenes?.querySelectorAll('.sp-scene').forEach(n=>{n._simultaneousEntryAnimation?.cancel();n._simultaneousEntryAnimation=null;delete n.dataset.simultaneousWaiting;});
+    this.els?.scenes?.querySelectorAll('.sp-scene').forEach(n=>{n._spLandingAnimation?.cancel();n._spLandingAnimation=null;delete n.dataset.simultaneousWaiting;});
     return originalFinish.call(this);
   };
   Object.defineProperty(P,'progress',{configurable:true,get(){return this.document?(this._simultaneousBounds().end+1)/this.document.scenes.length:0;}});

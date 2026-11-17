@@ -11436,7 +11436,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       setTimeout(keepInlineCaretVisible,360);
     });
   }
-  function liveEditRenderAt(index,{preserveSheet=true,preserveDesktopEditor=false}={}){
+  function liveEditRenderAt(index,{preserveSheet=true,preserveDesktopEditor=false,previewEntrance=true}={}){
     if(!player||!workingDocument?.scenes?.length)return;
     removeLiveDisappearEditTarget();
     const target=Math.max(0,Math.min(Number(index)||0,workingDocument.scenes.length-1));
@@ -11454,7 +11454,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     if(player.els?.total)player.els.total.textContent=String(doc.scenes.length);
 
     if(typeof player.refreshCurrent==='function'){
-      player.refreshCurrent({document:doc,index:target,preserveAudio:true});
+      player.refreshCurrent({document:doc,index:target,preserveAudio:true,previewEntrance});
     }else{
       // Compatibility fallback for an older cached Core.
       player._clearAutoTimer?.();
@@ -11480,7 +11480,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     if(desktopLiveActive()&&!preserveDesktopEditor)requestAnimationFrame(renderDesktopLivePanel);
     requestAnimationFrame(cleanupDesktopV2BuilderOverlays);
   }
-  function refreshLivePlayer({preserveSheet=true,preserveDesktopEditor=false}={}){
+  function refreshLivePlayer({preserveSheet=true,preserveDesktopEditor=false,previewEntrance=null}={}){
     finishCreditsInlineEdit();
     if(!player||!workingDocument?.scenes?.length)return;
     const directScene=framePositionDragScene;
@@ -11489,7 +11489,7 @@ function startInlineTextEdit(field='text',targetEl=null){
       framePositionDragReopen=true;
       finishFramePositionDrag({save:true,skipRefresh:true,keepEditorState:true});
     }
-    liveEditRenderAt(player.index,{preserveSheet,preserveDesktopEditor});
+    liveEditRenderAt(player.index,{preserveSheet,preserveDesktopEditor,previewEntrance:restoreDirect?false:previewEntrance});
     if(restoreDirect){
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         framePositionDragReopen=false;
@@ -12706,29 +12706,34 @@ function startInlineTextEdit(field='text',targetEl=null){
       
     `;document.head.appendChild(style);
   }
-  function finishFramePositionDrag({save=false,reset=false}={}){
+  function finishFramePositionDrag(options={}){
     const cleanup=framePositionDragCleanup;framePositionDragCleanup=null;
-    if(cleanup)cleanup({save,reset});
+    if(cleanup)cleanup(options);
   }
   function openFramePositionDragEditor(scene){
     if(!scene)return;
+    finishFramePositionDrag({skipRefresh:true});
     framePositionDragScene=scene;
     const p=ensurePresentation(scene);p.text||={};
-    finishFramePositionDrag();
     closeDesktopTextDetail();
     if(liveEditSheet){liveEditSheet.hidden=true;document.body.classList.remove('live-edit-sheet-open','mobile-live-detail-open');}
     ensureFramePositionEditorStyle();
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       const stage=player?.els?.stage,scenes=player?.els?.scenes;
-      const article=studioSelectedSceneArticle();
+      if(framePositionDragScene!==scene)return;
+      const article=[...(scenes?.querySelectorAll(':scope > .sp-scene')||[])].find(node=>node.dataset.sceneId===scene.id);
       const frame=article?.querySelector('.sp-handdrawn-frame');
       const target=frame||article?.querySelector(':scope > .sp-text');
-      if(!stage||!scenes||!article||!target){appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
+      if(!stage||!scenes||!article||!target){framePositionDragScene=null;appAlert(u('配置できるテキストがありません','There is no text to position.'));return;}
       // Stop entry motion before measuring. A filled CSS/WAAPI transform can move
       // the measured frame box away from its authored placement and bake that
       // temporary offset into the next drag position.
       article.classList.add('is-frame-position-dragging');
       playerHost?.classList.add('sp-direct-layout-editing');
+      article.classList.remove('sp-fx-play');
+      player._finishSyncedFrameEffect?.(article);
+      article._spLandingAnimation?.cancel();
+      article._spTextEntryDirectionAnimation?.cancel();
       article.querySelectorAll('.sp-handdrawn-frame,.sp-text').forEach(node=>node.getAnimations?.().forEach(animation=>{try{animation.cancel();}catch{}}));
       const pcMode=studioPreviewDevice==='pc'&&document.body.classList.contains('desktop-live-edit');
       const beforeText=p.text.position?clone(p.text.position):null;
@@ -12746,7 +12751,6 @@ function startInlineTextEdit(field='text',targetEl=null){
         pushUndoSnapshot(positionHistoryBefore);
         queueMicrotask(()=>showUndo('テキスト位置の変更を元に戻せます'));
       };
-      const initialPosition=p.text.position||p.frame?.position||{};
       // Direct manipulation is viewport-relative, not device-specific.
       // One normalized x/y must land at the same relative point on iPhone, tablet and PC.
       const setAdjustedPosition=(adjusted)=>{
@@ -12774,16 +12778,27 @@ function startInlineTextEdit(field='text',targetEl=null){
         liveScene.presentation||={};liveScene.presentation.text||={};
         if(!Number.isFinite(Number(angle))||Math.abs(Number(angle))<.5)delete liveScene.presentation.text.angle;else liveScene.presentation.text.angle=Number(angle);
       };
-      const stageRect=stage.getBoundingClientRect(),scenesRect=scenes.getBoundingClientRect(),targetRect=target.getBoundingClientRect();
-      // V7: reopening the editor must not re-measure and rewrite an already-authored
-      // normalized position. Re-measuring a rotated/scaled glyph box caused cumulative drift.
-      const existingPosition=p.text.position||p.frame?.position||null;
-      if(existingPosition?.preset!=='custom'||!Number.isFinite(Number(existingPosition.x))||!Number.isFinite(Number(existingPosition.y))){
-        setAdjustedPosition({preset:'custom',x:Math.max(-.35,Math.min(1.35,(targetRect.left+targetRect.width/2-stageRect.left)/Math.max(1,stageRect.width))),y:Math.max(-.35,Math.min(1.35,(targetRect.top+targetRect.height/2-stageRect.top)/Math.max(1,stageRect.height)))});
-      }else{
-        setAdjustedPosition({preset:'custom',x:Number(existingPosition.x),y:Number(existingPosition.y)});
-      }
+      const applySavedPosition=()=>{
+        const rect=stage.getBoundingClientRect();
+        const geometry=player._measureSceneGeometry(article,rect);
+        const position=player._framePosition(scene);
+        const {x,y}=player._customPositionTransform({...geometry,node:article},position,stage.clientWidth,stage.clientHeight);
+        article.style.transform=`translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
+      };
+      const stageRect=stage.getBoundingClientRect();
+      const geometry=player._measureSceneGeometry(article,stageRect);
+      const articleRect=article.getBoundingClientRect();
+      const existingPosition=player._framePosition(scene);
+      if(existingPosition.preset==='auto'){
+        const scaleX=stageRect.width/Math.max(1,stage.clientWidth);
+        const scaleY=stageRect.height/Math.max(1,stage.clientHeight);
+        setAdjustedPosition({preset:'custom',
+          x:Math.max(-.35,Math.min(1.35,(articleRect.left-stageRect.left+geometry.inkCenterX*scaleX)/Math.max(1,stageRect.width))),
+          y:Math.max(-.35,Math.min(1.35,(articleRect.top-stageRect.top+geometry.inkCenterY*scaleY)/Math.max(1,stageRect.height)))
+        });
+      }else setAdjustedPosition({preset:'custom',x:existingPosition.x,y:existingPosition.y});
       syncLivePosition(p.text.position);
+      applySavedPosition();
       const shield=document.createElement('div');shield.className='frame-position-drag-shield';
       const hint=document.createElement('div');hint.className='frame-position-drag-hint';hint.textContent=u('矢印で微調整、文字をドラッグして移動','Nudge with arrows or drag the text');
       const controls=document.createElement('div');controls.className='frame-position-fixed-controls';
@@ -12813,12 +12828,17 @@ function startInlineTextEdit(field='text',targetEl=null){
       const setSizeValue=raw=>{
         const next=Math.max(8,Math.min(420,Math.round(Number(raw)||8)));
         p.text.size=next;syncLiveSize(next);textNode.style.setProperty('font-size',`${next}px`,'important');
+        frame?._spDrawHanddrawnFrame?.(false);
+        applySavedPosition();
         sizeControl.range.value=sizeControl.number.value=String(next);
       };
       const setAngleValue=raw=>{
         const next=Math.max(-180,Math.min(180,Math.round(Number(raw)||0)));
         if(Math.abs(next)<1)delete p.text.angle;else p.text.angle=next;syncLiveAngle(p.text.angle);
-        textNode.style.rotate=`${next}deg`;angleControl.range.value=angleControl.number.value=String(next);
+        textNode.style.rotate=`${next}deg`;
+        frame?._spDrawHanddrawnFrame?.(false);
+        applySavedPosition();
+        angleControl.range.value=angleControl.number.value=String(next);
       };
       // iOS Safari can fail to drag a native range thumb inside the scaled preview.
       // Drive the value from pointer X ourselves so tap + drag behave identically.
@@ -12880,30 +12900,20 @@ function startInlineTextEdit(field='text',targetEl=null){
       playerHost?.addEventListener('touchend',blockEditorTouchRelease,true);
       let dragging=false;
       const applyPoint=(clientX,clientY)=>{
-        const sr=stage.getBoundingClientRect(),cr=scenes.getBoundingClientRect(),geometry=player._measureSceneGeometry(article,sr);
-        // Device previews are logical reader viewports scaled into the Studio
-        // pane. Convert rendered pointer pixels back to that logical space
-        // before clamping, saving and assigning the Scene transform.
-        const scale=Math.max(.05,Number(player?._layoutScale?.())||1);
-        const stageWidth=Math.max(1,stage.clientWidth||sr.width/scale),stageHeight=Math.max(1,stage.clientHeight||sr.height/scale);
-        const contentLeft=(cr.left-sr.left)/scale;
-        let centerX=(clientX-sr.left)/scale,centerY=(clientY-sr.top)/scale;
-        // Free placement. Partial off-screen placement is intentional for effect text.
-        centerX=Math.max(-stageWidth*.35,Math.min(stageWidth*1.35,centerX));
-        centerY=Math.max(-stageHeight*.35,Math.min(stageHeight*1.35,centerY));
-        setAdjustedPosition({preset:'custom',x:centerX/stageWidth,y:centerY/stageHeight});
+        const rect=stage.getBoundingClientRect();
+        setAdjustedPosition({preset:'custom',
+          x:Math.max(-.35,Math.min(1.35,(clientX-rect.left)/Math.max(1,rect.width))),
+          y:Math.max(-.35,Math.min(1.35,(clientY-rect.top)/Math.max(1,rect.height)))
+        });
         syncLivePosition(p.text.position);
-        article.style.transform=`translate3d(${Math.round(centerX-contentLeft-geometry.inkCenterX)}px,${Math.round(centerY-geometry.inkCenterY)}px,0)`;
-
+        applySavedPosition();
       };
       const nudgeStep=.025;
       const nudgePoint=(dx,dy,multiplier=1)=>{
-        const r=stage.getBoundingClientRect(),scale=Math.max(.05,Number(player?._layoutScale?.())||1);
-        const width=Math.max(1,stage.clientWidth||r.width/scale),height=Math.max(1,stage.clientHeight||r.height/scale);
-        const position=p.text.position||{};
-        const x=Number.isFinite(Number(position.x))?Number(position.x):.5;
-        const y=Number.isFinite(Number(position.y))?Number(position.y):.5;
-        applyPoint(r.left+(x+dx*nudgeStep*multiplier)*width*scale,r.top+(y+dy*nudgeStep*multiplier)*height*scale);
+        const rect=stage.getBoundingClientRect();
+        const position=p.text.position;
+        applyPoint(rect.left+(position.x+dx*nudgeStep*multiplier)*rect.width,
+          rect.top+(position.y+dy*nudgeStep*multiplier)*rect.height);
       };
       const blockEditorArrowNudge=event=>{
         if(!playerHost?.classList.contains('sp-direct-layout-editing')||framePositionDragScene!==scene)return;
@@ -12925,7 +12935,7 @@ function startInlineTextEdit(field='text',targetEl=null){
         if(reset)clearAdjustedPosition();
         else if(!keep){if(beforeText)p.text.position=beforeText;else delete p.text.position;if(beforeSize==null)delete p.text.size;else p.text.size=beforeSize;if(beforeAngle==null)delete p.text.angle;else p.text.angle=beforeAngle;if(p.frame){if(beforeFrame)p.frame.position=beforeFrame;else delete p.frame.position;}}
         syncLivePosition(p.text.position||p.frame?.position||null);syncLiveSize(p.text.size);syncLiveAngle(p.text.angle);
-        scheduleDraftSave(40);if(!keepEditorState)framePositionDragScene=null;if(!skipRefresh)refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel?.();
+        scheduleDraftSave(40);if(!keepEditorState)framePositionDragScene=null;if(!skipRefresh)refreshLivePlayer({preserveSheet:false,previewEntrance:false});renderDesktopLivePanel?.();
       };
       auto.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();commitPositionHistory();finishFramePositionDrag({save:true,reset:true});});
       cancel.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();finishFramePositionDrag();});
@@ -13054,7 +13064,7 @@ function startInlineTextEdit(field='text',targetEl=null){
     // PlayerCore.refreshCurrent() performs a fresh real-Player render, so the
     // selected entrance/position/view change is visible immediately. No second
     // manual animation trigger is needed (and avoiding it prevents double-play).
-    refreshLivePlayer({preserveSheet:true});
+    refreshLivePlayer({preserveSheet:true,previewEntrance:true});
     if(desktopLiveActive())renderDesktopLivePanel();
   }
 
@@ -13071,6 +13081,7 @@ function openDesktopEffectDetail(){
       display:p.display,
       view:p.view,
       entryMotion:p.entryMotion,
+      entryDirection:p.text?.entryDirection,
       credits:clone(p.credits||null),
       typing:clone(p.typing||null),
       effectTiming:clone(p.effectTiming||null),
@@ -13085,6 +13096,8 @@ function openDesktopEffectDetail(){
       if(before.display===undefined)delete p.display;else p.display=before.display;
       if(before.view===undefined)delete p.view;else p.view=before.view;
       if(before.entryMotion===undefined)delete p.entryMotion;else p.entryMotion=before.entryMotion;
+      if(before.entryDirection===undefined){if(p.text)delete p.text.entryDirection;}
+      else{p.text||={};p.text.entryDirection=before.entryDirection;}
       if(before.credits===null)delete p.credits;else p.credits=clone(before.credits);
       if(before.typing===null)delete p.typing;else p.typing=clone(before.typing);
       if(before.effectTiming===null)delete p.effectTiming;else p.effectTiming=clone(before.effectTiming);
@@ -15180,7 +15193,7 @@ function openDesktopTextDetail(){
     if(desktopTimingButton){desktopTimingButton.classList.remove('is-active');desktopTimingButton.textContent=u('⌛ 時間','⌛ Time');}
     desktopLivePanelBody.innerHTML=`<div class="desktop-live-empty-state"><strong>${u('右Editorを読み込み中…','Loading Live Editor…')}</strong></div>`;
     const p=ensurePresentation(scene);p.text ||= {};
-    const refresh=()=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false});renderDesktopLivePanel();};
+    const refresh=(previewEntrance=null)=>{scheduleDraftSave(70);refreshLivePlayer({preserveSheet:false,previewEntrance});renderDesktopLivePanel();};
 
     const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
     bodyCard.prepend(makeAutoRubyBodyControl(scene));
@@ -15904,7 +15917,7 @@ function openDesktopTextDetail(){
       v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()}),
       v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()}),
       desktopMakeSelect(u('表示形式','Display format'),[['world',t('scene.view.world')],['console',t('scene.view.console')],['system',t('scene.view.system')],['warning',t('scene.view.warning')],['void',t('scene.view.void')],['chat',u('チャット','Chat')],['web-board',u('掲示板','Board')],['web-comment',u('コメント欄','Comments')],['web-review',u('レビュー','Reviews')],['web-qa',u('Q&A','Q&A')],['web-sns',u('SNS','SNS')],['web-mail',u('メール','Email')],['web-notification',u('通知','Notifications')]],p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);if(v==='web-comment')initWebCommentMeta(scene,index);if(v==='web-qa')initWebQAMeta(scene,index);if(v==='web-sns')initWebSNSMeta(scene,index);if(v==='web-mail')initWebMailMeta(scene,index);if(v==='web-notification')initWebNotificationMeta(scene,index);refresh();renderDesktopLivePanel();}),
-      desktopMakeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh();}),
+      desktopMakeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;refresh(true);}),
       desktopMakeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;refresh();}),
       ...(isFrameType(p.frame?.type)?[desktopMakeSelect(u('枠と文字の動き','Frame and text motion'),[['separate',u('別々に動く（現在）','Separate (current)')],['sync',u('動きを同期','Synchronize motion')]],p.frame.motion==='sync'?'sync':'separate',v=>{if(v==='sync')p.frame={...(p.frame||{}),motion:'sync'};else delete p.frame.motion;scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel();})]:[]),
       desktopMakeSelect(u('文字の反転','Text reflection'),textFlipOptions(),p.text?.flip||'none',v=>{captureUndo('文字の反転を元に戻せます');setSceneTextFlip(scene,v);refresh();})
@@ -16151,7 +16164,7 @@ function openDesktopTextDetail(){
       entrance:{group:u('演出','Effects'),label:u('出かた','Entrance'),render:()=>{const effectValue=p.typing?.enabled?'typewriter':(p.effect||'auto');return desktopDetailSelect(u('出かた','Entrance'),[['auto',t('effect.auto')],['fade',t('effect.fade')],['pop',t('effect.pop')],['blur',t('effect.blur')],['whisper',t('effect.whisper')],['loud',t('effect.loud')],['pulse',t('effect.pulse')],['shake',t('effect.shake')],['tilt',t('effect.tilt')],['slow',t('effect.slow')],['slam',t('effect.slam')],['burst',t('effect.burst')],['glitchHit',t('effect.glitchHit')],['glitchHitRight',t('effect.glitchHitRight')],['rush',t('effect.rush')],['impact',u('衝撃（ドン）','Impact')],['scream',u('絶叫','Scream')],['stretch',u('伸びる','Stretch')],['murmur',u('ざわつく','Murmur')],['flash',u('閃光','Flash')],['break',u('破壊','Break')],['bounce',u('跳ねる','Bounce')],['typewriter',u('タイプライター','Typewriter')],['none',t('effect.none')]],effectValue,v=>{ensureDesktopEffectVisibleDefaults(scene,{save:false});if(v==='typewriter'){p.effect='none';p.typing={...(p.typing||{}),enabled:true,speed:Number(p.typing?.speed)||55,cursor:p.typing?.cursor!==false};}else{delete p.typing;p.effect=v;}scheduleDraftSave(40);replayCurrentDesktopEffect();renderDesktopLivePanel();});}},
       display:{group:u('演出','Effects'),label:u('表示','Display'),render:()=>v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderDesktopLivePanel()})},
       flow:{group:u('演出','Effects'),label:u('Sceneの流れ','Scene flow'),render:()=>v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderDesktopLivePanel()})},
-      entryMotion:{group:u('演出','Effects'),label:u('Sceneの入り方','Scene entrance'),render:()=>desktopDetailSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;quickApply();})},
+      entryMotion:{group:u('演出','Effects'),label:u('Sceneの入り方','Scene entrance'),render:()=>desktopDetailSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;quickApply(true);})},
       bgFit:{group:u('背景','Background'),label:u('背景の表示','Background fit'),render:()=>desktopDetailSelect(u('背景の表示','Background fit'),[['cover','cover'],['contain','contain']],p.background?.fit||'cover',v=>{p.background={...(p.background||{}),fit:v};quickApply();})},
       bgTransition:{group:u('背景','Background'),label:u('背景の切替','Background transition'),render:()=>desktopDetailSelect(u('背景の切替','Background transition'),[['fade',u('フェード','Fade')],['cut',u('カット','Cut')],['none',u('なし','None')]],p.background?.transition||'fade',v=>{p.background={...(p.background||{}),transition:v};quickApply();})},
       imageSize:{group:u('画像','Image'),label:u('Scene画像サイズ','Scene image size'),render:()=>desktopDetailSelect(u('Scene画像サイズ','Scene image size'),[['small',u('小','Small')],['normal',u('標準','Normal')],['large',u('大','Large')]],p.image?.size||'normal',v=>{p.image={...(p.image||{}),size:v};quickApply();})},
@@ -16160,7 +16173,7 @@ function openDesktopTextDetail(){
     const loadFrequent=()=>{try{const a=JSON.parse(localStorage.getItem(FREQUENT_KEY)||'null');if(Array.isArray(a)){const clean=a.filter(k=>frequentDefs[k]);if(clean.length)return clean;}}catch{}return [...FREQUENT_DEFAULT];};
     let frequentKeys=loadFrequent();
     const saveFrequent=()=>localStorage.setItem(FREQUENT_KEY,JSON.stringify(frequentKeys));
-    const quickApply=()=>{scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true});renderDesktopLivePanel();};
+    const quickApply=(previewEntrance=null)=>{scheduleDraftSave(40);refreshLivePlayer({preserveSheet:true,previewEntrance});renderDesktopLivePanel();};
     const frequentHead=document.createElement('div');frequentHead.className='desktop-v2-frequent-head';
     const frequentNote=document.createElement('p');frequentNote.className='desktop-v2-frequent-note';frequentNote.textContent=u('自分がよく使う設定だけを置く簡易Editorです。','A simple Editor containing only the settings you choose.');
     const editFrequent=document.createElement('button');editFrequent.type='button';editFrequent.className='desktop-v2-frequent-edit';editFrequent.textContent=u('よく使う設定を編集','Edit frequent settings');frequentHead.append(frequentNote,editFrequent);
@@ -16969,8 +16982,8 @@ function openDesktopTextDetail(){
           v69MakeDisplayBulkControl(scene,{label:u('表示','Display'),onApplied:()=>renderLiveEditSheet('effect')}),
           v68MakeFlowBulkControl(scene,{label:u('Sceneの流れ','Scene flow'),onApplied:()=>renderLiveEditSheet('effect')}),
           makeSelect(u('表示モード','Display mode'),viewValues,p.view||'world',v=>{p.view=v;if(v==='web-board')initWebBoardMeta(scene,index);scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
-          makeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer();}),
-          makeSelect(u('文字の出現方向','Text entrance direction'),TEXT_ENTRY_DIRECTION_OPTIONS,p.text?.entryDirection||'auto',v=>{p.text||={};if(v==='auto')delete p.text.entryDirection;else p.text.entryDirection=v;scheduleDraftSave(80);refreshLivePlayer();}),
+          makeSelect(u('Sceneの入り方','Scene entrance'),[['flow',t('scene.entry.flow')],['still',t('scene.entry.still')]],p.entryMotion||'flow',v=>{p.entryMotion=v;scheduleDraftSave(80);refreshLivePlayer({previewEntrance:true});}),
+          makeSelect(u('文字の出現方向','Text entrance direction'),TEXT_ENTRY_DIRECTION_OPTIONS,p.text?.entryDirection||'auto',v=>{p.text||={};if(v==='auto')delete p.text.entryDirection;else p.text.entryDirection=v;scheduleDraftSave(80);refreshLivePlayer({previewEntrance:true});}),
           makeSelect(u('消え方','Exit motion'),EXIT_MOTION_OPTIONS,p.disappear?.motion||'stay',v=>{p.disappear={...(p.disappear||{}),motion:v};if(!(Number(p.disappear.after)>0))p.disappear.after=2500;if(!(Number(p.disappear.fade)>0))p.disappear.fade=700;scheduleDraftSave(80);refreshLivePlayer();}),
           makeSelect(u('文字の枠','Text frame'),FRAME_TYPE_OPTIONS,isFrameType(p.frame?.type)?p.frame.type:'none',v=>{if(isFrameType(v))p.frame={...(p.frame||{}),type:v};else delete p.frame;scheduleDraftSave(80);refreshLivePlayer();renderLiveEditSheet('effect');}),
           ...(isFrameType(p.frame?.type)?[makeSelect(u('枠と文字の動き','Frame and text motion'),[['separate',u('別々に動く（現在）','Separate (current)')],['sync',u('動きを同期','Synchronize motion')]],p.frame.motion==='sync'?'sync':'separate',v=>{if(v==='sync')p.frame={...(p.frame||{}),motion:'sync'};else delete p.frame.motion;scheduleDraftSave(80);refreshLivePlayer();})]:[]),
