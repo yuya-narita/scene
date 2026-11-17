@@ -245,7 +245,7 @@
   transition:opacity var(--sp-disappear-fade,700ms) ease,
              filter var(--sp-disappear-fade,700ms) ease!important;
 }
-.sp-scene.is-disappeared{visibility:hidden;pointer-events:none}
+.sp-scene.is-disappeared{visibility:hidden!important;opacity:0!important;pointer-events:none}
 
 .sp-scene[data-view="console"] .sp-text{
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;

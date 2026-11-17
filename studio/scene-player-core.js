@@ -3607,6 +3607,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _measureSceneGeometry(node, stageRect) {
+      node.querySelector(':scope > .sp-handdrawn-frame')?._spFitHanddrawnFrame?.();
       node.classList.add('sp-layout-measuring');
       const nodeRect=this._logicalRect(node.getBoundingClientRect());
       const boxHeight=Math.max(1,nodeRect.height);
@@ -3836,6 +3837,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const stageHeight=Math.max(1,this.els.stage.clientHeight),stageWidth=Math.max(1,this.els.stage.clientWidth);
       const focusY = stageHeight * (stageWidth <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
+        const anchor=node._spOverlayAnchor;
+        if(anchor&&anchor.width===stageWidth&&anchor.height===stageHeight){
+          node.style.zIndex=String(20+i);
+          return {node,scene:sceneEntries[i]?.scene,x:anchor.x,y:anchor.y};
+        }
+        delete node._spOverlayAnchor;
         const geometry=this._measureSceneGeometry(node,stageRect),position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
         let x=0,y=focusY-Math.max(1,node.offsetHeight)/2;
         if(position.preset!=='auto')({x,y}=this._customPositionTransform({...geometry,node},position,stageWidth,stageHeight,this._viewportWidth()<=600?10:16));
@@ -3867,6 +3874,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
 
     _renderStackWithBreathing(visible, active) {
+      const epoch=this._simultaneousEpoch;
+      const isCurrent=()=>!this.destroyed&&epoch===this._simultaneousEpoch;
       const oldById = new Map(
         [...this.els.scenes.querySelectorAll('.sp-scene')].map((node) => [node.dataset.sceneId, node])
       );
@@ -3883,7 +3892,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           newestCreated = node;
         }
         nodes.push(node);
-        this.els.scenes.appendChild(node);
+        if(node.parentNode!==this.els.scenes)this.els.scenes.appendChild(node);
       });
 
       oldById.forEach((node) => {
@@ -3913,6 +3922,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
 
         requestAnimationFrame(() => {
+          if(!isCurrent())return;
           // Previous text may still move into its new stack position. The incoming
           // still Scene is deliberately excluded from every geometry transition.
           final.forEach(({node,x,y}) => {
@@ -3931,6 +3941,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // Keep transition disabled for this entrance frame, then hand future
           // stack movement back to the normal Scene transition rules.
           requestAnimationFrame(() => {
+            if(!isCurrent())return;
             if (newestCreated) newestCreated.style.transition = '';
           });
           this._scheduleAuto();
@@ -3942,6 +3953,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Leave the new Scene in its CSS entering position for one painted frame.
       // Without this frame, the incoming Scene has almost no travel distance.
       requestAnimationFrame(() => {
+        if(!isCurrent())return;
         this.host.classList.remove('sp-whitespace-exhale');
         this.host.classList.add('sp-whitespace-inhale');
 
@@ -3951,6 +3963,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         // Jump/Shino wait two frames before retargeting to the final geometry.
         requestAnimationFrame(() => {
+          if(!isCurrent())return;
           requestAnimationFrame(() => {
             this.host.classList.remove('sp-whitespace-inhale');
             this.host.classList.add('sp-whitespace-exhale');
@@ -4005,6 +4018,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
+      if(isForwardStack){
+        const stage=this.els.stage;
+        for(const node of this.els.scenes.querySelectorAll('.sp-scene')){
+          if(node.classList.contains('is-disappearing')&&
+             (node.classList.contains('is-disappear-explode')||node.classList.contains('is-disappear-shatter'))){
+            node.classList.add('is-disappeared');
+            node.classList.remove('is-disappearing');
+          }
+          if(display==='overlay'&&node.style.transform){
+            const previous=node.style.transform.match(/^translate3d\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px,/);
+            if(previous)node._spOverlayAnchor={x:Number(previous[1]),y:Number(previous[2]),width:stage.clientWidth,height:stage.clientHeight};
+          }else delete node._spOverlayAnchor;
+        }
+      }
 
       if (visible.some(entry=>this._simultaneousBounds(entry.index).id)) {
         this._renderSimultaneousVisible(visible,active,display,isForwardStack);
@@ -5988,17 +6015,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const fill=makePath('sp-handdrawn-fill'),bleed=makePath('sp-handdrawn-bleed'),ghost=makePath('sp-handdrawn-ghost'),ink=makePath('sp-handdrawn-ink'),scuff=makePath('sp-handdrawn-scuff');
       bleed.setAttribute('filter',`url(#${filterId})`);frame.prepend(svg);
       let lastWidth=0,lastHeight=0;
-      const draw=()=>{
+      let fittedViewport='';
+      const draw=(force=false, relayout=true)=>{
         if(!frame.isConnected)return;
         const text=frame.querySelector(':scope > .sp-text');
-        let fitted=false;
+        const vertical=text&&frame.dataset.writingMode==='vertical-rl';
+        const viewport=this.els.stage;
+        const viewportKey=`${viewport.clientWidth}:${viewport.clientHeight}:${this.host.clientHeight}`;
+        if(vertical&&!force&&fittedViewport===viewportKey)return;
         frame.classList.add('sp-frame-measuring');
-        if(text&&frame.dataset.writingMode==='vertical-rl'){
-          // Refit from natural text geometry on every live padding update.
-          // Reusing the previous fitted box leaves stale inline dimensions and
-          // makes the Studio preview lag or drift as the sliders move.
-          text.style.position='relative';text.style.left='';text.style.top='';text.style.height='';text.style.width='max-content';
-          frame.style.width='fit-content';frame.style.height='';frame.style.padding='';
+        if(vertical){
+          // Always fit the full text using its natural column height.
+          text.style.position='relative';
+          text.style.left='';
+          text.style.top='';
+          text.style.height='';
+          frame.style.width='fit-content';
+          frame.style.height='';
+          frame.style.padding='';
           const liveFrame=this.document?.scenes?.find(item=>item.id===scene.id)?.presentation?.frame||frameOptions;
           const liveExtraX=Math.max(-80,Math.min(180,Number(liveFrame.extraX)||0));
           const liveExtraY=Math.max(-80,Math.min(180,Number(liveFrame.extraY)||0));
@@ -6011,9 +6045,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           const fittedWidth=Math.ceil(Math.max(text.scrollWidth,inkRight-inkLeft,initialTextRect.width)+2);text.style.width=`${fittedWidth}px`;
           rects=measureRects();const fittedTextRect=logicalRect(text);
           inkLeft=rects.length?Math.min(...rects.map(item=>item.left)):fittedTextRect.left;inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
-          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12)+liveExtraX,padY=(mobile?30:38)+shapeLevel*(mobile?13:18)+liveExtraY,inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
+          const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top,inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom,columns=new Set(rects.map(item=>Math.round((item.left-fittedTextRect.left)/3)*3)).size||1,charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length,shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58))),mobile=this._viewportWidth()<=600,padX=(mobile?27:34)+shapeLevel*(mobile?8:12)+liveExtraX,padY=(mobile?30:38)+shapeLevel*(mobile?13:18)+liveExtraY,inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
           text.style.position='absolute';text.style.margin='0';text.style.height=`${Math.ceil(fittedTextRect.height)}px`;text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
-          frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fitted=true;
+          frame.style.padding='0';frame.style.width=`${Math.ceil(inkWidth+padX*2)}px`;frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;frame.dataset.shapeLevel=String(shapeLevel);frame.dataset.inkFitted='true';fittedViewport=viewportKey;
         }
         const rect=frame.getBoundingClientRect(),scale=this._layoutScale(),width=Math.max(24,Math.round(rect.width/scale*10)/10),height=Math.max(24,Math.round(rect.height/scale*10)/10);
         frame.classList.remove('sp-frame-measuring');
@@ -6022,10 +6056,14 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const frameType=frame.dataset.frameType||'handdrawn-voice',seed=this._handdrawnSeed(`${scene.id}|${scene.text}|${Math.round(width)}|${Math.round(height)}|${presentation.text?.writingMode||''}|${frameType}`),shapeLevel=Math.max(0,Math.min(1,Number(frame.dataset.shapeLevel)||0)),primary=this._handdrawnPath(width,height,seed,0,shapeLevel,frameType);
         fill.setAttribute('d',primary);ink.setAttribute('d',primary);bleed.setAttribute('d',this._handdrawnPath(width,height,seed,1,shapeLevel,frameType));ghost.setAttribute('d',this._handdrawnPath(width,height,seed,2,shapeLevel,frameType));scuff.setAttribute('d',this._handdrawnPath(width,height,seed,3,shapeLevel,frameType));
         const dashA=26+(seed%17),dashB=3+((seed>>>5)%5),dashC=8+((seed>>>9)%9);scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);scuff.setAttribute('stroke-dashoffset',String(seed%29));
-        const article=frame.closest('.sp-scene');if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this.index],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});
+        const article=frame.closest('.sp-scene');if(vertical&&relayout&&article?.parentNode===this.els.scenes&&!article.classList.contains('entering'))requestAnimationFrame(()=>{if(!frame.isConnected||!this.document)return;const active=this.document.scenes?.[this._simultaneousBounds().start],display=active?.presentation?.display||'stack',entries=this._visibleScenes(display),byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node])),present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node),presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);if(display==='overlay'&&!presentEntries.some(entry=>this._simultaneousBounds(entry.index).id))this._positionOverlayNodes(presentNodes,presentEntries);else this._positionSceneNodes(presentNodes,presentEntries,0);});
       };
-      frame._spDrawHanddrawnFrame=draw;
-      requestAnimationFrame(draw);
+      frame._spDrawHanddrawnFrame=()=>draw(true);
+      frame._spFitHanddrawnFrame=()=>{if(frame.dataset.writingMode==='vertical-rl')draw(false,false);};
+      requestAnimationFrame(()=>draw());
+      if(frame.dataset.writingMode==='vertical-rl'&&document.fonts?.status==='loading'){
+        document.fonts.ready.then(()=>draw(true));
+      }
       if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{if(!frame.isConnected){observer.disconnect();return;}draw();});observer.observe(frame);const ownerScene=frame.closest('.sp-scene');if(ownerScene)(ownerScene._spResizeObservers ||= []).push(observer);}
     }
 
@@ -7252,7 +7290,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._startTyping(scene, textNode, typing);
       } else {
         const frame=article.querySelector(':scope > .sp-handdrawn-frame');
-        if(frame){
+        if(frame&&(frame.dataset.writingMode!=='vertical-rl'||!frame._spFitHanddrawnFrame)){
           const previous={width:frame.style.width,height:frame.style.height};
           const finalWidth=frame.offsetWidth,finalHeight=frame.offsetHeight;
           if(finalWidth>0&&finalHeight>0){
@@ -7311,7 +7349,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion, scope });
           this._presentationTimeout(() => {
             if (!article.isConnected) return;
-            targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappeared');});
+            targets.forEach(target=>{
+              if(!target.isConnected)return;
+              target.classList.add('is-disappeared');
+              if(motion==='explode'||motion==='shatter')target.classList.remove('is-disappearing');
+            });
             emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion, scope });
           }, fade);
         }, after);
@@ -7493,7 +7535,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     const move=(unit,dx,dy)=>unit.positions.forEach(p=>{p.x+=dx;p.y+=dy;});
     for(let i=units.length-2;i>=0;i--){
       const next=units[i+1],prev=units[i],p=this.document.scenes[next.start].presentation||{};
-      if((p.display||'stack')==='overlay')continue;
+      if(display==='overlay'||(p.display||'stack')==='overlay')continue;
       const a=box(prev),b=box(next),gap=this._sceneGap(this.document.scenes[prev.start],this.document.scenes[next.start]);
       if(p.flow==='horizontal'){
         const vertical=p.text?.writingMode==='vertical-rl';move(prev,vertical?b.right+gap-a.left:b.left-gap-a.right,0);
@@ -7520,7 +7562,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(Number(scene.presentation?.effectTiming?.delay)>0)node.dataset.simultaneousWaiting='true';
         else delete node.dataset.simultaneousWaiting;
       }
-      this.els.scenes.appendChild(node);nodes.push(node);
+      if(node.parentNode!==this.els.scenes)this.els.scenes.appendChild(node);
+      nodes.push(node);
     });
     old.forEach(node=>node.remove());
     this._positionSimultaneous(nodes,visible,display);

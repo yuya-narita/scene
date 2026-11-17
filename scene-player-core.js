@@ -369,10 +369,17 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const updateLabel=()=>{const shown=this.host.classList.contains('sp-immersive-controls'),en=this.uiLanguage==='en';button.setAttribute('aria-expanded',String(shown));button.setAttribute('aria-label',shown?(en?'Hide controls':'操作を隠す'):(en?'Show controls':'操作を表示'));button.textContent=shown?'×':'⋯';};
       const reflow=()=>{
         if(this.destroyed||!this.document||!this.els.stage?.clientHeight)return;
-        const nodes=Array.from(this.els.scenes.children),entries=nodes.map(node=>({scene:this.document.scenes.find(sc=>sc.id===node.dataset.sceneId)}));
+        const nodes=Array.from(this.els.scenes.children);
+        const scenes=this.document.scenes;
+        const entries=nodes.map(node=>{
+          const index=scenes.findIndex(scene=>scene.id===node.dataset.sceneId);
+          return {scene:scenes[index],index};
+        });
         if(!nodes.length||entries.some(e=>!e.scene))return;
         nodes.forEach(node=>node.querySelectorAll('.sp-text[data-writing-mode="vertical-rl"],.sp-subtext[data-writing-mode="vertical-rl"]').forEach(text=>this._syncVerticalTextHeight(text)));
-        if(this.host.dataset.display==='overlay')this._positionOverlayNodes(nodes,entries);else this._positionSceneNodes(nodes,entries,0);
+        if(this.host.dataset.display==='overlay'&&!entries.some(entry=>this._simultaneousBounds(entry.index).id)){
+          this._positionOverlayNodes(nodes,entries);
+        }else this._positionSceneNodes(nodes,entries,0);
         // Existing viewers/rolls keep their timeline; no Scene/audio replay on rotation.
         this.els.scenes.querySelectorAll('.sp-credits-viewport').forEach(v=>v.dispatchEvent(new Event('sceneplayer:reflow')));
       };
@@ -3606,6 +3613,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     }
 
     _measureSceneGeometry(node, stageRect) {
+      node.querySelector(':scope > .sp-handdrawn-frame')?._spFitHanddrawnFrame?.();
       node.classList.add('sp-layout-measuring');
       const nodeRect=this._logicalRect(node.getBoundingClientRect());
       const boxHeight=Math.max(1,nodeRect.height);
@@ -3842,6 +3850,12 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const stageWidth=Math.max(1,this.els.stage.clientWidth||stageRect.width),stageHeight=Math.max(1,this.els.stage.clientHeight||stageRect.height);
       const focusY = stageHeight * (stageWidth <= 520 ? .48 : .46);
       return nodes.map((node, i) => {
+        const anchor=node._spOverlayAnchor;
+        if(anchor&&anchor.width===stageWidth&&anchor.height===stageHeight){
+          node.style.zIndex=String(20+i);
+          return {node,scene:sceneEntries[i]?.scene,x:anchor.x,y:anchor.y};
+        }
+        delete node._spOverlayAnchor;
         const geometry=this._measureSceneGeometry(node,stageRect);
         const position=node.querySelector(':scope > .sp-text, :scope > .sp-handdrawn-frame')?this._framePosition(sceneEntries[i]?.scene):{preset:'auto'};
         let x=0,y=focusY-geometry.height/2;
@@ -3867,6 +3881,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
 
     _renderStackWithBreathing(visible, active) {
+      const epoch=this._simultaneousEpoch;
+      const isCurrent=()=>!this.destroyed&&epoch===this._simultaneousEpoch;
       const oldById = new Map(
         [...this.els.scenes.querySelectorAll('.sp-scene')].map((node) => [node.dataset.sceneId, node])
       );
@@ -3883,7 +3899,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           newestCreated = node;
         }
         nodes.push(node);
-        this.els.scenes.appendChild(node);
+        if(node.parentNode!==this.els.scenes)this.els.scenes.appendChild(node);
       });
 
       oldById.forEach((node) => {
@@ -3910,6 +3926,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         }
 
         requestAnimationFrame(() => {
+          if(!isCurrent())return;
           // Previous text may still move into its new stack position. The incoming
           // still Scene is deliberately excluded from every geometry transition.
           final.forEach(({node,x,y}) => {
@@ -3928,6 +3945,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           // Keep transition disabled for this entrance frame, then hand future
           // stack movement back to the normal Scene transition rules.
           requestAnimationFrame(() => {
+            if(!isCurrent())return;
             if (newestCreated) newestCreated.style.transition = '';
           });
           this._scheduleAuto();
@@ -3939,6 +3957,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Leave the new Scene in its CSS entering position for one painted frame.
       // Without this frame, the incoming Scene has almost no travel distance.
       requestAnimationFrame(() => {
+        if(!isCurrent())return;
         this.host.classList.remove('sp-whitespace-exhale');
         this.host.classList.add('sp-whitespace-inhale');
 
@@ -3948,6 +3967,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
         // Jump/Shino wait two frames before retargeting to the final geometry.
         requestAnimationFrame(() => {
+          if(!isCurrent())return;
           requestAnimationFrame(() => {
             this.host.classList.remove('sp-whitespace-inhale');
             this.host.classList.add('sp-whitespace-exhale');
@@ -3982,6 +4002,20 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const display = this._hasCredits(active?.presentation) ? 'solo' : active?.presentation?.display || 'stack';
       const visible = this._visibleScenes(display);
       const isForwardStack = this._audioRenderMode === 'advance' && (display === 'stack' || display === 'overlay');
+      if(isForwardStack){
+        const stage=this.els.stage;
+        for(const node of this.els.scenes.querySelectorAll('.sp-scene')){
+          if(node.classList.contains('is-disappearing')&&
+             (node.classList.contains('is-disappear-explode')||node.classList.contains('is-disappear-shatter'))){
+            node.classList.add('is-disappeared');
+            node.classList.remove('is-disappearing');
+          }
+          if(display==='overlay'&&node.style.transform){
+            const previous=node.style.transform.match(/^translate3d\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px,/);
+            if(previous)node._spOverlayAnchor={x:Number(previous[1]),y:Number(previous[2]),width:stage.clientWidth,height:stage.clientHeight};
+          }else delete node._spOverlayAnchor;
+        }
+      }
 
       if (visible.some(entry=>this._simultaneousBounds(entry.index).id)) {
         this._renderSimultaneousVisible(visible,active,display,isForwardStack);
@@ -6004,12 +6038,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const scuff=makePath('sp-handdrawn-scuff');
       frame.prepend(svg);
       let lastWidth=0,lastHeight=0;
-      const draw=()=>{
+      let fittedViewport='';
+      const draw=(force=false, relayout=true)=>{
         if(!frame.isConnected)return;
         const text=frame.querySelector(':scope > .sp-text');
-        let fitted=false;
+        const vertical=text&&frame.dataset.writingMode==='vertical-rl';
+        const viewport=this.els.stage;
+        const viewportKey=`${viewport.clientWidth}:${viewport.clientHeight}:${this.host.clientHeight}`;
+        if(vertical&&!force&&fittedViewport===viewportKey)return;
         frame.classList.add('sp-frame-measuring');
-        if(text&&frame.dataset.writingMode==='vertical-rl'){
+        if(vertical){
+          // Always fit the full text using its natural column height.
+          text.style.position='relative';
+          text.style.left='';
+          text.style.top='';
+          this._syncVerticalTextHeight(text);
+          frame.style.width='fit-content';
+          frame.style.height='';
+          frame.style.padding='';
           const liveFrame=this.document?.scenes?.find(item=>item.id===scene.id)?.presentation?.frame||frameOptions;
           const liveExtraX=Math.max(-80,Math.min(180,Number(liveFrame.extraX)||0));
           const liveExtraY=Math.max(-80,Math.min(180,Number(liveFrame.extraY)||0));
@@ -6034,16 +6080,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           inkRight=rects.length?Math.max(...rects.map(item=>item.right)):fittedTextRect.right;
           const inkTop=rects.length?Math.min(...rects.map(item=>item.top)):fittedTextRect.top;
           const inkBottom=rects.length?Math.max(...rects.map(item=>item.bottom)):fittedTextRect.bottom;
-          const columns=new Set(rects.map(item=>Math.round(item.left/3)*3)).size||1;
+          const columns=new Set(rects.map(item=>Math.round((item.left-fittedTextRect.left)/3)*3)).size||1;
           const charCount=Array.from(String(scene.text||'')).filter(char=>char!=='\n').length;
           const shapeLevel=Math.max(Math.min(1,(columns-1)/3),Math.min(1,Math.max(0,(charCount-18)/58)));
           const mobile=(this.host.clientWidth||global.innerWidth)<=600;
-          const padX=Math.max(0,(mobile?27:34)+shapeLevel*(mobile?8:12)+extraX);
-          const padY=Math.max(0,(mobile?30:38)+shapeLevel*(mobile?13:18)+extraY);
+          const padX=Math.max(0,(mobile?27:34)+shapeLevel*(mobile?8:12)+liveExtraX);
+          const padY=Math.max(0,(mobile?30:38)+shapeLevel*(mobile?13:18)+liveExtraY);
           const inkWidth=Math.max(1,inkRight-inkLeft),inkHeight=Math.max(1,inkBottom-inkTop);
           text.style.position='absolute';
           text.style.margin='0';
-          text.style.height=`${Math.ceil(fittedTextRect.height)}px`;
           text.style.left=`${Math.round(padX-(inkLeft-fittedTextRect.left))}px`;
           text.style.top=`${Math.round(padY-(inkTop-fittedTextRect.top))}px`;
           frame.style.padding='0';
@@ -6051,7 +6096,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           frame.style.height=`${Math.ceil(inkHeight+padY*2)}px`;
           frame.dataset.shapeLevel=String(shapeLevel);
           frame.dataset.inkFitted='true';
-          fitted=true;
+          fittedViewport=viewportKey;
         }
         const rect=this._logicalRect(frame.getBoundingClientRect());
         const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
@@ -6071,20 +6116,24 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         scuff.setAttribute('stroke-dasharray',`${dashA} ${dashB} ${dashC} ${dashB+2}`);
         scuff.setAttribute('stroke-dashoffset',String(seed%29));
         const article=frame.closest('.sp-scene');
-        if(fitted&&article&&!article.classList.contains('entering'))requestAnimationFrame(()=>{
+        if(vertical&&relayout&&article?.parentNode===this.els.scenes&&!article.classList.contains('entering'))requestAnimationFrame(()=>{
           if(!frame.isConnected||!this.document)return;
-          const active=this.document.scenes?.[this.index];
+          const active=this.document.scenes?.[this._simultaneousBounds().start];
           const display=active?.presentation?.display||'stack';
           const entries=this._visibleScenes(display);
           const byId=new Map([...this.els.scenes.querySelectorAll('.sp-scene')].map(node=>[node.dataset.sceneId,node]));
           const present=entries.map(entry=>({entry,node:byId.get(entry.scene.id)})).filter(item=>item.node);
           const presentNodes=present.map(item=>item.node),presentEntries=present.map(item=>item.entry);
-          if(display==='overlay')this._positionOverlayNodes(presentNodes,presentEntries);
+          if(display==='overlay'&&!presentEntries.some(entry=>this._simultaneousBounds(entry.index).id))this._positionOverlayNodes(presentNodes,presentEntries);
           else this._positionSceneNodes(presentNodes,presentEntries,0);
         });
       };
-      frame._spDrawHanddrawnFrame=draw;
-      requestAnimationFrame(draw);
+      frame._spDrawHanddrawnFrame=()=>draw(true);
+      frame._spFitHanddrawnFrame=()=>{if(frame.dataset.writingMode==='vertical-rl')draw(false,false);};
+      requestAnimationFrame(()=>draw());
+      if(frame.dataset.writingMode==='vertical-rl'&&document.fonts?.status==='loading'){
+        document.fonts.ready.then(()=>draw(true));
+      }
       if(typeof ResizeObserver==='function'){
         const observer=new ResizeObserver(()=>{
           if(!frame.isConnected){observer.disconnect();return;}
@@ -7293,7 +7342,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         this._startTyping(scene, textNode, typing);
       } else {
         const frame=article.querySelector(':scope > .sp-handdrawn-frame');
-        if(frame){
+        if(frame&&(frame.dataset.writingMode!=='vertical-rl'||!frame._spFitHanddrawnFrame)){
           const previous={width:frame.style.width,height:frame.style.height};
           const finalWidth=frame.offsetWidth,finalHeight=frame.offsetHeight;
           if(finalWidth>0&&finalHeight>0){
@@ -7352,7 +7401,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'start', motion, scope });
           this._presentationTimeout(() => {
             if (!article.isConnected) return;
-            targets.forEach(target=>{if(target.isConnected)target.classList.add('is-disappeared');});
+            targets.forEach(target=>{
+              if(!target.isConnected)return;
+              target.classList.add('is-disappeared');
+              if(motion==='explode'||motion==='shatter')target.classList.remove('is-disappearing');
+            });
             emit(this.host, 'sceneplayer:disappear', { index: this.index, scene, phase: 'end', motion, scope });
           }, fade);
         }, after);
@@ -7523,7 +7576,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     const move=(unit,dx,dy)=>unit.positions.forEach(p=>{p.x+=dx;p.y+=dy;});
     for(let i=units.length-2;i>=0;i--){
       const next=units[i+1],prev=units[i],p=this.document.scenes[next.start].presentation||{};
-      if((p.display||'stack')==='overlay')continue;
+      if(display==='overlay'||(p.display||'stack')==='overlay')continue;
       const a=box(prev),b=box(next),gap=this._sceneGap(this.document.scenes[prev.start],this.document.scenes[next.start]);
       if(p.flow==='horizontal'){
         const vertical=p.text?.writingMode==='vertical-rl';move(prev,vertical?b.right+gap-a.left:b.left-gap-a.right,0);
@@ -7550,7 +7603,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         if(Number(scene.presentation?.effectTiming?.delay)>0)node.dataset.simultaneousWaiting='true';
         else delete node.dataset.simultaneousWaiting;
       }
-      this.els.scenes.appendChild(node);nodes.push(node);
+      if(node.parentNode!==this.els.scenes)this.els.scenes.appendChild(node);
+      nodes.push(node);
     });
     old.forEach(node=>node.remove());
     this._positionSimultaneous(nodes,visible,display);

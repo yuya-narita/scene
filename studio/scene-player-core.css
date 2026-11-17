@@ -307,7 +307,7 @@
      Scene vertical placement itself is transform-driven, so resetting it
      here would jump the Scene back to the stage origin before fading. */
 }
-.sp-scene.is-disappeared{visibility:hidden;pointer-events:none}
+.sp-scene.is-disappeared{visibility:hidden!important;opacity:0!important;pointer-events:none}
 
 .sp-scene[data-view="console"] .sp-text{
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
