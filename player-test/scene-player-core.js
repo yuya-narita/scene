@@ -5952,9 +5952,9 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
           frame.dataset.inkFitted='true';
           fitted=true;
         }
-        frame.classList.remove('sp-frame-measuring');
         const rect=this._logicalRect(frame.getBoundingClientRect());
         const width=Math.max(24,Math.round(rect.width*10)/10),height=Math.max(24,Math.round(rect.height*10)/10);
+        frame.classList.remove('sp-frame-measuring');
         if(Math.abs(width-lastWidth)<.5&&Math.abs(height-lastHeight)<.5)return;
         lastWidth=width;lastHeight=height;
         svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
@@ -7053,14 +7053,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       article.dataset.fxPlayed = 'true';
       article.classList.remove('sp-fx-play');
       void article.offsetWidth;
-      article.classList.add('sp-fx-play');
       const syncFrame=scene?.presentation?.frame?.motion==='sync'?article.querySelector(':scope > .sp-handdrawn-frame'):null;
       const syncText=syncFrame?.querySelector(':scope > .sp-text');
-      if(syncFrame&&syncText){
-        requestAnimationFrame(()=>requestAnimationFrame(()=>{
-          if(article.isConnected&&article.classList.contains('sp-fx-play'))this._syncFrameEntranceEffect(article,syncFrame,syncText);
-        }));
-      }
+      article.classList.add('sp-fx-play');
+      // Transfer the entrance before the browser paints the frame on its own.
+      if(syncText)this._syncFrameEntranceEffect(article,syncFrame,syncText);
 
       // Longest standard effect is fade/slow at ~1.25s.
       // Remove the trigger class afterwards so later layout changes cannot
@@ -7107,7 +7104,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _syncFrameEntranceEffect(article, frame, text) {
       if(!article||!frame||!text||article._spSyncedFrameEffect)return;
-      const cssAnimations=[...text.getAnimations()].filter(animation=>animation?.effect&&typeof animation.animationName==='string');
+      const cssAnimations=(text.getAnimations?.()||[]).filter(animation=>animation?.effect&&typeof animation.animationName==='string');
       if(!cssAnimations.length)return;
       const spatial=new Set(['transform','translate','scale','rotate','opacity','filter','clipPath','clip-path','transformOrigin','transform-origin']);
       const state={text,frame,animations:[],restore:{},overrides:new Set()};

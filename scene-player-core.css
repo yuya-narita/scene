@@ -712,6 +712,13 @@
 }
 
 /* Keep frame fitting independent from transient entrance transforms. */
+/* Measure the synced frame and its text at the final layout size. */
+.sp-scene[data-frame-motion="sync"] .sp-handdrawn-frame.sp-frame-measuring{
+  transform:none!important;
+  translate:none!important;
+  scale:none!important;
+  rotate:none!important;
+}
 .sp-handdrawn-frame.sp-frame-measuring>.sp-text,
 .sp-scene.sp-layout-measuring .sp-text{
   animation:none!important;
