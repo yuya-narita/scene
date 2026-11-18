@@ -719,7 +719,7 @@
       return true;
     }catch(error){
       console.error(error);currentPackage=null;if(relayButton)relayButton.hidden=true;if(journey)journey.hidden=true;setStatus(String(error?.message||error));return false;
-    }finally{if(openButton)openButton.disabled=false;}
+    }finally{finishAutoOpen();if(openButton)openButton.disabled=false;}
   }
 
   async function claimOfficialShelfCopy({button=endingOwnButton,statusNode=endingOwnStatus}={}){
@@ -840,9 +840,10 @@
     return String(fallback||'RELAYを読み込めませんでした。');
   }
   async function openRelayFromUrl(token='',publicId=''){
-    if(await resumeRelayPurchaseFromReturn())return true;
+    if(await resumeRelayPurchaseFromReturn()){finishAutoOpen();return true;}
     const hasToken=validRelayToken(token),hasPublicId=validRelayPublicId(publicId);
     if(!hasToken&&!hasPublicId){
+      finishAutoOpen();
       setStatus('このRELAY URLは正しくありません。');
       return false;
     }
@@ -903,6 +904,7 @@
       }
       return false;
     }finally{
+      finishAutoOpen();
       if(openButton)openButton.disabled=false;
     }
   }
@@ -1414,6 +1416,8 @@
     setRelayEntryMode(true);
     if(launcher)launcher.hidden=false;
     openRelayFromUrl(initialRelayToken,initialRelayPublicId);
+  }else{
+    finishAutoOpen();
   }
 
 })();

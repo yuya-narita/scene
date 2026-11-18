@@ -338,6 +338,7 @@
   }
 
   function showError(error) {
+    document.documentElement.classList.remove('public-book-loading');
     setShelfReturnReading(false);
     console.error(error);
     host.hidden = true;
@@ -1268,6 +1269,7 @@
   }
 
   async function fetchScene() {
+    document.documentElement.classList.add('public-book-loading');
     setShelfReturnReading(false);
     errorPanel.hidden = true;
     const src = source();
@@ -1327,6 +1329,7 @@
       localStorage.setItem(storageKey(),String(paidStartIndex));
       ensurePlayer(paidStartIndex);
     }
+    document.documentElement.classList.remove('public-book-loading');
   }
 
   function bindPublicControls() {

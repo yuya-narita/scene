@@ -1,47 +1,52 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" class="public-book-loading">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0b1016">
-  <title>あ箱 Local Player</title>
-  <meta name="description" content="あ箱 Local Player。あなたの本棚にある一冊を読むためのプレイヤーです。">
+  <title>あ箱 Player</title>
+  <meta name="description" content="あ箱 Player。あ箱の作品を読むためのプレイヤーです。">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="あ箱">
-  <meta property="og:title" content="あ箱 Local Player">
-  <meta property="og:description" content="あなたの本棚にある一冊を読むためのプレイヤーです。">
+  <meta property="og:title" content="あ箱 Player">
+  <meta property="og:description" content="あ箱の作品を読むためのプレイヤーです。">
   <meta property="og:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="あ箱 Local Player">
-  <meta name="twitter:description" content="あなたの本棚にある一冊を読むためのプレイヤーです。">
+  <meta name="twitter:title" content="あ箱 Player">
+  <meta name="twitter:description" content="あ箱の作品を読むためのプレイヤーです。">
   <meta name="twitter:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
-  <script>try{const q=new URLSearchParams(location.search),copy=q.get('bookshelfCopy')||'',master=q.get('bookshelfMaster')||'',preview=q.get('preview')||'',issue=q.get('issue')||'';if(/^[a-f0-9]{48}$/i.test(preview)||/^copy_[a-f0-9]{32}$/i.test(copy)||/^[A-Za-z0-9_-]{12,80}$/.test(master)||/^issue_[a-f0-9]{24}$/i.test(issue))document.documentElement.classList.add('local-auto-open-pending')}catch(_){}</script>
+  <script>
+    // Keep incoming bookshelf/review/RELAY links on their existing loader.
+    const entry=new URL(location.href);
+    if(!entry.searchParams.get('src')&&['bookshelfCopy','bookshelfMaster','preview','issue','review','officialShelf','relay','relayKey'].some(key=>entry.searchParams.get(key))){
+      const destination=new URL('./local-player/',entry);
+      destination.search=entry.search;destination.hash=entry.hash;
+      location.replace(destination.href);
+    }
+  </script>
+  <style>
+    .book-loading{display:none}
+    html.public-book-loading .book-loading,
+    html.local-auto-open-pending .book-loading{
+      position:fixed;inset:0;z-index:20001;display:flex;align-items:center;
+      justify-content:center;gap:12px;padding:24px;background:#0b1016;
+      color:rgba(245,245,242,.85);font:500 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+    }
+    html.local-auto-open-pending #localLauncher{display:none!important}
+    .book-loading-spinner{width:18px;height:18px;border:2px solid rgba(245,245,242,.22);
+      border-top-color:#f5f5f2;border-radius:50%;animation:book-loading-spin .8s linear infinite}
+    @keyframes book-loading-spin{to{transform:rotate(360deg)}}
+    @media(prefers-reduced-motion:reduce){.book-loading-spinner{animation:none}}
+  </style>
   <link rel="stylesheet" href="./scene-player-core.css?v=20261109-card-frame-v8">
   <link rel="stylesheet" href="./public-player.css?v=20261015-ending-v17">
-  <link rel="stylesheet" href="./local-loader.css?v=63.35.5-auto-open">
-  <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
-  <script>window.__AHAKO_LOCAL_PLAYER__ = true;</script>
+  <link rel="stylesheet" href="./ios-input-guard.css?v=70.4">
 </head>
 <body>
   <a id="publicShelfReturn" class="public-shelf-return" href="../bookshelf/" hidden>← 本棚へ</a>
-  <section id="localLauncher" class="local-launcher">
-    <div id="localDropZone" class="local-launcher-card" tabindex="0" role="button" aria-label=".sceneを開く">
-      <small>あ箱 LOCAL PLAYER</small>
-      <h1>.sceneを開く</h1>
-      <p>Master.scene / Distribution.scene を端末内で読み込みます。作品データはアップロードしません。</p>
-      <button id="localOpenButton" type="button">ファイルを選択</button>
-      <span>PCではここへドラッグ＆ドロップもできます</span>
-      <input id="localFileInput" type="file" hidden>
-      <p id="localStatus" class="local-status" aria-live="polite"></p>
-      <button id="localOwnCopyButton" class="local-own-copy" type="button" hidden>自分の一冊を受け取る</button>
-      <a class="local-privacy-link" href="https://yuya-narita.github.io/scene/privacy/" target="_blank" rel="noopener noreferrer">プライバシー</a>
-    </div>
-  </section>
-  <div id="localAutoOpen" class="local-auto-open" role="status" aria-live="polite" aria-label="本を開いています">
-    <span class="local-auto-open-spinner" aria-hidden="true"></span><span>本を開いています…</span>
+  <div id="publicBookLoading" class="book-loading" role="status" aria-live="polite">
+    <span class="book-loading-spinner" aria-hidden="true"></span><span>本を読み込んでいます…</span>
   </div>
-
-  <button id="localBackButton" class="local-back-button" type="button" hidden aria-label="ファイル選択に戻る">‹ <span>選択</span></button>
 
   <section id="publicIntro" class="public-intro" hidden>
     <div id="publicIntroCover" class="public-intro-cover"></div>
@@ -154,9 +159,7 @@
   <link rel="stylesheet" href="./shared/scene-rpg-player.css?v=20261112-card-kinds-v1">
   <script src="./shared/scene-rpg-command.js?v=20261112-public-rpg-1"></script>
   <script src="./shared/scene-rpg-player.js?v=20261112-card-kinds-v1"></script>
-  <script src="./public-player.js?v=20261109-card-frame-v8"></script>
-  <script src="../ahako-dialog.js?v=70.3"></script>
-  <script src="./local-loader.js?v=20261111-bookshelf-bookstore-return-v1"></script>
-  <script src="./load-diagnostics.js?v=20261028-safe-v1"></script>
+  <script src="./public-player.js?v=20261118-book-loading-v1"></script>
+  <script src="./ahako-dialog.js?v=70.3"></script>
 </body>
 </html>
