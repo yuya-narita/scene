@@ -1191,7 +1191,7 @@
         if(!db.objectStoreNames.contains(RECENT_SCENE_STORE))db.createObjectStore(RECENT_SCENE_STORE,{keyPath:'id'});
         drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(draftMetaFromRow(cursor.value));cursor.continue();};
       };
-      req.onsuccess=()=>resolve(req.result);
+      req.onsuccess=()=>{const db=req.result;db.onversionchange=()=>db.close();resolve(db);};
       req.onerror=()=>reject(req.error);
     });
   }
@@ -19094,7 +19094,7 @@ function openDesktopTextDetail(){
   // Master files stay in IndexedDB on this origin. No work payload is sent
   // to the A-Hako API by this integration.
   const BOOKSHELF_DB_NAME='ahako-local-bookshelf';
-  const BOOKSHELF_DB_VERSION=3;
+  const BOOKSHELF_DB_VERSION=4;
   const BOOKSHELF_WORKS_STORE='works';
   const BOOKSHELF_READER_STORE='readerBooks';
   const BOOKSHELF_HANDOFF_STORE='handoff';
@@ -19107,13 +19107,17 @@ function openDesktopTextDetail(){
       const req=indexedDB.open(BOOKSHELF_DB_NAME,BOOKSHELF_DB_VERSION);
       req.onupgradeneeded=()=>{
         const db=req.result;
-        if(!db.objectStoreNames.contains(BOOKSHELF_WORKS_STORE))db.createObjectStore(BOOKSHELF_WORKS_STORE,{keyPath:'workId'});
-        if(!db.objectStoreNames.contains(BOOKSHELF_READER_STORE))db.createObjectStore(BOOKSHELF_READER_STORE,{keyPath:'copyId'});
-        if(!db.objectStoreNames.contains(BOOKSHELF_HANDOFF_STORE))db.createObjectStore(BOOKSHELF_HANDOFF_STORE,{keyPath:'key'});
-        if(!db.objectStoreNames.contains(BOOKSHELF_WORK_RECOVERY_STORE))db.createObjectStore(BOOKSHELF_WORK_RECOVERY_STORE,{keyPath:'recoveryId'});
-        if(!db.objectStoreNames.contains(BOOKSHELF_READER_RECOVERY_STORE))db.createObjectStore(BOOKSHELF_READER_RECOVERY_STORE,{keyPath:'recoveryId'});
+        if(!db.objectStoreNames.contains('works'))db.createObjectStore('works',{keyPath:'workId'});
+        if(!db.objectStoreNames.contains('readerBooks'))db.createObjectStore('readerBooks',{keyPath:'copyId'});
+        if(!db.objectStoreNames.contains('handoff'))db.createObjectStore('handoff',{keyPath:'key'});
+        if(!db.objectStoreNames.contains('workRecovery'))db.createObjectStore('workRecovery',{keyPath:'recoveryId'});
+        if(!db.objectStoreNames.contains('readerRecovery'))db.createObjectStore('readerRecovery',{keyPath:'recoveryId'});
       };
-      req.onsuccess=()=>resolve(req.result);
+      req.onsuccess=()=>{
+        const db=req.result;
+        db.onversionchange=()=>db.close();
+        resolve(db);
+      };
       req.onerror=()=>reject(req.error);
     });
   }

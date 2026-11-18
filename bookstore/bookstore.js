@@ -99,10 +99,28 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);const returnUrl=new URL(location.href);if(privateReadingRoom)returnUrl.hash=roomShelfFace===3?'reading-room-later':'reading-room';player.searchParams.set('returnTo',returnUrl.href);return player.toString();}
 // V2.21.0 — Bookstore and Bookshelf share the same reader-copy IndexedDB.
 // The bookstore never duplicates MY COPY data; it only presents the existing shelf rows.
-const BOOKSHELF_DB_NAME='ahako-local-bookshelf',BOOKSHELF_DB_VERSION=3,BOOKSHELF_READER_STORE='readerBooks';
+const BOOKSHELF_DB_NAME='ahako-local-bookshelf',BOOKSHELF_DB_VERSION=4,BOOKSHELF_READER_STORE='readerBooks';
 const OWNED_ORDER_KEY='ahako:bookshelf:order:owned',OWNED_ARCHIVE_KEY='ahako:bookshelf:archive:owned';
 function readLocalIdList(key){try{const v=JSON.parse(localStorage.getItem(key)||'[]');return Array.isArray(v)?v.map(String):[];}catch(_){return[];}}
-function openBookshelfDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(BOOKSHELF_DB_NAME,BOOKSHELF_DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(BOOKSHELF_READER_STORE))db.createObjectStore(BOOKSHELF_READER_STORE,{keyPath:'copyId'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+function openBookshelfDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(BOOKSHELF_DB_NAME,BOOKSHELF_DB_VERSION);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains('works'))db.createObjectStore('works',{keyPath:'workId'});
+      if(!db.objectStoreNames.contains('readerBooks'))db.createObjectStore('readerBooks',{keyPath:'copyId'});
+      if(!db.objectStoreNames.contains('handoff'))db.createObjectStore('handoff',{keyPath:'key'});
+      if(!db.objectStoreNames.contains('workRecovery'))db.createObjectStore('workRecovery',{keyPath:'recoveryId'});
+      if(!db.objectStoreNames.contains('readerRecovery'))db.createObjectStore('readerRecovery',{keyPath:'recoveryId'});
+    };
+    req.onsuccess=()=>{
+      const db=req.result;
+      db.onversionchange=()=>db.close();
+      resolve(db);
+    };
+    req.onerror=()=>reject(req.error);
+  });
+}
 async function getOwnedReaderRows(){const db=await openBookshelfDb();try{return await new Promise((resolve,reject)=>{const r=db.transaction(BOOKSHELF_READER_STORE,'readonly').objectStore(BOOKSHELF_READER_STORE).getAll();r.onsuccess=()=>resolve(r.result||[]);r.onerror=()=>reject(r.error);});}finally{db.close();}}
 function ownedCoverBlob(w){const value=w?.coverBytes;if(value instanceof ArrayBuffer||ArrayBuffer.isView(value))return new Blob([value],{type:w.coverMime||'application/octet-stream'});return w?.coverBlob instanceof Blob?w.coverBlob:null;}
 function ownedPlayerUrl(w){const q=new URLSearchParams({bookshelfCopy:w.copyId});const returnUrl=new URL(location.href);if(privateReadingRoom)returnUrl.hash=roomShelfFace===3?'reading-room-later':'reading-room';q.set('returnTo',returnUrl.href);return `../local-player/?${q.toString()}`;}

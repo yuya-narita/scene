@@ -4,14 +4,14 @@
 // browser-managed restoration competing with it after a reload.
 try{history.scrollRestoration='manual';}catch(_){}
 const DB_NAME='ahako-local-bookshelf';
-const DB_VERSION=3;
+const DB_VERSION=4;
 const WORKS='works';
 const READER_BOOKS='readerBooks';
 const HANDOFF='handoff';
 const WORK_RECOVERY='workRecovery';
 const READER_RECOVERY='readerRecovery';
 const STUDIO_DRAFT_DB_NAME='scene-studio-drafts';
-const STUDIO_DRAFT_DB_VERSION=3;
+const STUDIO_DRAFT_DB_VERSION=4;
 const STUDIO_DRAFT_STORE='drafts';
 const STUDIO_DRAFT_META_STORE='draftMeta';
 const STUDIO_DRAFT_RECOVERY_STORE='draftRecovery';
@@ -333,7 +333,25 @@ document.addEventListener('click',event=>{
   else if(target?.closest?.('.public-author-card,.public-discovery-author'))prepareShelfPlayerExit();
 },true);
 
-function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(WORKS))db.createObjectStore(WORKS,{keyPath:'workId'});if(!db.objectStoreNames.contains(READER_BOOKS))db.createObjectStore(READER_BOOKS,{keyPath:'copyId'});if(!db.objectStoreNames.contains(HANDOFF))db.createObjectStore(HANDOFF,{keyPath:'key'});if(!db.objectStoreNames.contains(WORK_RECOVERY))db.createObjectStore(WORK_RECOVERY,{keyPath:'recoveryId'});if(!db.objectStoreNames.contains(READER_RECOVERY))db.createObjectStore(READER_RECOVERY,{keyPath:'recoveryId'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+function openDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains('works'))db.createObjectStore('works',{keyPath:'workId'});
+      if(!db.objectStoreNames.contains('readerBooks'))db.createObjectStore('readerBooks',{keyPath:'copyId'});
+      if(!db.objectStoreNames.contains('handoff'))db.createObjectStore('handoff',{keyPath:'key'});
+      if(!db.objectStoreNames.contains('workRecovery'))db.createObjectStore('workRecovery',{keyPath:'recoveryId'});
+      if(!db.objectStoreNames.contains('readerRecovery'))db.createObjectStore('readerRecovery',{keyPath:'recoveryId'});
+    };
+    req.onsuccess=()=>{
+      const db=req.result;
+      db.onversionchange=()=>db.close();
+      resolve(db);
+    };
+    req.onerror=()=>reject(req.error);
+  });
+}
 async function tx(store,mode,fn){const db=await openDb();return new Promise((resolve,reject)=>{const t=db.transaction(store,mode);const s=t.objectStore(store);let out;try{out=fn(s);}catch(e){db.close();reject(e);return;}t.oncomplete=()=>{db.close();resolve(out)};t.onerror=()=>{db.close();reject(t.error)};});}
 function request(req){return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
 async function getAllWorks(){const db=await openDb();try{return await request(db.transaction(WORKS,'readonly').objectStore(WORKS).getAll());}finally{db.close();}}
@@ -394,7 +412,7 @@ function studioDraftMetaFromRow(row){
   const doc=row?.document||{},easy=row?.easy||{};
   return {id:String(row?.id||''),draftId:String(row?.id||''),workId:String(doc?.studio?.identity?.workId||row?.publication?.id||''),title:String(row?.title||doc?.title||'Untitled'),author:String(easy.author||doc?.author||''),subtitle:String(easy.subtitle||doc?.metadata?.subtitle||''),description:String(easy.description||doc?.metadata?.description||''),seriesId:String(easy.seriesId||doc?.metadata?.seriesId||''),seriesTitle:String(easy.series||doc?.metadata?.seriesTitle||''),episode:String(easy.episode||doc?.metadata?.episode||''),episodeNumber:Number(easy.episodeNumber||doc?.metadata?.episodeNumber||0)||0,episodeTitle:String(easy.episodeTitle||doc?.metadata?.episodeTitle||''),sceneCount:Number(row?.sceneCount||doc?.scenes?.length||0),updatedAt:Number(row?.updatedAt)||Date.now(),publication:{...(row?.publication||{})},coverPresentation:{fontFamily:String(doc?.cover?.fontFamily||''),styles:doc?.cover?.styles||{},visibility:doc?.cover?.visibility||{}}};
 }
-function openStudioDraftDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(STUDIO_DRAFT_DB_NAME,STUDIO_DRAFT_DB_VERSION);req.onupgradeneeded=()=>{const db=req.result;const drafts=db.objectStoreNames.contains(STUDIO_DRAFT_STORE)?req.transaction.objectStore(STUDIO_DRAFT_STORE):db.createObjectStore(STUDIO_DRAFT_STORE,{keyPath:'id'});const meta=db.objectStoreNames.contains(STUDIO_DRAFT_META_STORE)?req.transaction.objectStore(STUDIO_DRAFT_META_STORE):db.createObjectStore(STUDIO_DRAFT_META_STORE,{keyPath:'id'});if(!db.objectStoreNames.contains(STUDIO_DRAFT_RECOVERY_STORE))db.createObjectStore(STUDIO_DRAFT_RECOVERY_STORE,{keyPath:'recoveryId'});if(!db.objectStoreNames.contains(STUDIO_DRAFT_VERSION_STORE)){const versions=db.createObjectStore(STUDIO_DRAFT_VERSION_STORE,{keyPath:'snapshotId'});versions.createIndex('draftId','draftId',{unique:false});}drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(studioDraftMetaFromRow(cursor.value));cursor.continue();};};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});}
+function openStudioDraftDb(){return new Promise((resolve,reject)=>{const req=indexedDB.open(STUDIO_DRAFT_DB_NAME,STUDIO_DRAFT_DB_VERSION);req.onupgradeneeded=()=>{const db=req.result;const drafts=db.objectStoreNames.contains(STUDIO_DRAFT_STORE)?req.transaction.objectStore(STUDIO_DRAFT_STORE):db.createObjectStore(STUDIO_DRAFT_STORE,{keyPath:'id'});const meta=db.objectStoreNames.contains(STUDIO_DRAFT_META_STORE)?req.transaction.objectStore(STUDIO_DRAFT_META_STORE):db.createObjectStore(STUDIO_DRAFT_META_STORE,{keyPath:'id'});if(!db.objectStoreNames.contains('recentScenes'))db.createObjectStore('recentScenes',{keyPath:'id'});if(!db.objectStoreNames.contains(STUDIO_DRAFT_RECOVERY_STORE))db.createObjectStore(STUDIO_DRAFT_RECOVERY_STORE,{keyPath:'recoveryId'});if(!db.objectStoreNames.contains(STUDIO_DRAFT_VERSION_STORE)){const versions=db.createObjectStore(STUDIO_DRAFT_VERSION_STORE,{keyPath:'snapshotId'});versions.createIndex('draftId','draftId',{unique:false});}drafts.openCursor().onsuccess=event=>{const cursor=event.target.result;if(!cursor)return;meta.put(studioDraftMetaFromRow(cursor.value));cursor.continue();};};req.onsuccess=()=>{const db=req.result;db.onversionchange=()=>db.close();resolve(db);};req.onerror=()=>reject(req.error);});}
 async function getAllStudioDraftMeta(){try{const db=await openStudioDraftDb();try{return await request(db.transaction(STUDIO_DRAFT_META_STORE,'readonly').objectStore(STUDIO_DRAFT_META_STORE).getAll());}finally{db.close();}}catch(error){console.warn('Studio drafts could not be read by Bookshelf',error);return[];}}
 
 async function getRecoveryRows(){
