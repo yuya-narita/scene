@@ -13,7 +13,8 @@ function safeImage(raw){try{const u=new URL(raw,API);return /^https?:$/.test(u.p
 function playerUrl(w){const u=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(w.publicationId)}`);raw.searchParams.set('raw','1');u.searchParams.set('src',raw.href);u.searchParams.set('returnTo',location.href);return u.href;}
 function authorUrl(w){const a=w.author||{},u=new URL('../author/',location.href);if(a.slug)u.searchParams.set('u',a.slug);else u.searchParams.set('id',a.authorId||'');return u.href;}
 function cover(w){const src=safeImage(w.coverUrl);return src?`<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:`<span class="cover-fallback">${esc(w.title||'あ箱の本')}</span>`;}
-function popPreview(w,preferred){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview ${esc(p.style)} ${popDesignClasses(p.design)} ${window.AhakoPopUI?.stampsFor?.(p.design)?.length?'pop-has-stamps':''}" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く"><strong>${window.AhakoPopUI?.html(p.text,p.design,45)||esc([...p.text].slice(0,45).join(''))}</strong><small>店員POP · ${list.length}枚をめくる ↗</small><span class="pop-doodle" aria-hidden="true">${window.AhakoPopUI?.svg(p.design?.doodle)||''}</span>${window.AhakoPopUI?.stampsHTML?.(p.design)||''}</button>`;}
+function popPreview(w,preferred){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview pop-frame" data-paper-view="thumb" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く（${list.length}枚）">${window.AhakoPopUI?.paperHTML?.(p)||esc(p.text)}</button>`;}
+
 function card(w){return `<article class="book-card" data-work="${esc(w.publicationId)}"><button class="cover-button" data-detail="${esc(w.publicationId)}" aria-label="${esc(w.title)}の詳細を開く">${cover(w)}</button><button class="book-title" data-detail="${esc(w.publicationId)}">${esc(w.title)}</button>${episodeText(w)?`<p class="book-episode">${esc(episodeText(w))}</p>`:''}<p class="book-author">${esc(w.author?.displayName||'作者')}</p><span class="genre-tag">${esc(genres.find(g=>g[0]===w.genre)?.[1]||'その他')}</span>${popPreview(w)}</article>`;}
 function render(preserve=false){
  preserve=preserve&&userMoved&&scrollY>8;
@@ -30,6 +31,7 @@ function render(preserve=false){
  $('#heroLoading').hidden=!home||popsReady;renderHero(home,featured);
  $('#recommendations').hidden=!home||!featured.length;$('#picks').innerHTML=featured.slice(0,5).map(card).join('');
  document.querySelectorAll('img').forEach(img=>{if(img.classList.contains('pop-stamp'))return;img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{className:'cover-fallback',textContent:'あ箱の本'}));};});
+ window.AhakoPopUI?.fitAll?.();
  const url=new URL(location.href);for(const [k,v]of Object.entries({q:query,genre,view:view==='home'?'':view})){if(v)url.searchParams.set(k,v);else url.searchParams.delete(k);}history.replaceState(null,'',url);
  if(anchorId&&!scrollLock){const next=[...document.querySelectorAll('#books .book-card')].find(c=>c.dataset.work===anchorId);if(next)window.scrollBy(0,next.getBoundingClientRect().top-anchorTop);}
 }
@@ -83,12 +85,12 @@ async function loadPops(){
 }
 function paintPop(){
  const rows=pops.get(popWork.publicationId)||[],p=rows[popIndex];if(!p)return;
- $('#popTitle').innerHTML='<span class="pop-work-title">'+esc(popWork.title)+'</span>'+(episodeText(popWork)?'<span class="pop-work-episode">'+esc(episodeText(popWork))+'</span>':'');$('#popText').innerHTML=window.AhakoPopUI?.html(p.text,p.design)||esc(p.text);$('#popByline').textContent=p.displayName||'あ箱書店 店員';$('#popPaper').className='pop-paper '+p.style+' '+popDesignClasses(p.design)+(window.AhakoPopUI?.stampsFor?.(p.design)?.length?' pop-has-stamps':'');$('#popPaper').querySelectorAll('.pop-stamp-layer').forEach(n=>n.remove());$('#popPaper').insertAdjacentHTML('beforeend',window.AhakoPopUI?.stampsHTML?.(p.design)||'');$('#popPaper .pop-doodle').innerHTML=window.AhakoPopUI?.svg(p.design?.doodle)||'';$('#popHint').hidden=rows.length===1;$('#popPaper').tabIndex=rows.length===1?-1:0;$('#popPaper').setAttribute('aria-disabled',String(rows.length===1));
- $('#popPosition').textContent=`${popIndex+1} / ${rows.length} 枚`;
- $('#popPrev').disabled=popIndex===0;$('#popNext').hidden=rows.length===1;$('#popPrev').hidden=rows.length===1;
- $('#popNext').textContent=popIndex===rows.length-1?'最初へ ↺':'次へ →';
- $('#popPaper').setAttribute('aria-label',rows.length===1?'店員POP':popIndex===rows.length-1?'最初のPOPへ戻る':'次のPOPをめくる');
+ $('#popTitle').innerHTML='<span class="pop-work-title">'+esc(popWork.title)+'</span>'+(episodeText(popWork)?'<span class="pop-work-episode">'+esc(episodeText(popWork))+'</span>':'');
+ const paper=$('#popPaper');paper.className='pop-paper pop-frame';paper.dataset.paperView='modal';paper.innerHTML=window.AhakoPopUI?.paperHTML?.(p,true)||esc(p.text);window.AhakoPopUI?.fitAll?.();
+ $('#popPosition').textContent=`${popIndex+1} / ${rows.length} 枚`;$('#popPrev').disabled=popIndex===0;$('#popNext').hidden=rows.length===1;$('#popPrev').hidden=rows.length===1;$('#popHint').hidden=rows.length===1;
+ $('#popNext').textContent=popIndex===rows.length-1?'最初へ ↺':'次へ →';paper.tabIndex=rows.length===1?-1:0;paper.setAttribute('aria-disabled',String(rows.length===1));paper.setAttribute('aria-label',rows.length===1?'店員POP':popIndex===rows.length-1?'最初のPOPへ戻る':'次のPOPをめくる');
 }
+
 function openPop(id){const w=works.find(w=>w.publicationId===id);if(!w||!pops.get(id)?.length)return;popWork=w;popIndex=0;paintPop();openDialog($('#popDialog'));}
 function flipPop(delta){if(turnTimer||!popWork)return;const rows=pops.get(popWork.publicationId)||[];if(rows.length<2)return;popIndex=(popIndex+delta+rows.length)%rows.length;
  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches){paintPop();return;}
@@ -96,7 +98,7 @@ function flipPop(delta){if(turnTimer||!popWork)return;const rows=pops.get(popWor
 }
 function lockScroll(){stopHeroAuto();if(scrollLock)return;scrollLock={y:scrollY,style:document.body.getAttribute('style')};document.body.style.cssText+=`;position:fixed;top:-${scrollY}px;left:0;right:0;width:100%;`;}
 function unlockScroll(){if(!scrollLock)return;const saved=scrollLock;scrollLock=null;if(saved.style===null)document.body.removeAttribute('style');else document.body.setAttribute('style',saved.style);window.scrollTo(0,saved.y);opener?.focus({preventScroll:true});armHeroAuto();}
-function openDialog(dialog){if(!scrollLock)opener=document.activeElement;focusStack.push(document.activeElement);lockScroll();dialog.showModal();}
+function openDialog(dialog){if(!scrollLock)opener=document.activeElement;focusStack.push(document.activeElement);lockScroll();dialog.showModal();window.AhakoPopUI?.fitAll?.();}
 function detail(id){const w=works.find(w=>w.publicationId===id);if(!w)return;detailWork=w;$('#detailContent').innerHTML=`<div class="detail-layout"><div class="detail-cover">${cover(w)}</div><div><h2 id="detailTitle">${esc(w.title)}</h2><p class="book-author"><a href="${esc(authorUrl(w))}">${esc(w.author?.displayName||'作者')} →</a></p><p class="muted">${esc([w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' · '))}</p></div></div><p class="detail-description">${esc(w.description||'この本を開いて、物語をお楽しみください。')}</p><div class="detail-actions"><a class="button primary" data-read href="${esc(playerUrl(w))}">作品を読む →</a>${pops.has(id)?`<button class="button" data-pop="${esc(id)}">店員POPを見る</button>`:''}</div><p class="muted">購入・MY COPYは、作品内の案内からご利用いただけます。</p>`;openDialog($('#detailDialog'));}
 $('#genreButtons').innerHTML=genres.map(([id,label,icon])=>`<button data-genre="${id}" aria-pressed="false"><span aria-hidden="true">${icon}</span><small>${label}</small></button>`).join('');
 $('#search').value=query;$('#search').addEventListener('input',e=>{userMoved=true;query=e.target.value;shown=24;render();});$('#retry').onclick=load;$('#more').onclick=()=>{shown+=24;render();};
@@ -113,5 +115,6 @@ $('#menuToggle').onclick=()=>{const open=$('#menu').hidden;$('#menu').hidden=!op
  if(!returnState)window.scrollTo(0,0);
  for(const event of ['wheel','touchmove'])document.addEventListener(event,()=>{userMoved=true;},{passive:true});
  document.addEventListener('keydown',e=>{if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key))userMoved=true;});
+ window.addEventListener?.('resize',()=>window.AhakoPopUI?.fitAll?.());document.fonts?.ready?.then(()=>window.AhakoPopUI?.fitAll?.());
  load();
 })();
