@@ -239,3 +239,21 @@
 @font-face{font-family:PopMincho;font-style:normal;font-weight:900;font-display:swap;src:url('fonts/zen-old-mincho-latin-900-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+2000-206F;}
 .pop-sheet .pop-text-block,.pop-sheet .pop-text-block .pop-words{font-weight:var(--pop-weight,700)!important}
 .pop-sheet.pop-font-hand #previewText,.pop-sheet.pop-font-hand #previewText .pop-words,.pop-sheet.pop-font-hand #popText,.pop-sheet.pop-font-hand #popText .pop-words,.pop-sheet.pop-font-hand>.pop-text-block:not([class*=pop-font-]),.pop-sheet.pop-font-hand>.pop-text-block:not([class*=pop-font-]) .pop-words,.pop-sheet .pop-text-block.pop-font-hand,.pop-sheet .pop-text-block.pop-font-hand .pop-words{font-weight:400!important;-webkit-text-stroke:var(--pop-stroke,0em) currentColor}
+
+/* V1.11: stable POP dimensions and an uncluttered, swipe-dismissable reader. */
+#menuToggle.menu-toggle{border:0;border-radius:0;box-shadow:none;background:transparent}
+#popDialog[open]{display:flex;flex-direction:column;width:min(540px,calc(100% - 28px));height:min(500px,calc(100svh - 28px));max-height:calc(100svh - 28px);overflow:hidden;padding:26px 20px 18px;touch-action:pan-x;transition:transform .18s ease,opacity .18s ease}
+#popDialog>.close{position:absolute;top:8px;right:8px;margin:0;float:none;flex-shrink:0}
+#popDialog>.eyebrow{flex-shrink:0;margin:5px 32px 12px}
+#popDialog #popTitle{height:62px;flex-shrink:0;margin:0 20px 10px;overflow:hidden;display:flex;flex-direction:column;justify-content:center}
+#popDialog .pop-stage{position:relative;flex:1;min-height:0;width:100%;overflow:visible;transform-origin:75% 30%;perspective:900px}
+#popDialog #popPaper.pop-frame{margin:0!important;cursor:pointer;touch-action:pan-x}
+#popDialog #popPosition{flex-shrink:0;margin:12px 0 0;min-height:16px;font-size:11px}
+#popDialog #popRead{flex-shrink:0;margin-top:12px;padding:14px 8px 2px}
+.pop-stage.pop-leave{animation:pop-leaf-out .13s cubic-bezier(.4,0,.9,.6) both;will-change:transform,opacity}
+.pop-stage.pop-arrive{animation:pop-leaf-in .25s cubic-bezier(.16,1,.3,1) both;will-change:transform,opacity}
+@keyframes pop-leaf-out{from{transform:perspective(900px) rotateY(0) rotateZ(0);opacity:1}to{transform:perspective(900px) translate(18px,-14px) rotateY(-24deg) rotateZ(-4deg) scale(.97);opacity:0}}
+@keyframes pop-leaf-in{from{transform:perspective(900px) translate(-10px,9px) rotateY(14deg) rotateZ(2deg) scale(.97);opacity:0}to{transform:perspective(900px) translate(0,0) rotateY(0) rotateZ(0) scale(1);opacity:1}}
+#popDialog.pop-dragging{transform:translateY(var(--pop-drag-y,0px));transition:none}
+#popDialog.pop-dismissing{transform:translateY(-110px) scale(.97);opacity:0;transition:transform .16s ease-in,opacity .16s ease-in}
+@media(prefers-reduced-motion:reduce){.pop-stage.pop-leave,.pop-stage.pop-arrive{animation:none}#popDialog[open]{transition:none}}

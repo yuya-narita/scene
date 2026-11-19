@@ -35,10 +35,20 @@ function blockHTML(b,attrs=''){return `<span ${attrs} class="pop-text-block ${cl
 function paperHTML(pop={},ids=false){const d=pop.design||{},l=layoutFor(pop),t=l.text,materials=['sticky-yellow','sticky-pink','sticky-blue','paper-cardboard','paper-kraft','paper-white','paper-grid'],style=materials.includes(pop.style)?pop.style:'sticky-yellow';return `<span class="pop-sheet ${style} ${classes(d)}" data-paper-width="${l.width}" data-paper-height="${l.height}" data-paper-tilt="${Number(d.tilt)||0}" style="width:${l.width}px;height:${l.height}px"><span ${ids?'id="popText"':''} class="pop-text-block" style="${weightStyle(d)}left:${t.x}px;top:${t.y}px;width:${t.width}px;font-size:${t.fontSize}px;line-height:${t.lineHeight};text-align:${t.align};transform:rotate(${t.rotation}deg)">${html(pop.text,d)}</span>${blocksFor(pop).map(b=>blockHTML(b)).join('')}<small ${ids?'id="popByline"':''} class="pop-byline-block" style="left:24px;top:${l.height-36}px;font-size:11px">${esc(pop.displayName||'あ箱書店 店員')}</small><span class="pop-doodle" aria-hidden="true">${svg(d.doodle)}</span>${stampsHTML(d)}</span>`;}
 function fitPaper(stage,holder,view='thumb'){
  const w=Number(stage.dataset.paperWidth)||stage.offsetWidth||480,h=Number(stage.dataset.paperHeight)||stage.offsetHeight||280,tilt=Number(stage.dataset.paperTilt)||0,a=tilt*Math.PI/180,c=Math.cos(a),s=Math.sin(a),rw=Math.abs(w*c)+Math.abs(h*s),rh=Math.abs(w*s)+Math.abs(h*c),mobile=window.matchMedia?.('(max-width: 799px)').matches===true;
- const pad=view==='editor'?24:0,available=Math.max(60,(holder.parentElement?.clientWidth||holder.clientWidth||(view==='thumb'?220:480))-(view==='modal'?48:12));
- const maxScale=view==='thumb'?(mobile ? 0.30 : 0.45):1,cap=view==='thumb'?Math.min(mobile?150:220,available):view==='editor'?Math.max(60,(holder.clientWidth||available)-pad):available,k=Math.min(maxScale,cap/rw,view==='editor'?Math.min(340,(window.innerHeight||900)*.36)/rh:Infinity);
- stage.dataset.paperScale=String(k);if(view==='editor')stage.style.setProperty('--paper-handle-scale',String(1/k));stage.style.transformOrigin='0 0';stage.style.transform=`matrix(${k*c},${k*s},${-k*s},${k*c},${k*(s>0?h*s:0)},${k*(s<0?-w*s:0)})`;stage.style.left=(pad/2)+'px';stage.style.top=(pad/2)+'px';
- holder.style.height=(rh*k+pad)+'px';if(view!=='editor')holder.style.width=(rw*k)+'px';return {scale:k,width:rw*k,height:rh*k};
+ let k,left=0,top=0,width,height;
+ if(view==='modal'){
+  const slot=holder.parentElement,widthAvailable=slot?.clientWidth||440,heightAvailable=slot?.clientHeight||280,angle=4*Math.PI/180;
+  // Reserve the maximum supported tilt, so rotating a paper never changes its scale or the dialog size.
+  const boundWidth=w*Math.cos(angle)+h*Math.sin(angle),boundHeight=w*Math.sin(angle)+h*Math.cos(angle);
+  k=Math.min(1,Math.max(40,widthAvailable-20)/boundWidth,Math.max(40,heightAvailable-20)/boundHeight);width=widthAvailable;height=heightAvailable;left=(width-rw*k)/2;top=(height-rh*k)/2;
+ }else{
+  const editor=view==='editor',pad=editor?24:0,stable=holder.closest?.('.hero-slide,.book-card')||holder.parentElement;
+  // Never measure the shrink-to-fit POP wrapper or an already scaled frame.
+  const available=Math.max(60,(stable?.clientWidth||(editor?holder.clientWidth:0)||(mobile?162:232))-12),maxScale=editor?1:mobile ? .30 : .45,cap=editor?Math.max(60,(holder.clientWidth||available)-pad):Math.min(mobile?150:220,available);
+  k=Math.min(maxScale,cap/rw,editor?Math.min(340,(window.innerHeight||900)*.36)/rh:Infinity);width=rw*k;height=rh*k+pad;left=pad/2;top=pad/2;
+ }
+ stage.dataset.paperScale=String(k);if(view==='editor')stage.style.setProperty('--paper-handle-scale',String(1/k));stage.style.transformOrigin='0 0';stage.style.transform=`matrix(${k*c},${k*s},${-k*s},${k*c},${k*(s>0?h*s:0)},${k*(s<0?-w*s:0)})`;stage.style.left=left+'px';stage.style.top=top+'px';
+ holder.style.height=height+'px';if(view!=='editor')holder.style.width=width+'px';return {scale:k,width,height};
 }
 function fitAll(root=document){root.querySelectorAll('.pop-frame').forEach(frame=>{const sheet=frame.querySelector('.pop-sheet');if(sheet)fitPaper(sheet,frame,frame.dataset.paperView||'thumb');});}
 window.AhakoPopUI=Object.freeze({html,marksFor,adjust,svg,stampsFor,stampsHTML,layoutFor,weightFor,weightStyle,blocksFor,blockHTML,paperHTML,fitPaper,fitAll,doodles:Object.keys(art)});
