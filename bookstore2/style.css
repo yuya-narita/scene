@@ -208,3 +208,22 @@
 .pop-sheet.pop-font-hand .pop-text-block{font-family:Yomogi,cursive;font-weight:400}
 .pop-text-handles button{transform:scale(var(--paper-handle-scale,1))}
 .pop-text-handles button:before{content:"";position:absolute;inset:-12px}
+
+/* V1.9: POP overlaps the upper right of the cover; kicker stays upper left. */
+.hero-compact .hero-slide{padding:24px 0 8px}
+.hero-compact .hero-pop-wrap{position:absolute;top:0;right:22px;width:auto;margin:0;padding:0;z-index:2}
+.hero-compact .hero-kicker{position:absolute;top:24px;left:34px;right:250px;text-align:left;z-index:1;font-family:"Yu Mincho",serif;text-shadow:0 1px 5px #000,0 0 10px #000a}
+.hero-loading{position:relative;padding-top:24px}.hero-loading-note{position:absolute;top:0;right:22px;width:215px;height:125px;margin:0}
+.pop-sheet .pop-text-block.pop-font-print,.pop-sheet .pop-text-block.pop-font-print .pop-words{font-family:PopSans,sans-serif;font-weight:700;letter-spacing:0}
+.pop-sheet .pop-text-block.pop-font-hand,.pop-sheet .pop-text-block.pop-font-hand .pop-words{font-family:Yomogi,cursive;font-weight:400;letter-spacing:0}
+.pop-sheet .pop-text-block.pop-font-serif,.pop-sheet .pop-text-block.pop-font-serif .pop-words{font-family:PopMincho,serif;font-weight:700;letter-spacing:0}
+.pop-sheet .pop-text-block{color:var(--pop-ink,#25292d)}
+/* Compact desk: controls stay beside the preview, grouped into four tabs. */
+.admin-main{max-width:1200px}.admin-form{padding:18px}.editor-grid{display:grid;grid-template-columns:minmax(300px,420px) minmax(0,1fr);gap:22px;align-items:start}
+.editor-side{min-width:0}.editor-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:11;padding:4px 0}
+.editor-tabs button{flex:1;border:0;border-radius:6px;padding:12px 4px;background:#f4f6f9;font-size:13px;font-weight:700}.editor-tabs [aria-pressed=true]{background:#1453c4;color:#fff}
+.editor-controls{max-height:65svh;overflow:auto;overscroll-behavior:contain;padding:0 8px 12px 0;scrollbar-width:thin}.editor-panel{margin:0!important}.editor-panel .pop-options{padding:12px;margin:12px 0}.editor-panel p{line-height:1.6}
+.admin-main .editor-panel label{margin:10px 0 5px;font-size:12px}.admin-main .editor-panel input,.admin-main .editor-panel select{padding:9px;font-size:14px}.admin-main .editor-panel textarea{min-height:90px;height:105px;font-size:15px}.admin-main .editor-panel .button{margin-top:8px;padding:9px 10px;font-size:12px}
+.editor-preview-pane{position:sticky;top:16px;min-width:0;background:#fff;z-index:10}.preview-heading{font-size:13px;margin:10px 0}.editor-preview-pane .paper-preview-viewport{margin:10px 0 12px}.editor-actions{display:flex;flex-wrap:wrap;gap:8px}.admin-main .editor-actions .button{margin:0;padding:10px 12px}.editor-preview-pane .admin-status{margin:8px 0}.text-block-bar .muted{margin:8px 0}
+.admin-main #preview .pop-text-block{outline:none}.admin-main #preview .is-text-selected{outline:1px dashed #8fb0df;outline-offset:3px}.admin-main #preview.paper-text-editing .pop-text-block{z-index:2;outline:none}.admin-main #preview.paper-text-editing .is-text-selected{z-index:8;outline:2px solid #1453c4}
+@media(max-width:799px){.hero-compact .hero-slide{padding-top:18px}.hero-compact .hero-pop-wrap{top:0;right:12px;width:auto;margin:0}.hero-compact .hero-kicker{top:12px;left:18px;right:165px;font-size:8px;letter-spacing:.2px}.hero-loading{padding-top:18px}.hero-loading-note{right:12px;width:145px;height:85px}.editor-grid{display:flex;flex-direction:column;gap:12px}.editor-preview-pane{order:-1;position:sticky;top:0;width:100%;border-bottom:1px solid var(--line);padding:4px 0 10px}.editor-side{width:100%}.editor-controls{max-height:48svh}.editor-tabs{position:static}.admin-form{padding:12px}.editor-preview-pane .preview-heading{margin:2px 0;font-size:11px}.editor-preview-pane .paper-preview-viewport{margin:6px 0 8px}.admin-main .editor-actions .button{min-height:40px;font-size:11px;padding:8px}.editor-preview-pane .admin-status:empty{display:none}}
