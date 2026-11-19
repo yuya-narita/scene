@@ -13,7 +13,7 @@ function safeImage(raw){try{const u=new URL(raw,API);return /^https?:$/.test(u.p
 function playerUrl(w){const u=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(w.publicationId)}`);raw.searchParams.set('raw','1');u.searchParams.set('src',raw.href);u.searchParams.set('returnTo',location.href);return u.href;}
 function authorUrl(w){const a=w.author||{},u=new URL('../author/',location.href);if(a.slug)u.searchParams.set('u',a.slug);else u.searchParams.set('id',a.authorId||'');return u.href;}
 function cover(w){const src=safeImage(w.coverUrl);return src?`<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:`<span class="cover-fallback">${esc(w.title||'あ箱の本')}</span>`;}
-function popPreview(w,preferred){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview ${esc(p.style)} ${popDesignClasses(p.design)}" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く"><strong>${window.AhakoPopUI?.html(p.text,p.design,45)||esc([...p.text].slice(0,45).join(''))}</strong><small>店員POP · ${list.length}枚をめくる ↗</small><span class="pop-doodle" aria-hidden="true">${window.AhakoPopUI?.svg(p.design?.doodle)||''}</span></button>`;}
+function popPreview(w,preferred){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview ${esc(p.style)} ${popDesignClasses(p.design)} ${window.AhakoPopUI?.stampsFor?.(p.design)?.length?'pop-has-stamps':''}" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く"><strong>${window.AhakoPopUI?.html(p.text,p.design,45)||esc([...p.text].slice(0,45).join(''))}</strong><small>店員POP · ${list.length}枚をめくる ↗</small><span class="pop-doodle" aria-hidden="true">${window.AhakoPopUI?.svg(p.design?.doodle)||''}</span>${window.AhakoPopUI?.stampsHTML?.(p.design)||''}</button>`;}
 function card(w){return `<article class="book-card" data-work="${esc(w.publicationId)}"><button class="cover-button" data-detail="${esc(w.publicationId)}" aria-label="${esc(w.title)}の詳細を開く">${cover(w)}</button><button class="book-title" data-detail="${esc(w.publicationId)}">${esc(w.title)}</button>${episodeText(w)?`<p class="book-episode">${esc(episodeText(w))}</p>`:''}<p class="book-author">${esc(w.author?.displayName||'作者')}</p><span class="genre-tag">${esc(genres.find(g=>g[0]===w.genre)?.[1]||'その他')}</span>${popPreview(w)}</article>`;}
 function render(preserve=false){
  preserve=preserve&&userMoved&&scrollY>8;
@@ -29,7 +29,7 @@ function render(preserve=false){
  const home=view==='home'&&!q&&!genre,featured=works.filter(w=>pops.has(w.publicationId));
  $('#heroLoading').hidden=!home||popsReady;renderHero(home,featured);
  $('#recommendations').hidden=!home||!featured.length;$('#picks').innerHTML=featured.slice(0,5).map(card).join('');
- document.querySelectorAll('img').forEach(img=>{img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{className:'cover-fallback',textContent:'あ箱の本'}));};});
+ document.querySelectorAll('img').forEach(img=>{if(img.classList.contains('pop-stamp'))return;img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{className:'cover-fallback',textContent:'あ箱の本'}));};});
  const url=new URL(location.href);for(const [k,v]of Object.entries({q:query,genre,view:view==='home'?'':view})){if(v)url.searchParams.set(k,v);else url.searchParams.delete(k);}history.replaceState(null,'',url);
  if(anchorId&&!scrollLock){const next=[...document.querySelectorAll('#books .book-card')].find(c=>c.dataset.work===anchorId);if(next)window.scrollBy(0,next.getBoundingClientRect().top-anchorTop);}
 }
@@ -75,7 +75,7 @@ async function loadPops(){
  let failures=0;
  for(let i=0;i<works.length;i+=16){
   try{const d=await request('/bookstore2/pops?publicationIds='+encodeURIComponent(works.slice(i,i+16).map(w=>w.publicationId).join(',')));
-   for(const [id,rows]of Object.entries(d.pops||{})){const valid=Array.isArray(rows)?rows.filter(p=>p&&typeof p.text==='string'&&['sticky-yellow','sticky-pink','sticky-blue'].includes(p.style)):[];if(valid.length)pops.set(id,valid);else pops.delete(id);}
+   for(const [id,rows]of Object.entries(d.pops||{})){const valid=Array.isArray(rows)?rows.filter(p=>p&&typeof p.text==='string'&&['sticky-yellow','sticky-pink','sticky-blue','paper-cardboard','paper-kraft','paper-white','paper-grid'].includes(p.style)):[];if(valid.length)pops.set(id,valid);else pops.delete(id);}
   }catch{failures++;}
  }
  popsReady=true;if(document.querySelector('dialog[open]'))renderAfterClose=true;else render(true);
@@ -83,7 +83,7 @@ async function loadPops(){
 }
 function paintPop(){
  const rows=pops.get(popWork.publicationId)||[],p=rows[popIndex];if(!p)return;
- $('#popTitle').innerHTML='<span class="pop-work-title">'+esc(popWork.title)+'</span>'+(episodeText(popWork)?'<span class="pop-work-episode">'+esc(episodeText(popWork))+'</span>':'');$('#popText').innerHTML=window.AhakoPopUI?.html(p.text,p.design)||esc(p.text);$('#popByline').textContent=p.displayName||'あ箱書店 店員';$('#popPaper').className='pop-paper '+p.style+' '+popDesignClasses(p.design);$('#popPaper .pop-doodle').innerHTML=window.AhakoPopUI?.svg(p.design?.doodle)||'';$('#popHint').hidden=rows.length===1;$('#popPaper').tabIndex=rows.length===1?-1:0;$('#popPaper').setAttribute('aria-disabled',String(rows.length===1));
+ $('#popTitle').innerHTML='<span class="pop-work-title">'+esc(popWork.title)+'</span>'+(episodeText(popWork)?'<span class="pop-work-episode">'+esc(episodeText(popWork))+'</span>':'');$('#popText').innerHTML=window.AhakoPopUI?.html(p.text,p.design)||esc(p.text);$('#popByline').textContent=p.displayName||'あ箱書店 店員';$('#popPaper').className='pop-paper '+p.style+' '+popDesignClasses(p.design)+(window.AhakoPopUI?.stampsFor?.(p.design)?.length?' pop-has-stamps':'');$('#popPaper').querySelectorAll('.pop-stamp-layer').forEach(n=>n.remove());$('#popPaper').insertAdjacentHTML('beforeend',window.AhakoPopUI?.stampsHTML?.(p.design)||'');$('#popPaper .pop-doodle').innerHTML=window.AhakoPopUI?.svg(p.design?.doodle)||'';$('#popHint').hidden=rows.length===1;$('#popPaper').tabIndex=rows.length===1?-1:0;$('#popPaper').setAttribute('aria-disabled',String(rows.length===1));
  $('#popPosition').textContent=`${popIndex+1} / ${rows.length} 枚`;
  $('#popPrev').disabled=popIndex===0;$('#popNext').hidden=rows.length===1;$('#popPrev').hidden=rows.length===1;
  $('#popNext').textContent=popIndex===rows.length-1?'最初へ ↺':'次へ →';
@@ -105,6 +105,7 @@ $('#menuToggle').onclick=()=>{const open=$('#menu').hidden;$('#menu').hidden=!op
  document.addEventListener('click',e=>{if(e.target.closest('#heroTrack')&&Date.now()<heroClickUntil){e.preventDefault();return;}if(e.target.closest('[data-read]')){try{sessionStorage.setItem('ahako:popstore:return',JSON.stringify({url:location.href,y:scrollLock?.y??scrollY,shown,at:Date.now()}));}catch{}document.querySelectorAll('dialog[open]').forEach(d=>d.close());unlockScroll();focusStack=[];return;}const vb=e.target.closest('[data-view]'),gb=e.target.closest('[data-genre]'),db=e.target.closest('[data-detail]'),pb=e.target.closest('[data-pop]');if(pb){e.preventDefault();openPop(pb.dataset.pop);return;}if(vb){userMoved=true;view=vb.dataset.view;genre='';query='';$('#search').value='';shown=24;render();}if(gb){userMoved=true;genre=gb.dataset.genre;view='all';shown=24;render();$('#catalogue').scrollIntoView({block:'start'});}if(db)detail(db.dataset.detail);});
  document.querySelectorAll('dialog').forEach(d=>{d.querySelector('[data-close]').onclick=()=>d.close();d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});d.addEventListener('close',()=>{if(d.id==='popDialog'){clearTimeout(turnTimer);turnTimer=null;}const prior=focusStack.pop();if(!document.querySelector('dialog[open]')){unlockScroll();if(renderAfterClose){renderAfterClose=false;render(true);}}else prior?.focus({preventScroll:true});});});
  $('#hero').addEventListener('focusin',()=>{heroFocus=true;stopHeroAuto();});$('#hero').addEventListener('focusout',()=>{setTimeout(()=>{heroFocus=!!document.activeElement?.closest?.('#hero');armHeroAuto();},0);});
+ document.addEventListener('error',e=>{if(e.target?.classList?.contains('pop-stamp'))e.target.remove();},true);
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopHeroAuto();else armHeroAuto();});
  window.addEventListener?.('pagehide',stopHeroAuto);window.addEventListener?.('pageshow',armHeroAuto);
  try{history.scrollRestoration='manual';}catch{}

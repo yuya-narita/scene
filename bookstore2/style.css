@@ -149,3 +149,26 @@
 #popHint{font-size:10px;margin:9px 0 16px}#popRead{display:block;width:100%;border-top:1px solid var(--line);padding:16px 8px 2px;margin-top:14px;font-size:13px}
 @media(max-width:480px){#popDialog{width:calc(100% - 28px);padding:24px 18px 18px}#popTitle{margin:0 16px 18px}#popPaper{padding:22px 18px 20px;min-height:215px}#popText{font-size:20px;line-height:1.85}.pop-work-title{font-size:16px}#popDialog .pop-controls{gap:9px}.pop-work-episode{font-size:11px}}
 .pop-store-page{overflow-anchor:none}
+
+/* V1.7: paper materials, with no external texture/image request. */
+.paper-cardboard{--paper:#c6a174;background-color:#c6a174;background-image:repeating-linear-gradient(0deg,#82634314 0px,#82634314 1px,#f7dfb014 1px,#f7dfb014 3px),repeating-linear-gradient(93deg,transparent 0px,transparent 18px,#7252360a 19px,transparent 21px),linear-gradient(120deg,#d6b58b,#c29b6c 65%,#cfaa7d);border:1px solid #a17a4e;box-shadow:1px 3px 0 #88634155,inset 0 1px 0 #f3dcc4;border-radius:3px}
+.paper-kraft{--paper:#e2c59c;background-color:#e2c59c;background-image:repeating-linear-gradient(27deg,transparent 0px,transparent 3px,#79512c09 4px,transparent 5px),linear-gradient(110deg,#ead2ad,#dbc099);border:1px solid #c8aa80}
+.paper-white{--paper:#fffef9;background:#fffef9;border:1px solid #e2dfd5;box-shadow:2px 4px 0 #18212e13}
+.paper-grid{--paper:#fcfdf8;background-color:#fcfdf8;background-image:linear-gradient(#9cbce533 1px,transparent 1px),linear-gradient(90deg,#9cbce533 1px,transparent 1px);background-size:18px 18px;border:1px solid #d8e0e8}
+.paper-cardboard.pop-preview:after{display:none}#popPaper.paper-cardboard{border-radius:3px}
+/* Stamp positions are stored as percentages of the paper, with natural image ratio. */
+.pop-preview,.pop-paper{isolation:isolate}
+.pop-preview>strong,.pop-preview>small,#popText,#popByline{position:relative;z-index:2}
+.pop-doodle{z-index:2}
+.pop-stamp-layer{position:absolute;inset:0;display:block;overflow:hidden;border-radius:inherit;pointer-events:none}
+.pop-stamps-behind{z-index:1}.pop-stamps-front{z-index:3}
+.pop-stamp{position:absolute;display:block;height:auto!important;max-width:none!important;max-height:none!important;min-height:0!important;object-fit:contain;transform-origin:center;-webkit-user-drag:none;user-select:none;pointer-events:none}
+.pop-preview.pop-has-stamps{display:flex;flex-direction:column;justify-content:flex-start;min-height:140px}
+.pop-preview.pop-has-stamps>small{margin-top:auto;padding-top:10px}
+#popPaper.pop-has-stamps{min-height:280px}
+.admin-main #preview.pop-has-stamps{min-height:280px;overflow:visible}
+.pop-stamp-editor .pop-stamp{pointer-events:auto;cursor:grab;touch-action:none;outline-offset:3px}
+.pop-stamp-editor .pop-stamp.is-selected{outline:2px dashed #1453c4;filter:drop-shadow(0 1px 1px #fff9)}
+.pop-stamp-editor .pop-stamp:active{cursor:grabbing}
+#stampTools .button{font-size:12px;margin-right:6px;padding:10px 12px}#stampStatus{line-height:1.8}
+#stampTools input[type=file]{font-size:13px;padding:10px}
