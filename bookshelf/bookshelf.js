@@ -772,6 +772,9 @@ async function importBookshelfClaimFromLocation(){
     fetch(`${API_BASE}/bookshelf-event`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,body:JSON.stringify({event:'own_copy_saved',workId:String(payload.scene?.workId||payload.scene?.distribution?.workId||''),copyId:String(payload.scene?.distribution?.copyId||'')})}).catch(()=>{});
   }catch(_){}
   const copyId=String(payload.scene?.distribution?.copyId||'');
+  if(afterClaim==='bookstore2'&&/^copy_[a-f0-9]{32}$/i.test(copyId)){
+    const store=new URL('../bookstore2/',location.href);store.searchParams.set('view','owned');location.replace(store.href);
+  }
   if(afterClaim==='bookstore'&&/^copy_[a-f0-9]{32}$/i.test(copyId)){
     const bookstore=new URL('../bookstore/',location.href);
     bookstore.searchParams.set('receivedCopy',copyId);

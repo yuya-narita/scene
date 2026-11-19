@@ -266,3 +266,10 @@
 .book-art{position:relative;padding-top:40px;isolation:isolate}
 .book-art>.pop-preview.pop-frame{position:absolute!important;right:6px;top:40px;z-index:2;margin:0!important;transform:translateY(-50%)!important}
 .book-art>.pop-preview.pop-frame:before{content:"";position:absolute;min-width:44px;min-height:44px;width:100%;height:100%;left:50%;top:50%;transform:translate(-50%,-50%)}
+
+/* V1.15: reader-only shop navigation, sales details and themed shelves. */
+.reader-header-actions{display:flex;align-items:center;gap:12px}.reader-shortcut{display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;border:0;background:none;color:var(--ink);padding:9px}.reader-shortcut svg{width:25px;height:25px}
+#menu button{display:block;width:100%;padding:14px 18px;border:0;background:none;text-align:left;font-size:14px;color:var(--ink)}#menu a[href*=terms],#menu a[href*=privacy]{font-size:12px;color:var(--muted);padding-top:9px;padding-bottom:9px}
+.detail-offer{padding:18px;background:#f4f7fb;border-radius:10px;margin-top:20px}.detail-offer>strong{font-size:22px}.detail-offer p{font-size:13px;line-height:1.8;margin:10px 0 16px}.detail-offer small{display:block;font-size:11px;color:var(--muted);line-height:1.7;margin-top:9px}.detail-actions{margin-top:18px}
+.theme-shelf{padding:24px 0;border-top:1px solid var(--line);margin-top:20px}.theme-shelf h3{margin:0;font-size:19px}.theme-shelf>.muted{margin:8px 0 4px}.theme-shelf .books{grid-template-columns:repeat(3,minmax(0,1fr));max-width:720px}.owned-help a{color:var(--blue);text-decoration:underline}.owned-help{line-height:1.9;margin-bottom:18px}
+@media(max-width:799px){.reader-header-actions{gap:0}.reader-header-actions #menuToggle{padding-left:8px;padding-right:8px}.reader-shortcut{width:38px;min-width:38px;padding:8px}.theme-shelf .books{grid-template-columns:repeat(2,minmax(0,1fr))}.header-inner{gap:4px}.header-inner .brand{gap:8px;font-size:21px}.header-inner .brand small{font-size:7px;letter-spacing:1px}.header-inner .book-mark{font-size:34px}}

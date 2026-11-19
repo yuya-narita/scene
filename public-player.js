@@ -631,6 +631,7 @@
     if(!/^[a-f0-9]{48}$/i.test(String(token||'')))return '';
     const url=new URL('./bookshelf/',location.href);
     url.searchParams.set('claim',String(token));
+    try{const back=new URL(params.get('returnTo')||'',location.href);const store=new URL('./bookstore2/',location.href);if(back.origin===store.origin&&back.pathname===store.pathname)url.searchParams.set('afterClaim','bookstore2');}catch(_){}
     if(/^handoff_[a-f0-9]{24}$/i.test(handoffId))url.searchParams.set('handoff',handoffId);
     if(external)url.searchParams.set('openExternalBrowser','1');
     if(/^[A-Za-z0-9_-]{12,80}$/.test(String(paidPublicationId||'')))url.searchParams.set('paidPublicationId',String(paidPublicationId));
@@ -1322,6 +1323,8 @@
       // (cover, player, or ending). Checkout was launched only from ending, so
       // normalize every such return to ending instead of trusting browser history.
       forceCheckoutReturnToEnding();
+    }else if(params.get('shop')==='mycopy'&&!shopEntryConsumed&&doc?.sharing?.ownCopy?.enabled===true){
+      showShopEntry();
     }else if(params.get('paid_continue')==='1'){
       history.replaceState(null,'',(()=>{const u=new URL(location.href);u.searchParams.delete('paid_continue');return u.toString();})());
       const paidLockScene=Math.floor(Number(documentData?.commerce?.ownCopyGate?.lockScene||0));
@@ -1518,7 +1521,16 @@
     }
   }
 
+  let shopEntryActive=false,shopEntryConsumed=false;
+  function leaveShopEntry(){if(!shopEntryActive)return;shopEntryActive=false;ending.classList.remove('is-shop-entry');buildEnding(documentData);}
+  function showShopEntry(){
+    shopEntryConsumed=true;shopEntryActive=true;intro.hidden=true;host.hidden=true;ending.hidden=false;ending.classList.add('is-visible','is-shop-entry');setReportVisible(false);
+    endingLabel.textContent=String(documentData?.title||'この一冊を、本棚へ');endingLabel.hidden=false;endingLeft.hidden=true;endingRight.hidden=true;
+    const label=endingCoverButton?.querySelector('strong');if(label)label.textContent='まず読んでみる';
+    const next=new URL(location.href);next.searchParams.delete('shop');history.replaceState(null,'',next.toString());
+  }
   function returnToCover() {
+    leaveShopEntry();
     if (player) {
       const exitingPlayer = player;
       fadePublicAudio();
@@ -1552,6 +1564,7 @@
   }
 
   async function ensurePlayer(startAt = 0) {
+    leaveShopEntry();
     setShelfReturnReading(true);
     if (player) {
       const previousPlayer = player;
