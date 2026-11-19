@@ -3,19 +3,20 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const genres=[['fantasy','ファンタジー','⚔'],['romance','恋愛','♡'],['horror','ホラー','♧'],['mystery','ミステリ','⌕'],['sf','SF','♄'],['everyday','日常','☕'],['essay','エッセイ','✎'],['other','その他','…']];
 const $=s=>document.querySelector(s),params=new URLSearchParams(location.search);
 let works=[],pops=new Map(),shown=24,view=['home','all','new','pop'].includes(params.get('view'))?params.get('view'):'home',genre=genres.some(g=>g[0]===params.get('genre'))?params.get('genre'):'',query=params.get('q')||'';
-let renderAfterClose=false,returnState=null,heroIndex=0,heroIds=[],heroUserSelected=false,heroScrollTimer=null,heroClickUntil=0,heroAutoTimer=null,heroPaused=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true,heroHover=false,heroFocus=false,heroTouch=false,heroVisible=true,heroResizeObserver=null,heroIntersectionObserver=null;
-try{const saved=JSON.parse(sessionStorage.getItem('ahako:popstore:return')||'null');if(saved?.url===location.href&&Date.now()-saved.at<7200000){returnState=saved;shown=Math.max(24,Number(saved.shown)||24);}}catch{}
+let popsReady=false,userMoved=false,renderAfterClose=false,returnState=null,heroIndex=0,heroIds=[],heroUserSelected=false,heroScrollTimer=null,heroClickUntil=0,heroAutoTimer=null,heroPaused=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true,heroHover=false,heroFocus=false,heroTouch=false,heroVisible=true,heroResizeObserver=null,heroIntersectionObserver=null;
+try{const saved=JSON.parse(sessionStorage.getItem('ahako:popstore:return')||'null'),nav=window.performance?.getEntriesByType?.('navigation')?.[0]?.type;let fromPlayer=false;try{const ref=new URL(document.referrer),player=new URL('../',location.href);fromPlayer=ref.origin===player.origin&&ref.pathname===player.pathname;}catch{}if(saved?.url===location.href&&Date.now()-saved.at<7200000&&(nav==='back_forward'||(nav!=='reload'&&fromPlayer))){returnState=saved;shown=Math.max(24,Number(saved.shown)||24);}else if(saved)sessionStorage.removeItem('ahako:popstore:return');}catch{}
 let detailWork=null,popWork=null,popIndex=0,turnTimer=null,scrollLock=null,opener=null,focusStack=[];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function popDesignClasses(d={}){const pick=(key,values,fallback)=>values.includes(d?.[key])?d[key]:fallback;const tilt=Number(d?.tilt??-2);return ['pop-font-'+pick('font',['print','hand','serif'],'print'),'pop-ink-'+pick('ink',['black','blue','red'],'black'),'pop-accent-'+pick('accent',['none','underline','marker'],'none'),'pop-doodle-'+pick('doodle',['none','stars','burst','smile','paws'],'none'),'pop-tilt-'+(Number.isInteger(tilt)&&tilt>=-4&&tilt<=4?tilt+4:2)].join(' ');}
+function popDesignClasses(d={}){const pick=(key,values,fallback)=>values.includes(d?.[key])?d[key]:fallback;const tilt=Number(d?.tilt??-2);return ['pop-font-'+pick('font',['print','hand','serif'],'print'),'pop-ink-'+pick('ink',['black','blue','red'],'black'),'pop-range-mode','pop-doodle-'+pick('doodle',['none','stars','burst','smile','paws','heart','arrow','flower','book','cat','rays','circle','sparkle'],'none'),'pop-tilt-'+(Number.isInteger(tilt)&&tilt>=-4&&tilt<=4?tilt+4:2)].join(' ');}
 function episodeText(w){return [...new Set([w?.episodeLabel,w?.episodeTitle,w?.subtitle].map(v=>String(v||'').trim()).filter(v=>v&&v!==w?.title))].join(' · ');}
 function safeImage(raw){try{const u=new URL(raw,API);return /^https?:$/.test(u.protocol)?u.href:'';}catch{return '';}}
 function playerUrl(w){const u=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(w.publicationId)}`);raw.searchParams.set('raw','1');u.searchParams.set('src',raw.href);u.searchParams.set('returnTo',location.href);return u.href;}
 function authorUrl(w){const a=w.author||{},u=new URL('../author/',location.href);if(a.slug)u.searchParams.set('u',a.slug);else u.searchParams.set('id',a.authorId||'');return u.href;}
 function cover(w){const src=safeImage(w.coverUrl);return src?`<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:`<span class="cover-fallback">${esc(w.title||'あ箱の本')}</span>`;}
-function popPreview(w,preferred){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview ${esc(p.style)} ${popDesignClasses(p.design)}" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く"><strong><span class="pop-words">${esc([...p.text].slice(0,45).join(''))}${[...p.text].length>45?'…':''}</span></strong><small>店員POP · ${list.length}枚をめくる ↗</small><span class="pop-doodle" aria-hidden="true"></span></button>`;}
+function popPreview(w,preferred){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview ${esc(p.style)} ${popDesignClasses(p.design)}" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く"><strong>${window.AhakoPopUI?.html(p.text,p.design,45)||esc([...p.text].slice(0,45).join(''))}</strong><small>店員POP · ${list.length}枚をめくる ↗</small><span class="pop-doodle" aria-hidden="true">${window.AhakoPopUI?.svg(p.design?.doodle)||''}</span></button>`;}
 function card(w){return `<article class="book-card" data-work="${esc(w.publicationId)}"><button class="cover-button" data-detail="${esc(w.publicationId)}" aria-label="${esc(w.title)}の詳細を開く">${cover(w)}</button><button class="book-title" data-detail="${esc(w.publicationId)}">${esc(w.title)}</button>${episodeText(w)?`<p class="book-episode">${esc(episodeText(w))}</p>`:''}<p class="book-author">${esc(w.author?.displayName||'作者')}</p><span class="genre-tag">${esc(genres.find(g=>g[0]===w.genre)?.[1]||'その他')}</span>${popPreview(w)}</article>`;}
 function render(preserve=false){
+ preserve=preserve&&userMoved&&scrollY>8;
  const anchor=preserve?[...document.querySelectorAll('#books .book-card')].find(c=>{const r=c.getBoundingClientRect();return r.bottom>0&&r.top<(window.innerHeight||Infinity);}):null;
  const anchorId=anchor?.dataset.work,anchorTop=anchor?.getBoundingClientRect().top;
  const q=query.trim().normalize('NFKC').toLocaleLowerCase('ja');
@@ -26,7 +27,7 @@ function render(preserve=false){
  document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
  document.querySelectorAll('[data-genre]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.genre===genre)));
  const home=view==='home'&&!q&&!genre,featured=works.filter(w=>pops.has(w.publicationId));
- renderHero(home,featured);
+ $('#heroLoading').hidden=!home||popsReady;renderHero(home,featured);
  $('#recommendations').hidden=!home||!featured.length;$('#picks').innerHTML=featured.slice(0,5).map(card).join('');
  document.querySelectorAll('img').forEach(img=>{img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{className:'cover-fallback',textContent:'あ箱の本'}));};});
  const url=new URL(location.href);for(const [k,v]of Object.entries({q:query,genre,view:view==='home'?'':view})){if(v)url.searchParams.set(k,v);else url.searchParams.delete(k);}history.replaceState(null,'',url);
@@ -69,7 +70,7 @@ function renderHero(home){
  updateHeroControls();armHeroAuto();
 }
 async function request(path){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);try{const r=await fetch(API+path,{signal:controller.signal,cache:'no-store'}),data=await r.json();if(!r.ok||!data.ok)throw new Error('データを取得できませんでした');return data;}finally{clearTimeout(timer);}}
-async function load(){ $('#retry').hidden=true;$('#loadStatus').textContent='本を並べています…';try{const d=await request('/discover');if(!Array.isArray(d.works))throw new Error('作品一覧の応答を確認できませんでした');works=d.works.filter(w=>/^[A-Za-z0-9_-]{6,80}$/.test(w.publicationId));render();$('#loadStatus').textContent=works.length?'':'公開中の作品はまだありません。';await loadPops();if(returnState){window.scrollTo(0,Math.max(0,Number(returnState.y)||0));returnState=null;try{sessionStorage.removeItem('ahako:popstore:return');}catch{}}}catch(e){$('#loadStatus').textContent=e.name==='AbortError'?'接続に時間がかかっています。もう一度お試しください。':'本を読み込めませんでした。通信環境をご確認のうえ、もう一度お試しください。';$('#retry').hidden=false;}}
+async function load(){ $('#retry').hidden=true;$('#loadStatus').textContent='本を並べています…';try{const d=await request('/discover');if(!Array.isArray(d.works))throw new Error('作品一覧の応答を確認できませんでした');works=d.works.filter(w=>/^[A-Za-z0-9_-]{6,80}$/.test(w.publicationId));render();$('#loadStatus').textContent=works.length?'':'公開中の作品はまだありません。';await loadPops();if(returnState){window.scrollTo(0,Math.max(0,Number(returnState.y)||0));returnState=null;try{sessionStorage.removeItem('ahako:popstore:return');}catch{}}else if(!userMoved&&!scrollLock)window.scrollTo(0,0);}catch(e){$('#loadStatus').textContent=e.name==='AbortError'?'接続に時間がかかっています。もう一度お試しください。':'本を読み込めませんでした。通信環境をご確認のうえ、もう一度お試しください。';$('#retry').hidden=false;}}
 async function loadPops(){
  let failures=0;
  for(let i=0;i<works.length;i+=16){
@@ -77,15 +78,15 @@ async function loadPops(){
    for(const [id,rows]of Object.entries(d.pops||{})){const valid=Array.isArray(rows)?rows.filter(p=>p&&typeof p.text==='string'&&['sticky-yellow','sticky-pink','sticky-blue'].includes(p.style)):[];if(valid.length)pops.set(id,valid);else pops.delete(id);}
   }catch{failures++;}
  }
- if(document.querySelector('dialog[open]'))renderAfterClose=true;else render(true);
+ popsReady=true;if(document.querySelector('dialog[open]'))renderAfterClose=true;else render(true);
  $('#popStatus').hidden=!failures;$('#popStatusText').textContent=failures?'店員POPを一部読み込めませんでした。作品はそのままお読みいただけます。':'';
 }
 function paintPop(){
  const rows=pops.get(popWork.publicationId)||[],p=rows[popIndex];if(!p)return;
- $('#popTitle').textContent=[popWork.title,episodeText(popWork)].filter(Boolean).join(' ／ ');$('#popText').innerHTML='<span class="pop-words">'+esc(p.text)+'</span>';$('#popByline').textContent=p.displayName||'あ箱書店 店員';$('#popPaper').className='pop-paper '+p.style+' '+popDesignClasses(p.design);
+ $('#popTitle').innerHTML='<span class="pop-work-title">'+esc(popWork.title)+'</span>'+(episodeText(popWork)?'<span class="pop-work-episode">'+esc(episodeText(popWork))+'</span>':'');$('#popText').innerHTML=window.AhakoPopUI?.html(p.text,p.design)||esc(p.text);$('#popByline').textContent=p.displayName||'あ箱書店 店員';$('#popPaper').className='pop-paper '+p.style+' '+popDesignClasses(p.design);$('#popPaper .pop-doodle').innerHTML=window.AhakoPopUI?.svg(p.design?.doodle)||'';$('#popHint').hidden=rows.length===1;$('#popPaper').tabIndex=rows.length===1?-1:0;$('#popPaper').setAttribute('aria-disabled',String(rows.length===1));
  $('#popPosition').textContent=`${popIndex+1} / ${rows.length} 枚`;
  $('#popPrev').disabled=popIndex===0;$('#popNext').hidden=rows.length===1;$('#popPrev').hidden=rows.length===1;
- $('#popNext').textContent=popIndex===rows.length-1?'最初のPOPへ戻る ↺':'次のPOPをめくる →';
+ $('#popNext').textContent=popIndex===rows.length-1?'最初へ ↺':'次へ →';
  $('#popPaper').setAttribute('aria-label',rows.length===1?'店員POP':popIndex===rows.length-1?'最初のPOPへ戻る':'次のPOPをめくる');
 }
 function openPop(id){const w=works.find(w=>w.publicationId===id);if(!w||!pops.get(id)?.length)return;popWork=w;popIndex=0;paintPop();openDialog($('#popDialog'));}
@@ -98,13 +99,18 @@ function unlockScroll(){if(!scrollLock)return;const saved=scrollLock;scrollLock=
 function openDialog(dialog){if(!scrollLock)opener=document.activeElement;focusStack.push(document.activeElement);lockScroll();dialog.showModal();}
 function detail(id){const w=works.find(w=>w.publicationId===id);if(!w)return;detailWork=w;$('#detailContent').innerHTML=`<div class="detail-layout"><div class="detail-cover">${cover(w)}</div><div><h2 id="detailTitle">${esc(w.title)}</h2><p class="book-author"><a href="${esc(authorUrl(w))}">${esc(w.author?.displayName||'作者')} →</a></p><p class="muted">${esc([w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' · '))}</p></div></div><p class="detail-description">${esc(w.description||'この本を開いて、物語をお楽しみください。')}</p><div class="detail-actions"><a class="button primary" data-read href="${esc(playerUrl(w))}">作品を読む →</a>${pops.has(id)?`<button class="button" data-pop="${esc(id)}">店員POPを見る</button>`:''}</div><p class="muted">購入・MY COPYは、作品内の案内からご利用いただけます。</p>`;openDialog($('#detailDialog'));}
 $('#genreButtons').innerHTML=genres.map(([id,label,icon])=>`<button data-genre="${id}" aria-pressed="false"><span aria-hidden="true">${icon}</span><small>${label}</small></button>`).join('');
-$('#search').value=query;$('#search').addEventListener('input',e=>{query=e.target.value;shown=24;render();});$('#retry').onclick=load;$('#more').onclick=()=>{shown+=24;render();};
+$('#search').value=query;$('#search').addEventListener('input',e=>{userMoved=true;query=e.target.value;shown=24;render();});$('#retry').onclick=load;$('#more').onclick=()=>{shown+=24;render();};
 $('#popRetry').onclick=loadPops;$('#popNext').onclick=()=>flipPop(1);$('#popPrev').onclick=()=>flipPop(-1);$('#popPaper').onclick=()=>flipPop(1);$('#popRead').onclick=()=>{const id=popWork.publicationId;$('#popDialog').close();if(!$('#detailDialog').open)detail(id);};
 $('#menuToggle').onclick=()=>{const open=$('#menu').hidden;$('#menu').hidden=!open;$('#menuToggle').setAttribute('aria-expanded',String(open));};
- document.addEventListener('click',e=>{if(e.target.closest('#heroTrack')&&Date.now()<heroClickUntil){e.preventDefault();return;}if(e.target.closest('[data-read]')){try{sessionStorage.setItem('ahako:popstore:return',JSON.stringify({url:location.href,y:scrollLock?.y??scrollY,shown,at:Date.now()}));}catch{}document.querySelectorAll('dialog[open]').forEach(d=>d.close());unlockScroll();focusStack=[];return;}const vb=e.target.closest('[data-view]'),gb=e.target.closest('[data-genre]'),db=e.target.closest('[data-detail]'),pb=e.target.closest('[data-pop]');if(pb){e.preventDefault();openPop(pb.dataset.pop);return;}if(vb){view=vb.dataset.view;genre='';query='';$('#search').value='';shown=24;render();}if(gb){genre=gb.dataset.genre;view='all';shown=24;render();$('#catalogue').scrollIntoView({block:'start'});}if(db)detail(db.dataset.detail);});
+ document.addEventListener('click',e=>{if(e.target.closest('#heroTrack')&&Date.now()<heroClickUntil){e.preventDefault();return;}if(e.target.closest('[data-read]')){try{sessionStorage.setItem('ahako:popstore:return',JSON.stringify({url:location.href,y:scrollLock?.y??scrollY,shown,at:Date.now()}));}catch{}document.querySelectorAll('dialog[open]').forEach(d=>d.close());unlockScroll();focusStack=[];return;}const vb=e.target.closest('[data-view]'),gb=e.target.closest('[data-genre]'),db=e.target.closest('[data-detail]'),pb=e.target.closest('[data-pop]');if(pb){e.preventDefault();openPop(pb.dataset.pop);return;}if(vb){userMoved=true;view=vb.dataset.view;genre='';query='';$('#search').value='';shown=24;render();}if(gb){userMoved=true;genre=gb.dataset.genre;view='all';shown=24;render();$('#catalogue').scrollIntoView({block:'start'});}if(db)detail(db.dataset.detail);});
  document.querySelectorAll('dialog').forEach(d=>{d.querySelector('[data-close]').onclick=()=>d.close();d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});d.addEventListener('close',()=>{if(d.id==='popDialog'){clearTimeout(turnTimer);turnTimer=null;}const prior=focusStack.pop();if(!document.querySelector('dialog[open]')){unlockScroll();if(renderAfterClose){renderAfterClose=false;render(true);}}else prior?.focus({preventScroll:true});});});
  $('#hero').addEventListener('focusin',()=>{heroFocus=true;stopHeroAuto();});$('#hero').addEventListener('focusout',()=>{setTimeout(()=>{heroFocus=!!document.activeElement?.closest?.('#hero');armHeroAuto();},0);});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopHeroAuto();else armHeroAuto();});
  window.addEventListener?.('pagehide',stopHeroAuto);window.addEventListener?.('pageshow',armHeroAuto);
+ try{history.scrollRestoration='manual';}catch{}
+ $('#heroLoading').hidden=view!=='home'||!!genre||!!query;
+ if(!returnState)window.scrollTo(0,0);
+ for(const event of ['wheel','touchmove'])document.addEventListener(event,()=>{userMoved=true;},{passive:true});
+ document.addEventListener('keydown',e=>{if(['PageDown','PageUp','ArrowDown','ArrowUp','Home','End',' '].includes(e.key))userMoved=true;});
  load();
 })();

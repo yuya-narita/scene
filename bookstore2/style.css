@@ -113,3 +113,39 @@
 .hero-compact .hero-controls{padding-top:0;gap:0;min-height:40px}
 @media(max-width:799px){.hero-compact .hero-caption{gap:4px;padding:12px 18px 34px}.hero-kicker{font-size:9px;line-height:1.3;letter-spacing:.7px}.hero-author{font-size:11px;line-height:1.4}.hero-compact .hero-title{font-size:22px;line-height:1.3}.hero-compact .hero-episode{font-size:12px;line-height:1.4}}
 @media(max-width:360px){.hero-compact .hero-caption{gap:3px;padding:11px 15px 32px}.hero-compact .hero-title{font-size:20px;line-height:1.25}.hero-compact .hero-episode{font-size:11px;line-height:1.4}.hero-kicker{font-size:8.5px}.hero-author{font-size:10px}}
+
+/* V1.6: reserve the late-loading showcase and keep the page start stable. */
+.hero-loading{margin:0 0 28px;overflow:hidden}
+.hero-loading-image{aspect-ratio:2.7/1;border-radius:14px;background:#eff2f5}
+.hero-loading-note{position:relative;height:66px;width:min(64%,420px);margin:-25px 22px 0 auto;border-radius:3px 3px 12px 3px;background:#f5f2df}
+.hero-loading:after{content:"";display:block;height:40px}
+@media(max-width:799px){.hero-loading-image{aspect-ratio:16/9}.hero-loading-note{width:80%;margin:-20px 12px 0 auto}}
+/* Range formatting is inline, so only the selected words receive a mark. */
+.pop-range-mode .pop-words{background:none;text-decoration:none}
+.pop-mark-marker{background:linear-gradient(transparent 58%,#ff4ba26b 58%,#ff4ba26b 94%,transparent 94%);-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.pop-mark-underline{text-decoration-line:underline;text-decoration-style:wavy;text-decoration-color:#e53883;text-decoration-thickness:2px;text-underline-offset:4px}
+/* SVG replaces every former text/emoji ornament on every device. */
+.pop-doodle:before{content:none!important}
+.pop-doodle{width:52px;height:40px;right:8px;bottom:7px;font-size:initial;line-height:1;transform:rotate(-7deg)}
+.pop-doodle svg{display:block;width:100%;height:100%;overflow:visible;pointer-events:none}
+.pop-preview small{padding-right:46px}
+.pop-paper .pop-doodle{width:70px;height:53px;right:12px;bottom:12px}
+.pop-paper #popByline{padding-right:68px}
+.mark-toolbar{padding:10px 12px 12px;margin:10px 0;border:1px solid var(--line);border-radius:9px;background:#f8faff}
+.admin-main .mark-toolbar label{margin:0 0 8px}.mark-toolbar .button{margin:8px 6px 0 0;padding:10px 12px;font-size:12px}.mark-toolbar .text-button{margin-top:4px}.mark-toolbar p{margin:8px 0 0;line-height:1.7}
+/* A quieter POP reader: title, paper, one compact row of navigation. */
+#popDialog{padding:28px 22px 22px;max-height:calc(100svh - 28px);border-radius:18px;scrollbar-width:thin}
+#popDialog .close{position:sticky;top:0;float:right;margin:-18px -12px 0 0;z-index:2;background:#fff;border-radius:50%;font-size:24px}
+#popDialog>.eyebrow{font-size:10px;letter-spacing:.6px;margin:4px 32px 12px;color:var(--muted)}
+#popTitle{margin:0 24px 20px;font-size:16px;line-height:1.65}
+.pop-work-title{display:block;font-size:17px;font-weight:750}.pop-work-episode{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:4px}
+#popPaper{justify-content:flex-start;min-height:220px;padding:24px 22px 22px;border-radius:4px 5px 20px 4px;text-align:left;gap:18px}
+#popText{display:block;font-size:21px;line-height:1.85;letter-spacing:.01em;line-break:strict;word-break:normal;overflow-wrap:anywhere;white-space:pre-wrap}
+#popPaper #popByline{margin-top:auto;padding-top:12px;font-size:11px;line-height:1.7}
+#popPaper[aria-disabled=true]{cursor:default}
+#popDialog .pop-controls{display:flex;align-items:center;justify-content:center;gap:14px;margin:20px 0 0}
+#popPosition{margin:0;min-width:58px;font-size:11px;font-variant-numeric:tabular-nums}
+#popDialog .pop-controls .button{min-height:42px;padding:10px 14px;font-size:12px}
+#popHint{font-size:10px;margin:9px 0 16px}#popRead{display:block;width:100%;border-top:1px solid var(--line);padding:16px 8px 2px;margin-top:14px;font-size:13px}
+@media(max-width:480px){#popDialog{width:calc(100% - 28px);padding:24px 18px 18px}#popTitle{margin:0 16px 18px}#popPaper{padding:22px 18px 20px;min-height:215px}#popText{font-size:20px;line-height:1.85}.pop-work-title{font-size:16px}#popDialog .pop-controls{gap:9px}.pop-work-episode{font-size:11px}}
+.pop-store-page{overflow-anchor:none}
