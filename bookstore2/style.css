@@ -257,3 +257,7 @@
 #popDialog.pop-dragging{transform:translateY(var(--pop-drag-y,0px));transition:none}
 #popDialog.pop-dismissing{transform:translateY(-110px) scale(.97);opacity:0;transition:transform .16s ease-in,opacity .16s ease-in}
 @media(prefers-reduced-motion:reduce){.pop-stage.pop-leave,.pop-stage.pop-arrive{animation:none}#popDialog[open]{transition:none}}
+
+/* V1.13: consistent, device-independent genre line icons. */
+.genres .genre-icon{display:flex;align-items:center;justify-content:center;height:34px;margin:0 auto 6px;color:currentColor}
+.genres .genre-icon svg{display:block;width:28px;height:28px;flex-shrink:0;overflow:visible;pointer-events:none}

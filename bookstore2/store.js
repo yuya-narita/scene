@@ -1,6 +1,18 @@
 (()=>{'use strict';
 const API='https://scene-studio-api.a-hako.workers.dev';
-const genres=[['fantasy','ファンタジー','⚔'],['romance','恋愛','♡'],['horror','ホラー','♧'],['mystery','ミステリ','⌕'],['sf','SF','♄'],['everyday','日常','☕'],['essay','エッセイ','✎'],['other','その他','…']];
+const genres=[['fantasy','ファンタジー'],['romance','恋愛'],['horror','ホラー'],['mystery','ミステリ'],['sf','SF'],['everyday','日常'],['essay','エッセイ'],['other','その他']];
+const genreArt={
+ fantasy:'<path d="m5 5 5 1 15 15-4 4L6 10 5 5Zm14 17 6-6M21 25l5 5m-4-2 6-6M7 28l3-3m2-6 3-3M22 10l4-4 5-1-1 5-5 5M5 31l4-1"/>',
+ romance:'<path d="M18 30 5.5 18C-2 10 8 1 15 8l3 3 3-3c7-7 17 2 9.5 10L18 30Z"/>',
+ horror:'<path d="M7 30V16a11 11 0 0 1 22 0v14l-5-3-6 3-6-3-5 3Z"/><path d="M14 16v2m8-2v2m-7 5q3 3 6 0"/>',
+ mystery:'<circle cx="15" cy="15" r="10"/><path d="m22 22 9 9M10 14a5 5 0 0 1 5-5"/>',
+ sf:'<circle cx="18" cy="18" r="10"/><ellipse cx="18" cy="18" rx="18" ry="5" transform="rotate(-28 18 18)"/><path d="m29 4 1 1M7 31l1 1"/>',
+ everyday:'<path d="M7 11h19v11a8 8 0 0 1-8 8h-3a8 8 0 0 1-8-8V11Zm19 2h3a5 5 0 0 1 0 10h-3M4 32h28M12 3v4m6-4v4m6-4v4"/>',
+ essay:'<path d="m7 25-2 7 7-2L30 12l-5-5L7 25Zm15-15 5 5M7 25l5 5M24 8l3-3a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3l-3 3M18 32h14"/>',
+ other:'<circle cx="7" cy="18" r="1.5" fill="currentColor"/><circle cx="18" cy="18" r="1.5" fill="currentColor"/><circle cx="29" cy="18" r="1.5" fill="currentColor"/>'
+};
+function genreIcon(id){return `<svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${genreArt[id]||genreArt.other}</svg>`;}
+
 const $=s=>document.querySelector(s),params=new URLSearchParams(location.search);
 let works=[],pops=new Map(),shown=24,view=['home','all','new','pop'].includes(params.get('view'))?params.get('view'):'home',genre=genres.some(g=>g[0]===params.get('genre'))?params.get('genre'):'',query=params.get('q')||'';
 let popsReady=false,userMoved=false,renderAfterClose=false,returnState=null,heroIndex=0,heroIds=[],heroUserSelected=false,heroScrollTimer=null,heroClickUntil=0,heroAutoTimer=null,heroPaused=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches===true,heroHover=false,heroFocus=false,heroTouch=false,heroVisible=true,heroResizeObserver=null,heroIntersectionObserver=null;
@@ -114,7 +126,7 @@ function lockScroll(){stopHeroAuto();if(scrollLock)return;scrollLock={y:scrollY,
 function unlockScroll(){if(!scrollLock)return;const saved=scrollLock;scrollLock=null;if(saved.style===null)document.body.removeAttribute('style');else document.body.setAttribute('style',saved.style);window.scrollTo(0,saved.y);opener?.focus({preventScroll:true});armHeroAuto();}
 function openDialog(dialog){if(!scrollLock)opener=document.activeElement;focusStack.push(document.activeElement);lockScroll();dialog.showModal();window.AhakoPopUI?.fitAll?.();}
 function detail(id){const w=works.find(w=>w.publicationId===id);if(!w)return;detailWork=w;$('#detailContent').innerHTML=`<div class="detail-layout"><div class="detail-cover">${cover(w)}</div><div><h2 id="detailTitle">${esc(w.title)}</h2><p class="book-author"><a href="${esc(authorUrl(w))}">${esc(w.author?.displayName||'作者')} →</a></p><p class="muted">${esc([w.episodeLabel,w.episodeTitle,w.subtitle].filter(Boolean).join(' · '))}</p></div></div><p class="detail-description">${esc(w.description||'この本を開いて、物語をお楽しみください。')}</p><div class="detail-actions"><a class="button primary" data-read href="${esc(playerUrl(w))}">作品を読む →</a>${pops.has(id)?`<button class="button" data-pop="${esc(id)}">店員POPを見る</button>`:''}</div><p class="muted">購入・MY COPYは、作品内の案内からご利用いただけます。</p>`;openDialog($('#detailDialog'));}
-$('#genreButtons').innerHTML=genres.map(([id,label,icon])=>`<button data-genre="${id}" aria-pressed="false"><span aria-hidden="true">${icon}</span><small>${label}</small></button>`).join('');
+$('#genreButtons').innerHTML=genres.map(([id,label])=>`<button data-genre="${id}" aria-pressed="false"><span class="genre-icon" aria-hidden="true">${genreIcon(id)}</span><small>${label}</small></button>`).join('');
 $('#search').value=query;$('#search').addEventListener('input',e=>{userMoved=true;query=e.target.value;shown=24;render();});$('#retry').onclick=load;$('#more').onclick=()=>{shown+=24;render();};
 $('#popRetry').onclick=loadPops;$('#popPaper').onclick=()=>{if(Date.now()>=popSuppressUntil)flipPop(1);};installPopSwipe();$('#popRead').onclick=()=>{const id=popWork.publicationId;$('#popDialog').close();if(!$('#detailDialog').open)detail(id);};
 $('#menuToggle').onclick=()=>{const open=$('#menu').hidden;$('#menu').hidden=!open;$('#menuToggle').setAttribute('aria-expanded',String(open));};
