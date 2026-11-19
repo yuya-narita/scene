@@ -2,7 +2,7 @@
 const API='https://scene-studio-api.a-hako.workers.dev';
 const genres=[['fantasy','ファンタジー'],['romance','恋愛'],['horror','ホラー'],['mystery','ミステリ'],['sf','SF'],['everyday','日常'],['essay','エッセイ'],['other','その他']];
 const genreArt={
- fantasy:'<path d="m5 5 5 1 15 15-4 4L6 10 5 5Zm14 17 6-6M21 25l5 5m-4-2 6-6M7 28l3-3m2-6 3-3M22 10l4-4 5-1-1 5-5 5M5 31l4-1"/>',
+ fantasy:'<g transform="rotate(35 18 18)"><path d="m18 3 5 6v15H13V9l5-6ZM9 24h18M18 24v7M18 8v12"/><circle cx="18" cy="33" r="2"/></g>',
  romance:'<path d="M18 30 5.5 18C-2 10 8 1 15 8l3 3 3-3c7-7 17 2 9.5 10L18 30Z"/>',
  horror:'<path d="M7 30V16a11 11 0 0 1 22 0v14l-5-3-6 3-6-3-5 3Z"/><path d="M14 16v2m8-2v2m-7 5q3 3 6 0"/>',
  mystery:'<circle cx="15" cy="15" r="10"/><path d="m22 22 9 9M10 14a5 5 0 0 1 5-5"/>',
@@ -25,9 +25,9 @@ function safeImage(raw){try{const u=new URL(raw,API);return /^https?:$/.test(u.p
 function playerUrl(w){const u=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(w.publicationId)}`);raw.searchParams.set('raw','1');u.searchParams.set('src',raw.href);u.searchParams.set('returnTo',location.href);return u.href;}
 function authorUrl(w){const a=w.author||{},u=new URL('../author/',location.href);if(a.slug)u.searchParams.set('u',a.slug);else u.searchParams.set('id',a.authorId||'');return u.href;}
 function cover(w){const src=safeImage(w.coverUrl);return src?`<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:`<span class="cover-fallback">${esc(w.title||'あ箱の本')}</span>`;}
-function popPreview(w,preferred){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview pop-frame" data-paper-view="thumb" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く（${list.length}枚）">${window.AhakoPopUI?.paperHTML?.(p)||esc(p.text)}</button>`;}
+function popPreview(w,preferred,paperView='thumb'){const list=pops.get(w.publicationId)||[];if(!list.length)return '';const p=preferred||list[0];return `<button class="pop-preview pop-frame" data-paper-view="${paperView}" data-pop="${esc(w.publicationId)}" aria-label="${esc(w.title)}のPOPを開く（${list.length}枚）">${window.AhakoPopUI?.paperHTML?.(p)||esc(p.text)}</button>`;}
 
-function card(w){return `<article class="book-card" data-work="${esc(w.publicationId)}"><button class="cover-button" data-detail="${esc(w.publicationId)}" aria-label="${esc(w.title)}の詳細を開く">${cover(w)}</button><button class="book-title" data-detail="${esc(w.publicationId)}">${esc(w.title)}</button>${episodeText(w)?`<p class="book-episode">${esc(episodeText(w))}</p>`:''}<p class="book-author">${esc(w.author?.displayName||'作者')}</p><span class="genre-tag">${esc(genres.find(g=>g[0]===w.genre)?.[1]||'その他')}</span>${popPreview(w)}</article>`;}
+function card(w){return `<article class="book-card" data-work="${esc(w.publicationId)}"><div class="book-art"><button class="cover-button" data-detail="${esc(w.publicationId)}" aria-label="${esc(w.title)}の詳細を開く">${cover(w)}</button>${popPreview(w,undefined,'card')}</div><button class="book-title" data-detail="${esc(w.publicationId)}">${esc(w.title)}</button>${episodeText(w)?`<p class="book-episode">${esc(episodeText(w))}</p>`:''}<p class="book-author">${esc(w.author?.displayName||'作者')}</p><span class="genre-tag">${esc(genres.find(g=>g[0]===w.genre)?.[1]||'その他')}</span></article>`;}
 function render(preserve=false){
  preserve=preserve&&userMoved&&scrollY>8;
  const anchor=preserve?[...document.querySelectorAll('#books .book-card')].find(c=>{const r=c.getBoundingClientRect();return r.bottom>0&&r.top<(window.innerHeight||Infinity);}):null;

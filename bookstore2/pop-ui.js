@@ -45,7 +45,7 @@ function fitPaper(stage,holder,view='thumb'){
   const editor=view==='editor',pad=editor?24:0,stable=holder.closest?.('.hero-slide,.book-card')||holder.parentElement;
   // Never measure the shrink-to-fit POP wrapper or an already scaled frame.
   const available=Math.max(60,(stable?.clientWidth||(editor?holder.clientWidth:0)||(mobile?162:232))-12),maxScale=editor?1:mobile ? .30 : .45,cap=editor?Math.max(60,(holder.clientWidth||available)-pad):Math.min(mobile?150:220,available);
-  k=Math.min(maxScale,cap/rw,editor?Math.min(340,(window.innerHeight||900)*.36)/rh:Infinity);if(!editor&&holder.closest?.('.hero-slide')&&window.matchMedia?.('(max-width: 480px)').matches===true)k*=.85;width=rw*k;height=rh*k+pad;left=pad/2;top=pad/2;
+  k=view==='card'?Math.min(1,Math.min(mobile?110:120,available)/rw,80/rh):Math.min(maxScale,cap/rw,editor?Math.min(340,(window.innerHeight||900)*.36)/rh:Infinity);if(!editor&&holder.closest?.('.hero-slide')&&window.matchMedia?.('(max-width: 480px)').matches===true)k*=.85;width=rw*k;height=rh*k+pad;left=pad/2;top=pad/2;
  }
  stage.dataset.paperScale=String(k);if(view==='editor')stage.style.setProperty('--paper-handle-scale',String(1/k));stage.style.transformOrigin='0 0';stage.style.transform=`matrix(${k*c},${k*s},${-k*s},${k*c},${k*(s>0?h*s:0)},${k*(s<0?-w*s:0)})`;stage.style.left=left+'px';stage.style.top=top+'px';
  holder.style.height=height+'px';if(view!=='editor')holder.style.width=width+'px';return {scale:k,width,height};
