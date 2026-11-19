@@ -3,3 +3,47 @@
 @media(max-width:799px){.header-inner{padding:20px 18px 17px}.brand{font-size:23px;gap:7px}.book-mark{font-size:38px}.brand small{font-size:8px;letter-spacing:.8px}.menu-toggle{font-size:0;padding:10px}.menu-toggle span{font-size:20px;margin:0}.search-wrap{padding:0 18px}.search input{font-size:16px}.search kbd{display:none}.tabs{padding-left:18px;padding-right:18px;gap:25px}.tabs>*{font-size:13px}main{padding:20px 18px 28px}.hero{padding:24px 20px;min-height:275px;grid-template-columns:1.2fr 1fr;margin-bottom:30px;gap:12px}.hero h1{font-size:25px;line-height:1.45}.hero-description{font-size:12px;-webkit-line-clamp:3;margin:12px 0 16px}.hero-art{width:100%}.hero-art img{max-height:210px}.hero-art .pop-preview{padding:10px;margin-top:12px}.hero-art .pop-preview strong{font-size:12px}.hero-art .pop-preview small{font-size:8px}.eyebrow{font-size:9px;letter-spacing:1px}.section-head h2{font-size:20px}.section-head{gap:8px}.section-head .text-button{font-size:11px}.books{grid-template-columns:repeat(3,minmax(0,1fr));gap:25px 16px}.genres{grid-template-columns:repeat(4,minmax(0,1fr))}.invitation{padding:25px 0;gap:20px}.invitation p{font-size:17px}.invitation span{font-size:11px;max-width:160px}}
 @media(max-width:480px){.books{grid-template-columns:repeat(2,minmax(0,1fr));gap:25px 18px}.hero h1{font-size:22px}.hero .button{font-size:12px;padding:10px 14px}.hero-description{font-size:11px}.hero .eyebrow{font-size:8px}.hero-art img{max-height:175px}.hero-art .pop-preview strong{-webkit-line-clamp:3}.hero-art .pop-preview small{display:none}.book-title{font-size:14px}.hero{min-height:275px;padding:22px 16px}.detail-layout{gap:15px}.detail-cover{width:85px}#detailTitle{font-size:19px}dialog{padding:38px 20px 24px}#popText{font-size:20px}.pop-controls .button{padding:10px 13px}.invitation{display:block}.invitation span{display:block;max-width:none;margin-top:10px}.filter-row{display:block}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* V1.2: use the same filled portrait covers as Bookshelf; POP stays outside. */
+.cover-button img,.detail-cover img{object-fit:cover;object-position:center}
+.book-card{align-self:start}
+/* The hero is a native horizontal scroller, so iPhone vertical scrolling stays native. */
+.hero{display:block;min-height:0;padding:0;background:transparent;overflow:hidden;border-radius:14px;margin-bottom:32px}
+.hero-track{width:100%;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none;border-radius:14px;-webkit-overflow-scrolling:touch}
+.hero-track::-webkit-scrollbar{display:none}
+.hero-slides{display:flex;width:100%;align-items:stretch}
+.hero-slide{flex:0 0 100%;min-width:0;display:grid;grid-template-columns:44% 56%;background:#eef2f7;scroll-snap-align:start;scroll-snap-stop:always;overflow:hidden;border-radius:14px}
+.hero-image{grid-column:2;grid-row:1;align-self:stretch;display:block;width:100%;height:100%;min-height:350px;border:0;padding:0;background:#e5eaf1;overflow:hidden;cursor:pointer}
+.hero-image img{display:block;width:100%;height:100%;max-height:450px;object-fit:cover;object-position:center;filter:none}
+.hero-image .cover-fallback{width:100%;height:100%;min-height:350px}
+.hero .hero-copy{grid-column:1;grid-row:1;padding:34px 30px;min-width:0;max-width:none;align-self:center}
+.hero h2{font-size:clamp(24px,3vw,37px);line-height:1.45;letter-spacing:-.5px;margin:8px 0 12px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hero-description{margin:12px 0 18px}
+.hero .pop-preview{max-width:290px;margin:0 0 20px;transform:rotate(-2deg)}
+.hero .pop-preview strong{font-size:14px}
+.hero-controls{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 6px 0}
+.hero-arrow{width:44px;height:44px;border:1px solid #dde3ec;border-radius:50%;background:#fff;color:var(--blue);font-size:21px;flex-shrink:0}
+.hero-dots{display:flex;align-items:center;gap:1px;flex-wrap:wrap;justify-content:center;max-width:256px}
+.hero-dots button{border:0;background:none;width:30px;height:40px;position:relative;padding:0}
+.hero-dots button:before{content:"";display:block;margin:auto;width:7px;height:7px;border-radius:50%;background:#c6cdd9}
+.hero-dots [aria-current=true]:before{background:var(--blue);width:18px;border-radius:5px}
+.hero-controls #heroCount{min-width:32px;white-space:nowrap;font-variant-numeric:tabular-nums}
+@media(max-width:799px){
+ .hero-slide{display:flex;flex-direction:column}
+ .hero-image{width:100%;height:auto;min-height:0;aspect-ratio:16/9;flex-shrink:0}
+ .hero-image img{width:100%;height:100%;max-height:none}
+ .hero-image .cover-fallback{min-height:0;height:100%}
+ .hero .hero-copy{padding:22px 22px 24px;width:100%;align-self:stretch}
+ .hero h2{font-size:25px;margin:8px 0;line-height:1.45}
+ .hero .hero-description{font-size:13px;line-height:1.7;-webkit-line-clamp:2;margin:10px 0 16px}
+ .hero .eyebrow{font-size:9px;letter-spacing:1px}
+ .hero .book-author{font-size:12px;margin-bottom:0}
+ .hero .pop-preview{max-width:none;width:calc(100% - 4px);padding:12px 14px;margin:0 0 18px}
+ .hero .pop-preview strong{font-size:14px;-webkit-line-clamp:2}
+ .hero .pop-preview small{display:block;font-size:10px}
+ .hero .button{font-size:13px;min-height:44px;padding:11px 18px}
+ .hero-controls{gap:5px;padding-top:8px}
+ .hero-dots{max-width:216px}
+ .hero-dots button{width:25px;height:44px}
+}
+@media(max-width:360px){.hero-controls{gap:2px}.hero-dots button{width:21px}.hero .hero-copy{padding:20px 18px}.hero h2{font-size:23px}}

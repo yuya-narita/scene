@@ -3,7 +3,7 @@ const API='https://scene-studio-api.a-hako.workers.dev';
 const genres=[['fantasy','ファンタジー','⚔'],['romance','恋愛','♡'],['horror','ホラー','♧'],['mystery','ミステリ','⌕'],['sf','SF','♄'],['everyday','日常','☕'],['essay','エッセイ','✎'],['other','その他','…']];
 const $=s=>document.querySelector(s),params=new URLSearchParams(location.search);
 let works=[],pops=new Map(),shown=24,view=['home','all','new','pop'].includes(params.get('view'))?params.get('view'):'home',genre=genres.some(g=>g[0]===params.get('genre'))?params.get('genre'):'',query=params.get('q')||'';
-let renderAfterClose=false,returnState=null;
+let renderAfterClose=false,returnState=null,heroIndex=0,heroIds=[],heroUserSelected=false,heroScrollTimer=null,heroClickUntil=0;
 try{const saved=JSON.parse(sessionStorage.getItem('ahako:popstore:return')||'null');if(saved?.url===location.href&&Date.now()-saved.at<7200000){returnState=saved;shown=Math.max(24,Number(saved.shown)||24);}}catch{}
 let detailWork=null,popWork=null,popIndex=0,turnTimer=null,scrollLock=null,opener=null,focusStack=[];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -23,13 +23,37 @@ function render(preserve=false){
  $('#activeFilter').textContent=[q?`「${query.trim()}」`:'',genre?genres.find(g=>g[0]===genre)[1]:''].filter(Boolean).join(' / ');
  document.querySelectorAll('[data-view]').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
  document.querySelectorAll('[data-genre]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.genre===genre)));
- const home=view==='home'&&!q&&!genre,featured=works.filter(w=>pops.has(w.publicationId)),heroWork=featured[0]||works[0];
- $('#hero').hidden=!home||!heroWork;
- if(heroWork)$('#hero').innerHTML=`<div class="hero-copy"><p class="eyebrow">${featured.length?'STAFF PICK / 店員が選ぶ一冊':'NEW ARRIVAL / 新しく届いた一冊'}</p><h1>${esc(heroWork.title)}</h1><p class="book-author">${esc(heroWork.author?.displayName||'作者')}</p><p class="hero-description">${esc(heroWork.description||heroWork.subtitle||'あ箱で、新しい物語との出会いを。')}</p><button class="button primary" data-detail="${esc(heroWork.publicationId)}">作品を見る →</button></div><div class="hero-art">${cover(heroWork)}${popPreview(heroWork)}</div>`;
+ const home=view==='home'&&!q&&!genre,featured=works.filter(w=>pops.has(w.publicationId));
+ renderHero(home,featured);
  $('#recommendations').hidden=!home||!featured.length;$('#picks').innerHTML=featured.slice(0,5).map(card).join('');
  document.querySelectorAll('img').forEach(img=>{img.onerror=()=>{img.replaceWith(Object.assign(document.createElement('span'),{className:'cover-fallback',textContent:'あ箱の本'}));};});
  const url=new URL(location.href);for(const [k,v]of Object.entries({q:query,genre,view:view==='home'?'':view})){if(v)url.searchParams.set(k,v);else url.searchParams.delete(k);}history.replaceState(null,'',url);
  if(anchorId&&!scrollLock){const next=[...document.querySelectorAll('#books .book-card')].find(c=>c.dataset.work===anchorId);if(next)window.scrollBy(0,next.getBoundingClientRect().top-anchorTop);}
+}
+function updateHeroControls(){
+ const dots=document.querySelectorAll('[data-hero-index]');dots.forEach((b,i)=>{b.setAttribute('aria-current',i===heroIndex?'true':'false');});
+ const counter=$('#heroCount');if(counter)counter.textContent=`${heroIndex+1} / ${heroIds.length}`;
+ if($('#heroPrev'))$('#heroPrev').disabled=heroIndex===0;
+ if($('#heroNext'))$('#heroNext').disabled=heroIndex>=heroIds.length-1;
+}
+function moveHero(index){
+ if(!heroIds.length)return;heroIndex=Math.max(0,Math.min(heroIds.length-1,index));heroUserSelected=true;
+ const track=$('#heroTrack');if(track?.scrollTo)track.scrollTo({left:heroIndex*track.clientWidth,behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+ updateHeroControls();
+}
+function renderHero(home,featured){
+ const hero=$('#hero');hero.hidden=!home||!works.length;if(hero.hidden)return;
+ const oldId=heroIds[heroIndex],seen=new Set(),slides=[...featured,...works].filter(w=>{if(seen.has(w.publicationId))return false;seen.add(w.publicationId);return true;}).slice(0,8);
+ heroIds=slides.map(w=>w.publicationId);heroIndex=heroUserSelected&&heroIds.includes(oldId)?heroIds.indexOf(oldId):0;
+ hero.innerHTML=`<div id="heroTrack" class="hero-track" tabindex="0" role="region" aria-label="おすすめ作品。左右にスワイプして切り替え"><div class="hero-slides">${slides.map((w,i)=>`<article class="hero-slide" role="group" aria-roledescription="スライド" aria-label="${i+1} / ${slides.length}"><button class="hero-image" data-detail="${esc(w.publicationId)}" aria-label="${esc(w.title)}の詳細を開く">${cover(w)}</button><div class="hero-copy"><p class="eyebrow">${pops.has(w.publicationId)?'STAFF PICK / 店員が選ぶ一冊':'NEW ARRIVAL / 新しく届いた一冊'}</p><h2>${esc(w.title)}</h2><p class="book-author">${esc(w.author?.displayName||'作者')}</p><p class="hero-description">${esc(w.description||w.subtitle||'あ箱で、新しい物語との出会いを。')}</p>${popPreview(w)}<button class="button primary" data-detail="${esc(w.publicationId)}">作品を見る →</button></div></article>`).join('')}</div></div><div class="hero-controls" ${slides.length===1?'hidden':''}><button id="heroPrev" class="hero-arrow" aria-label="前のおすすめ作品">←</button><div class="hero-dots" aria-label="紹介する作品を選ぶ">${slides.map((w,i)=>`<button data-hero-index="${i}" aria-label="${i+1}冊目：${esc(w.title)}" aria-current="false"></button>`).join('')}</div><span id="heroCount" class="muted" aria-live="polite"></span><button id="heroNext" class="hero-arrow" aria-label="次のおすすめ作品">→</button></div>`;
+ const track=$('#heroTrack');track.scrollLeft=heroIndex*track.clientWidth;clearTimeout(heroScrollTimer);
+ track.addEventListener('scroll',()=>{clearTimeout(heroScrollTimer);heroScrollTimer=setTimeout(()=>{if(!track.clientWidth)return;heroIndex=Math.max(0,Math.min(heroIds.length-1,Math.round(track.scrollLeft/track.clientWidth)));heroUserSelected=true;updateHeroControls();},90);},{passive:true});
+ track.addEventListener('keydown',e=>{if(e.target!==track)return;if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();moveHero(heroIndex+(e.key==='ArrowRight'?1:-1));}});
+ let gesture=null;track.addEventListener('pointerdown',e=>{gesture={x:e.clientX,y:e.clientY};},{passive:true});
+ track.addEventListener('pointerup',e=>{if(gesture&&Math.abs(e.clientX-gesture.x)>30&&Math.abs(e.clientX-gesture.x)>Math.abs(e.clientY-gesture.y))heroClickUntil=Date.now()+350;gesture=null;},{passive:true});track.addEventListener('pointercancel',()=>{gesture=null;});
+ $('#heroPrev').onclick=()=>moveHero(heroIndex-1);$('#heroNext').onclick=()=>moveHero(heroIndex+1);
+ document.querySelectorAll('[data-hero-index]').forEach(b=>b.onclick=()=>moveHero(Number(b.dataset.heroIndex)));
+ updateHeroControls();
 }
 async function request(path){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);try{const r=await fetch(API+path,{signal:controller.signal,cache:'no-store'}),data=await r.json();if(!r.ok||!data.ok)throw new Error('データを取得できませんでした');return data;}finally{clearTimeout(timer);}}
 async function load(){ $('#retry').hidden=true;$('#loadStatus').textContent='本を並べています…';try{const d=await request('/discover');if(!Array.isArray(d.works))throw new Error('作品一覧の応答を確認できませんでした');works=d.works.filter(w=>/^[A-Za-z0-9_-]{6,80}$/.test(w.publicationId));render();$('#loadStatus').textContent=works.length?'':'公開中の作品はまだありません。';await loadPops();if(returnState){window.scrollTo(0,Math.max(0,Number(returnState.y)||0));returnState=null;try{sessionStorage.removeItem('ahako:popstore:return');}catch{}}}catch(e){$('#loadStatus').textContent=e.name==='AbortError'?'接続に時間がかかっています。もう一度お試しください。':'本を読み込めませんでした。通信環境をご確認のうえ、もう一度お試しください。';$('#retry').hidden=false;}}
@@ -64,7 +88,7 @@ $('#genreButtons').innerHTML=genres.map(([id,label,icon])=>`<button data-genre="
 $('#search').value=query;$('#search').addEventListener('input',e=>{query=e.target.value;shown=24;render();});$('#retry').onclick=load;$('#more').onclick=()=>{shown+=24;render();};
 $('#popRetry').onclick=loadPops;$('#popNext').onclick=()=>flipPop(1);$('#popPrev').onclick=()=>flipPop(-1);$('#popPaper').onclick=()=>flipPop(1);$('#popRead').onclick=()=>{const id=popWork.publicationId;$('#popDialog').close();if(!$('#detailDialog').open)detail(id);};
 $('#menuToggle').onclick=()=>{const open=$('#menu').hidden;$('#menu').hidden=!open;$('#menuToggle').setAttribute('aria-expanded',String(open));};
- document.addEventListener('click',e=>{if(e.target.closest('[data-read]')){try{sessionStorage.setItem('ahako:popstore:return',JSON.stringify({url:location.href,y:scrollLock?.y??scrollY,shown,at:Date.now()}));}catch{}document.querySelectorAll('dialog[open]').forEach(d=>d.close());unlockScroll();focusStack=[];return;}const vb=e.target.closest('[data-view]'),gb=e.target.closest('[data-genre]'),db=e.target.closest('[data-detail]'),pb=e.target.closest('[data-pop]');if(pb){e.preventDefault();openPop(pb.dataset.pop);return;}if(vb){view=vb.dataset.view;genre='';query='';$('#search').value='';shown=24;render();}if(gb){genre=gb.dataset.genre;view='all';shown=24;render();$('#catalogue').scrollIntoView({block:'start'});}if(db)detail(db.dataset.detail);});
+ document.addEventListener('click',e=>{if(e.target.closest('#heroTrack')&&Date.now()<heroClickUntil){e.preventDefault();return;}if(e.target.closest('[data-read]')){try{sessionStorage.setItem('ahako:popstore:return',JSON.stringify({url:location.href,y:scrollLock?.y??scrollY,shown,at:Date.now()}));}catch{}document.querySelectorAll('dialog[open]').forEach(d=>d.close());unlockScroll();focusStack=[];return;}const vb=e.target.closest('[data-view]'),gb=e.target.closest('[data-genre]'),db=e.target.closest('[data-detail]'),pb=e.target.closest('[data-pop]');if(pb){e.preventDefault();openPop(pb.dataset.pop);return;}if(vb){view=vb.dataset.view;genre='';query='';$('#search').value='';shown=24;render();}if(gb){genre=gb.dataset.genre;view='all';shown=24;render();$('#catalogue').scrollIntoView({block:'start'});}if(db)detail(db.dataset.detail);});
  document.querySelectorAll('dialog').forEach(d=>{d.querySelector('[data-close]').onclick=()=>d.close();d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}});d.addEventListener('close',()=>{if(d.id==='popDialog'){clearTimeout(turnTimer);turnTimer=null;}const prior=focusStack.pop();if(!document.querySelector('dialog[open]')){unlockScroll();if(renderAfterClose){renderAfterClose=false;render(true);}}else prior?.focus({preventScroll:true});});});
  load();
 })();
