@@ -34,9 +34,7 @@ function render(preserve=false){
 }
 function updateHeroControls(){
  document.querySelectorAll('[data-hero-index]').forEach((b,i)=>b.setAttribute('aria-current',i===heroIndex?'true':'false'));
- const counter=$('#heroCount');if(counter){counter.textContent=`${heroIndex+1} / ${heroIds.length}`;counter.setAttribute('aria-live',heroPaused?'polite':'off');}
  for(const id of ['heroPrev','heroNext'])if($('#'+id))$('#'+id).disabled=heroIds.length<2;
- const play=$('#heroPlay');if(play){play.textContent=heroPaused?'自動再生':'一時停止';play.setAttribute('aria-label',heroPaused?'紹介欄の自動再生を開始':'紹介欄の自動再生を一時停止');}
 }
 function stopHeroAuto(){clearTimeout(heroAutoTimer);heroAutoTimer=null;}
 function armHeroAuto(){
@@ -51,13 +49,13 @@ function moveHero(index,manual=true){
 }
 function renderHero(home){
  stopHeroAuto();heroResizeObserver?.disconnect();heroIntersectionObserver?.disconnect();clearTimeout(heroScrollTimer);
- const hero=$('#hero'),oldId=heroIds[heroIndex];
+ const hero=$('#hero'),oldId=heroIds[heroIndex];hero.classList.add('hero-compact');
  const slides=works.map(w=>{const selected=(pops.get(w.publicationId)||[]).filter(p=>(p.showcase??'staff')!=='none').sort((a,b)=>Number(a.showcaseOrder??0)-Number(b.showcaseOrder??0)||Number(a.order)-Number(b.order))[0];return selected?{...w,_showcasePop:selected}:null;}).filter(Boolean).sort((a,b)=>Number(a._showcasePop.showcaseOrder??0)-Number(b._showcasePop.showcaseOrder??0)||a.publicationId.localeCompare(b.publicationId)).slice(0,8);
  hero.hidden=!home||!slides.length;if(hero.hidden){heroIds=[];heroIndex=0;return;}
  heroIds=slides.map(w=>w.publicationId);heroIndex=heroUserSelected&&heroIds.includes(oldId)?heroIds.indexOf(oldId):0;heroHover=false;heroFocus=false;heroTouch=false;heroVisible=true;
- const slide=(w,i,clone=false)=>`<article class="hero-slide" ${clone?'aria-hidden="true" inert':`role="group" aria-roledescription="スライド" aria-label="${i+1} / ${slides.length}"`}><button class="hero-image" data-detail="${esc(w.publicationId)}" aria-label="${esc([w.title,episodeText(w)].filter(Boolean).join(' ／ '))}の詳細を開く">${cover(w)}</button><div class="hero-copy"><p class="eyebrow">${w._showcasePop.showcase==='new-series'?'NEW SERIAL / 新連載':'STAFF PICK / 店員が選ぶ一冊'}</p><h2>${esc(w.title)}</h2>${episodeText(w)?`<p class="hero-episode">${esc(episodeText(w))}</p>`:''}<p class="book-author">${esc(w.author?.displayName||'作者')}</p><p class="hero-description">${esc(w.description||'あ箱で、新しい物語との出会いを。')}</p>${popPreview(w,w._showcasePop)}<button class="button primary" data-detail="${esc(w.publicationId)}">作品を見る →</button></div></article>`;
+ const slide=(w,i,clone=false)=>{const episode=[...new Set([w.episodeLabel,w.episodeTitle].map(v=>String(v||'').trim()).filter(Boolean))].join(' · ');return `<article class="hero-slide" ${clone?'aria-hidden="true" inert':`role="group" aria-roledescription="スライド" aria-label="${i+1} / ${slides.length}"`}><button class="hero-image" data-detail="${esc(w.publicationId)}" aria-label="${esc([w.title,episode].filter(Boolean).join(' ／ '))}の詳細を開く">${cover(w)}<span class="hero-caption"><strong class="hero-title">${esc(w.title)}</strong>${episode?`<span class="hero-episode">${esc(episode)}</span>`:''}</span></button><div class="hero-pop-wrap">${popPreview(w,w._showcasePop)}</div></article>`;};
  const looping=slides.length>1;
- hero.innerHTML=`<div id="heroTrack" class="hero-track" tabindex="0" role="region" aria-label="運営が選んだ作品。左右にスワイプして切り替え"><div class="hero-slides">${looping?slide(slides.at(-1),slides.length-1,true):''}${slides.map((w,i)=>slide(w,i)).join('')}${looping?slide(slides[0],0,true):''}</div></div><div class="hero-controls" ${looping?'':'hidden'}><button id="heroPrev" class="hero-arrow" aria-label="前のおすすめ作品">←</button><div class="hero-dots" aria-label="紹介する作品を選ぶ">${slides.map((w,i)=>`<button data-hero-index="${i}" aria-label="${i+1}冊目：${esc([w.title,episodeText(w)].filter(Boolean).join(' ／ '))}" aria-current="false"></button>`).join('')}</div><span id="heroCount" class="muted"></span><button id="heroNext" class="hero-arrow" aria-label="次のおすすめ作品">→</button><button id="heroPlay" class="hero-play">一時停止</button></div>`;
+ hero.innerHTML=`<div id="heroTrack" class="hero-track" tabindex="0" role="region" aria-label="運営が選んだ作品。左右にスワイプして切り替え"><div class="hero-slides">${looping?slide(slides.at(-1),slides.length-1,true):''}${slides.map((w,i)=>slide(w,i)).join('')}${looping?slide(slides[0],0,true):''}</div></div><div class="hero-controls" ${looping?'':'hidden'}><button id="heroPrev" class="hero-arrow" aria-label="前のおすすめ作品">←</button><div class="hero-dots" aria-label="紹介する作品を選ぶ">${slides.map((w,i)=>`<button data-hero-index="${i}" aria-label="${i+1}冊目：${esc([w.title,episodeText(w)].filter(Boolean).join(' ／ '))}" aria-current="false"></button>`).join('')}</div><button id="heroNext" class="hero-arrow" aria-label="次のおすすめ作品">→</button></div>`;
  const track=$('#heroTrack');let lastWidth=track.clientWidth;
  const jump=()=>{track.scrollLeft=(looping?heroIndex+1:0)*track.clientWidth;};jump();
  track.addEventListener('scroll',()=>{stopHeroAuto();clearTimeout(heroScrollTimer);heroScrollTimer=setTimeout(()=>{if(!track.clientWidth)return;const physical=Math.round(track.scrollLeft/track.clientWidth),n=heroIds.length;heroIndex=looping?((physical-1)%n+n)%n:0;if(looping&&(physical===0||physical===n+1))jump();updateHeroControls();armHeroAuto();},150);},{passive:true});
@@ -67,7 +65,6 @@ function renderHero(home){
  track.addEventListener('pointercancel',()=>{gesture=null;heroTouch=false;armHeroAuto();});
  hero.onpointerenter=e=>{if(e.pointerType==='mouse'){heroHover=true;stopHeroAuto();}};hero.onpointerleave=()=>{heroHover=false;armHeroAuto();};
  $('#heroPrev').onclick=()=>moveHero(heroIndex-1);$('#heroNext').onclick=()=>moveHero(heroIndex+1);
- $('#heroPlay').onclick=()=>{heroPaused=!heroPaused;heroFocus=false;heroHover=false;updateHeroControls();armHeroAuto();};
  document.querySelectorAll('[data-hero-index]').forEach(b=>b.onclick=()=>moveHero(Number(b.dataset.heroIndex)));
  if(typeof ResizeObserver!=='undefined'){heroResizeObserver=new ResizeObserver(()=>{if(track.clientWidth!==lastWidth){lastWidth=track.clientWidth;jump();}});heroResizeObserver.observe(track);}
  if(typeof IntersectionObserver!=='undefined'){heroIntersectionObserver=new IntersectionObserver(entries=>{heroVisible=entries[0]?.isIntersecting===true;armHeroAuto();},{threshold:.2});heroIntersectionObserver.observe(hero);}
