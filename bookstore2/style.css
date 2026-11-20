@@ -280,3 +280,8 @@
 
 /* V1.17: bounded desktop covers and visible mobile swipe affordance. */
 @media(max-width:799px){.theme-shelf .feature-books.feature-odd>.book-card{flex-basis:42%}}
+
+/* Transparent POP keeps its artboard and stamp positions without paper or automatic byline. */
+.pop-sheet.paper-transparent{--paper:transparent;background:transparent;border:0;border-radius:0;box-shadow:none}
+.pop-sheet.paper-transparent:before,.pop-sheet.paper-transparent:after{display:none!important}
+.pop-sheet.paper-transparent .pop-byline-block{display:none!important}
