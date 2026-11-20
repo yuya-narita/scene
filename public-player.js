@@ -317,7 +317,7 @@
 
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sceneReachReady&&player&&!host.hidden)sceneReachTracker?.reach(player.index);});
   function measureReading(event,index=0){
-    window.AhakoWorkMeasurement?.track(currentWorkId(),event,{surface:'public-player',scope:commercePreviewLocked(documentData)?'preview':'full',index,sceneCount:documentData?.scenes?.length||0,percent:100*Math.max(0,index)/Math.max(1,(documentData?.scenes?.length||1)-1)});
+    window.AhakoWorkMeasurement?.track(currentWorkId(),event,{surface:'public-player',scope:commercePreviewLocked(documentData)?'preview':'full',readingSource:window.AhakoWorkMeasurement?.resolveReadingSource(),index,sceneCount:documentData?.scenes?.length||0,percent:100*Math.max(0,index)/Math.max(1,(documentData?.scenes?.length||1)-1)});
   }
   function sendAnalytics(event, extra={}){
     const workId=currentWorkId();

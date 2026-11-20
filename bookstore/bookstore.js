@@ -96,7 +96,7 @@ function preloadRoomBackground(id){
 }
 function primeNextRoomBackground(id){preloadRoomBackground(id).catch(()=>{});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);const returnUrl=new URL(location.href);if(privateReadingRoom)returnUrl.hash=roomShelfFace===3?'reading-room-later':'reading-room';player.searchParams.set('returnTo',returnUrl.href);return player.toString();}
+function playerUrl(work){const player=new URL('../',location.href),raw=new URL(`${API}/work/${encodeURIComponent(work.publicationId)}`);raw.searchParams.set('raw','1');player.searchParams.set('src',raw);player.searchParams.set('via','shop1');const returnUrl=new URL(location.href);if(privateReadingRoom)returnUrl.hash=roomShelfFace===3?'reading-room-later':'reading-room';player.searchParams.set('returnTo',returnUrl.href);return player.toString();}
 // V2.21.0 — Bookstore and Bookshelf share the same reader-copy IndexedDB.
 // The bookstore never duplicates MY COPY data; it only presents the existing shelf rows.
 const BOOKSHELF_DB_NAME='ahako-local-bookshelf',BOOKSHELF_DB_VERSION=4,BOOKSHELF_READER_STORE='readerBooks';
