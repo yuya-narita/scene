@@ -285,3 +285,9 @@
 .pop-sheet.paper-transparent{--paper:transparent;background:transparent;border:0;border-radius:0;box-shadow:none}
 .pop-sheet.paper-transparent:before,.pop-sheet.paper-transparent:after{display:none!important}
 .pop-sheet.paper-transparent .pop-byline-block{display:none!important}
+
+/* Small genre filters for staff picks. */
+.staff-genre-filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
+.staff-genre-filters button{appearance:none;border:1px solid #dfe5ed;border-radius:999px;background:#fff;color:#737d8c;font:inherit;font-size:12px;font-weight:500;line-height:1.5;padding:7px 12px;min-height:34px}
+.staff-genre-filters button[aria-pressed="true"]{background:#edf3ff;border-color:#bfd0f2;color:var(--blue);font-weight:600}
+@media(hover:hover){.staff-genre-filters button:hover{border-color:var(--blue);color:var(--blue)}}
