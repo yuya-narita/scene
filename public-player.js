@@ -35,6 +35,7 @@
 
   let player = null;
   let documentData = null;
+  let sceneReachTracker=null,sceneReachReady=false;
   let ownCopyReady=Promise.resolve(null);
   let shellBound = false;
   let muted = false;
@@ -314,6 +315,7 @@
     }
   }
 
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sceneReachReady&&player&&!host.hidden)sceneReachTracker?.reach(player.index);});
   function measureReading(event,index=0){
     window.AhakoWorkMeasurement?.track(currentWorkId(),event,{surface:'public-player',scope:commercePreviewLocked(documentData)?'preview':'full',index,sceneCount:documentData?.scenes?.length||0,percent:100*Math.max(0,index)/Math.max(1,(documentData?.scenes?.length||1)-1)});
   }
@@ -1290,6 +1292,7 @@
     const doc = hydratePublicAudio(await response.json());
     ScenePlayerCore.validate(doc);
     documentData = doc;
+    try{sceneReachTracker?.dispose();sceneReachTracker=window.AhakoSceneReach?.create(currentWorkId(),doc.readingMeasurement)||null;}catch(_){sceneReachTracker=null;}sceneReachReady=false;
     if(commercePreviewLocked(doc)&&!params.get('payment')){
       try{
         const ownership=await fetchCommerceOwnership();
@@ -1385,6 +1388,7 @@
 
   function onSceneChange(e) {
     const index = Number(e.detail?.index);
+    if(sceneReachReady&&!host.hidden)sceneReachTracker?.reach(index);
     if (Number.isInteger(index) && index > 0) {
       localStorage.setItem(storageKey(), String(index));
     }
@@ -1543,6 +1547,7 @@
     ownCopyReady.then(async result=>{if(!shopEntryActive)return;if(!result?.commerce){ending.classList.remove('is-shop-preparing');return;}try{await purchasePublicOwnCopy(result.commerce);}finally{ending.classList.remove('is-shop-preparing');}}).catch(error=>{ending.classList.remove('is-shop-preparing');if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);});
   }
   function returnToCover() {
+    sceneReachReady=false;void sceneReachTracker?.flush();
     leaveShopEntry();
     if (player) {
       const exitingPlayer = player;
@@ -1577,6 +1582,7 @@
   }
 
   async function ensurePlayer(startAt = 0) {
+    sceneReachReady=false;
     leaveShopEntry();
     setShelfReturnReading(true);
     if (player) {
@@ -1655,6 +1661,8 @@
     beginResonanceClock(performance.now());
     host.style.visibility = '';
     host.style.pointerEvents = '';
+    sceneReachReady=Boolean(player)&&!host.hidden;
+    if(sceneReachReady)sceneReachTracker?.reach(Number.isInteger(player?.index)?player.index:startAt);
     // V128 — Public Player has an outer cover/opening shell. Core focuses the
     // stage during begin(), but openingBreath() keeps the Player hidden and the
     // START button can retain focus. Re-focus once the readable surface is
@@ -1664,6 +1672,7 @@
 
 
   function showIntro() {
+    sceneReachReady=false;void sceneReachTracker?.flush();
     intro.dataset.startTrigger=['center','bottom','tap'].includes(documentData?.cover?.startTrigger)?documentData.cover.startTrigger:'bottom';
     setShelfReturnReading(false);
     ending.classList.remove('is-visible');
