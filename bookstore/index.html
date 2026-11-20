@@ -45,7 +45,7 @@
 .book-path .path-floor{opacity:.10!important;}
 </style>
 <link rel="stylesheet" href="./bookstore-mobile-layout.css?v=2.33.1">
-<link rel="stylesheet" href="../shared/work-share.css?v=1.35"><script src="../shared/work-share.js?v=1.35" defer></script></head>
+<link rel="stylesheet" href="../shared/work-share.css?v=1.35"><script src="../shared/work-share.js?v=1.36" defer></script></head>
 <body class="intro-entry-active">
 <header class="shop-head">
   <a class="brand" href="../bookshelf/" aria-label="本棚へ戻る"><strong>あ箱</strong><small>BOOK STORE β</small></a>
@@ -96,7 +96,7 @@
     <div class="detail-copy">
       <small id="pickedContext">PUBLIC BOOK</small><h1 id="pickedTitle"></h1><p id="pickedDetail"></p><p class="author" id="pickedAuthor"></p>
     </div>
-    <div class="picked-actions"><button id="sharePickedWork" type="button" hidden>共有する</button><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
+    <div class="picked-actions"><a id="pickedIntroduction" hidden>作品紹介</a><button id="sharePickedWork" type="button" hidden>共有する</button><button id="saveLater" type="button">あとで読む</button><a id="readBook" href="#">ひらく</a></div>
   </article>
 </div>
 <dialog class="store-ui-dialog" id="genreRoomDialog" aria-labelledby="genreRoomTitle">
@@ -130,7 +130,7 @@
  <div class="reader-status-book-picker-options" id="readerBookPickerOptions" role="listbox" aria-label="所蔵本"></div>
  <p class="reader-status-book-picker-no-results" id="readerBookPickerNoResults" hidden>該当する本がありません</p>
 </dialog>
-<script src="./bookstore.js?v=1.35"></script>
+<script src="./bookstore.js?v=1.36"></script>
 <script src="./bookstore-ui.js?v=2.33.9"></script>
 <script src="./bookstore-auth.js?v=2.33.1"></script>
 <script src="./bookstore-mobile-layout.js?v=2.33.1"></script>

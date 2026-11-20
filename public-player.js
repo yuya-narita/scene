@@ -102,8 +102,8 @@
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
     shelfReturnLink.href='https://yuya-narita.github.io/scene/bookstore/';
-    try{const back=new URL(params.get('returnTo')||'',location.href),store=new URL('./bookstore2/',location.href);if(back.origin===store.origin&&back.pathname===store.pathname)shelfReturnLink.href=back.href;}catch(_){}
     shelfReturnLink.textContent='← あ箱書店へ';
+    try{const back=new URL(params.get('returnTo')||'',location.href),store=new URL('./bookstore2/',location.href);if(back.origin===store.origin&&back.pathname===store.pathname)shelfReturnLink.href=back.href;else if(back.origin==='https://scene-studio-api.a-hako.workers.dev'&&back.pathname==='/book/'+encodeURIComponent(currentWorkId())&&/^[A-Za-z0-9_-]{6,80}$/.test(currentWorkId()||'')){shelfReturnLink.href=back.origin+back.pathname;shelfReturnLink.textContent='← 作品紹介へ';}}catch(_){}
     shelfReturnLink.hidden=false;
     if(window.matchMedia?.('(max-width:520px)').matches){
       shelfReturnLink.style.width='max-content';
@@ -1308,6 +1308,7 @@
       }catch(error){console.warn('Paid access probe failed',error);}
     }
     applyDocumentMeta(doc);
+    if(!isOperatorGuide()&&/^[A-Za-z0-9_-]{6,80}$/.test(currentWorkId()||'')){let canonical=document.querySelector('link[rel="canonical"]');if(!canonical){canonical=document.createElement('link');canonical.rel='canonical';document.head.append(canonical);}canonical.href='https://scene-studio-api.a-hako.workers.dev/book/'+encodeURIComponent(currentWorkId());}
     for(const [key,target]of [['intro',intro],['ending',document.getElementById('publicEndingActions')]]){
       if(!target)continue;let share=target.querySelector('[data-public-share]');
       if(!share){share=document.createElement('button');share.type='button';share.dataset.publicShare=key;share.className='public-share-work';share.textContent='この作品を共有';target.append(share);}
