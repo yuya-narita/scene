@@ -1746,6 +1746,7 @@
 
   async function copyAnyPublishedUrl(url,button=null){
     if(!url)return;
+    if(window.AhakoWorkShare?.publication(url)){window.AhakoWorkShare.open({url});return;}
     try{
       await navigator.clipboard.writeText(url);
     }catch(_){
@@ -1763,6 +1764,7 @@
   async function shareDraftPublication(row){
     const url=row?.publication?.url;
     if(!url)return;
+    if(window.AhakoWorkShare?.open({url,title:row.title||'作品を共有'}))return;
     if(navigator.share){
       try{
         await navigator.share({title:row.title||'Scene',text:row.title||'Scene',url});
@@ -7016,6 +7018,7 @@ return flowCommentCard;}
 
   async function copyPublishedUrl(){
     if(!latestPublishedUrl)return;
+    if(window.AhakoWorkShare?.open({url:latestPublishedUrl,title:workingDocument?.title||'作品を共有'}))return;
     try{
       await navigator.clipboard.writeText(latestPublishedUrl);
       const btn=$('#publishCopyButton');
@@ -7038,6 +7041,7 @@ return flowCommentCard;}
 
   async function sharePublishedUrl(){
     if(!latestPublishedUrl)return;
+    if(window.AhakoWorkShare?.open({url:latestPublishedUrl,title:workingDocument?.title||'作品を共有'}))return;
     const shareData={
       title:workingDocument?.title||'Scene',
       text:workingDocument?.title||'Scene',
@@ -19295,11 +19299,11 @@ function openDesktopTextDetail(){
       const menu=document.querySelector('#menuPublishedCount');if(menu)menu.textContent=all?`${all}冊`:'0冊';
       document.querySelectorAll('[data-published-filter]').forEach(b=>{const on=b.dataset.publishedFilter===filter;b.classList.toggle('is-active',on);b.setAttribute('aria-selected',on?'true':'false')});
     }
-    async function copy(url,button){if(!url)return;try{await navigator.clipboard.writeText(url)}catch(_){const ta=document.createElement('textarea');ta.value=url;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}const old=button.textContent;button.textContent='コピー済み';setTimeout(()=>button.textContent=old,1100)}
+    async function copy(url,button){if(!url)return;if(window.AhakoWorkShare?.open({url}))return;try{await navigator.clipboard.writeText(url)}catch(_){const ta=document.createElement('textarea');ta.value=url;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}const old=button.textContent;button.textContent='コピー済み';setTimeout(()=>button.textContent=old,1100)}
     function render(){
       syncTabs();const box=document.querySelector('#publishedManagerList');if(!box)return;const rows=items.filter(x=>filter==='all'||stateOf(x)===filter);
       if(!rows.length){box.innerHTML=`<small style="display:block;padding:18px 2px;opacity:.6">${filter==='public'?'公開中の作品はありません。':filter==='stopped'?'停止中の作品はありません。':'公開作品はありません。'}</small>`;return}
-      box.innerHTML=rows.map((x,i)=>{const state=stateOf(x),url=publicUrlOf(x),series=x.seriesTitle||x.series||'',episode=[x.episode||x.episodeLabel||'',x.episodeTitle||''].filter(Boolean).join('　'),cover=String(x.coverUrl||'');return `<article class="published-manager-item" data-published-index="${i}">${cover?`<img class="published-manager-cover" src="${esc(cover)}" alt="">`:'<div class="published-manager-cover published-manager-cover-empty">あ</div>'}<div class="published-manager-info">${series?`<div class="published-manager-series">${esc(series)}</div>`:''}<strong class="published-manager-title">${esc(x.title||'無題')}</strong>${episode?`<div class="published-manager-episode">${esc(episode)}</div>`:''}<div class="published-manager-date">${esc(dateText(x))}</div></div><div class="published-manager-side"><span class="published-manager-state">${state==='public'?'公開中':'停止中'}</span><div class="published-manager-actions">${state==='public'&&url?`<a class="is-primary" href="${esc(url)}" target="_blank" rel="noopener">開く</a><button type="button" data-pub-copy>URL</button>`:''}<button type="button" data-pub-state>${state==='public'?'停止':'再開'}</button><button type="button" class="is-danger" data-pub-delete>削除</button></div></div></article>`}).join('');
+      box.innerHTML=rows.map((x,i)=>{const state=stateOf(x),url=publicUrlOf(x),series=x.seriesTitle||x.series||'',episode=[x.episode||x.episodeLabel||'',x.episodeTitle||''].filter(Boolean).join('　'),cover=String(x.coverUrl||'');return `<article class="published-manager-item" data-published-index="${i}">${cover?`<img class="published-manager-cover" src="${esc(cover)}" alt="">`:'<div class="published-manager-cover published-manager-cover-empty">あ</div>'}<div class="published-manager-info">${series?`<div class="published-manager-series">${esc(series)}</div>`:''}<strong class="published-manager-title">${esc(x.title||'無題')}</strong>${episode?`<div class="published-manager-episode">${esc(episode)}</div>`:''}<div class="published-manager-date">${esc(dateText(x))}</div></div><div class="published-manager-side"><span class="published-manager-state">${state==='public'?'公開中':'停止中'}</span><div class="published-manager-actions">${state==='public'&&url?`<a class="is-primary" href="${esc(url)}" target="_blank" rel="noopener">開く</a><button type="button" data-pub-copy>共有</button>`:''}<button type="button" data-pub-state>${state==='public'?'停止':'再開'}</button><button type="button" class="is-danger" data-pub-delete>削除</button></div></div></article>`}).join('');
       [...box.querySelectorAll('.published-manager-item')].forEach((row,pos)=>{const visible=rows[pos],url=publicUrlOf(visible);row.querySelector('[data-pub-copy]')?.addEventListener('click',e=>copy(url,e.currentTarget));row.querySelector('[data-pub-state]')?.addEventListener('click',async e=>{const makePublic=stateOf(visible)==='stopped',id=publicationIdOf(visible);if(!id)return appAlert('公開作品IDを確認できませんでした。');if(!await appConfirm(`「${visible.title||'無題'}」の公開を${makePublic?'再開':'停止'}しますか？`,{danger:!makePublic,confirmLabel:makePublic?'再開する':'停止する'}))return;e.currentTarget.disabled=true;try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(id)}/${makePublic?'republish':'unpublish'}`,{method:'POST',headers:authorAuthHeaders()});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'公開状態を変更できませんでした。');await load()}catch(err){await appAlert(String(err?.message||err));e.currentTarget.disabled=false}});row.querySelector('[data-pub-delete]')?.addEventListener('click',async e=>{const id=publicationIdOf(visible);if(!id)return appAlert('公開作品IDを確認できませんでした。');if(!await appConfirm(`「${visible.title||'無題'}」をサーバーから完全に削除しますか？\n\nこの操作は元に戻せません。`,{danger:true,confirmLabel:'削除する'}))return;e.currentTarget.disabled=true;try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(id)}`,{method:'DELETE',headers:authorAuthHeaders()});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||'削除できませんでした。');await load()}catch(err){await appAlert(String(err?.message||err));e.currentTarget.disabled=false}})});
     }
     async function load(){const box=document.querySelector('#publishedManagerList');if(box)box.innerHTML='<small style="display:block;padding:18px 2px;opacity:.6">公開作品を確認しています…</small>';try{const r=await fetch(`${SCENE_STUDIO_API_BASE}/author/works`,{headers:authorAuthHeaders(),cache:'no-store'});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw new Error(j?.error||(r.status===401?'作者ログインが必要です。':'公開作品を読み込めませんでした。'));items=Array.isArray(j.works)?j.works:[];render()}catch(err){items=[];syncTabs();if(box)box.innerHTML=`<small style="display:block;padding:18px 2px;color:#9a3333">${esc(err?.message||err)}</small>`}}

@@ -1308,6 +1308,11 @@
       }catch(error){console.warn('Paid access probe failed',error);}
     }
     applyDocumentMeta(doc);
+    for(const [key,target]of [['intro',intro],['ending',document.getElementById('publicEndingActions')]]){
+      if(!target)continue;let share=target.querySelector('[data-public-share]');
+      if(!share){share=document.createElement('button');share.type='button';share.dataset.publicShare=key;share.className='public-share-work';share.textContent='この作品を共有';target.append(share);}
+      const id=currentWorkId();share.hidden=!id;share.dataset.workShareId=id||'';share.dataset.workShareTitle=doc.title||'作品を共有';
+    }
     if(!analyticsViewSent && currentWorkId()){
       analyticsViewSent=true;
       sendAnalytics('view');
