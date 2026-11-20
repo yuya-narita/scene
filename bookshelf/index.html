@@ -18,7 +18,8 @@
   <meta name="twitter:description" content="手元の一冊を読み、作者が公開した作品と出会う場所です。">
   <meta name="twitter:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
   <link rel="manifest" href="../ahako.webmanifest?v=20261016-v27">
-  <link rel="stylesheet" href="bookshelf.css?v=20261120-author-tree-v129">
+  <link rel="stylesheet" href="bookshelf.css?v=20261120-paper-tree-v130">
+  <link rel="stylesheet" href="author-paper-tree.css?v=1.30">
   <link rel="stylesheet" href="../ahako-shelf-wait.css?v=3">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
 </head>
@@ -37,6 +38,7 @@
           <input id="createdTabToggle" type="checkbox" role="switch">
         </label>
         <button id="commerceWalletButton" class="commerce-wallet-menu-item" type="button" hidden><span><strong>売上残高</strong><small>売上と取引履歴を確認</small></span><b id="commerceWalletAmount">—</b></button>
+        <button id="authorTreeMenuButton" type="button" hidden>あなたの作品の木</button>
         <div class="menu-separator"></div>
         <button id="backupButton" type="button">本棚をバックアップ</button>
         <button id="restoreButton" type="button">バックアップから復元</button>
@@ -69,6 +71,7 @@
       <div id="desktopDensityControl" class="desktop-density-control" aria-label="PCの列数">
         <label for="desktopColumnsSelect">表示</label><select id="desktopColumnsSelect"><option value="3">3列</option><option value="4">4列</option><option value="5">5列</option><option value="6">6列</option></select>
       </div>
+      <button id="authorTreeLauncher" class="author-tree-launcher" type="button" hidden>あなたの作品の木</button>
     </div>
 
     <div id="shelfBodyViewport" class="shelf-body-viewport is-shelf-pending">
@@ -229,9 +232,8 @@
 
   <dialog id="authorTreeDialog" class="author-tree-dialog" aria-labelledby="authorTreeTitle">
     <div class="author-tree-inner">
-      <div class="author-tree-topline"><button id="closeAuthorTree" type="button">← 作品の詳細へ</button><span>WORK JOURNEY</span></div>
-      <header class="author-tree-title"><div><h2 id="authorTreeTitle">作品の木</h2><p>読まれて、手渡されて。この一冊が外へ出ていく。</p></div><strong id="authorTreeWorkTitle"></strong></header>
-      <div class="author-tree-layout"><section id="authorTreeBody" aria-label="一冊の旅"></section><aside id="authorTreeCounts" aria-label="読書と受取の件数"></aside></div>
+      <div class="author-tree-topline"><button id="closeAuthorTree" type="button">本棚へ戻る</button><span>AUTHOR TREE</span></div>
+      <section id="authorTreeBody" aria-label="作者の全作品で育つ木"></section>
     </div>
   </dialog>
 
@@ -264,7 +266,9 @@
   <script src="../ahako-shelf-wait.js?v=3"></script>
   <script src="../ahako-file-save.js?v=20261015-v20"></script>
   <script src="work-counts.js?v=1.29"></script>
-  <script src="author-tree.js?v=1.29"></script>
-<script src="bookshelf.js?v=20261120-author-tree-v129"></script>
+  <script src="paper-tree.js?v=1.30"></script>
+  <script src="relay-journey.js?v=1.30"></script>
+  <script src="author-tree.js?v=1.30"></script>
+<script src="bookshelf.js?v=20261120-paper-tree-v130"></script>
 </body>
 </html>
