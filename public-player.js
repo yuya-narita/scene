@@ -35,6 +35,7 @@
 
   let player = null;
   let documentData = null;
+  let ownCopyReady=Promise.resolve(null);
   let shellBound = false;
   let muted = false;
   const reportButton=document.getElementById('publicReportButton');
@@ -99,9 +100,8 @@
 
   function configureShelfReturn(){
     if(!shelfReturnLink)return;
-    // Every public Player entry (TOP, Studio publication, and shared work)
-    // returns to the same bookstore entrance regardless of its origin URL.
     shelfReturnLink.href='https://yuya-narita.github.io/scene/bookstore/';
+    try{const back=new URL(params.get('returnTo')||'',location.href),store=new URL('./bookstore2/',location.href);if(back.origin===store.origin&&back.pathname===store.pathname)shelfReturnLink.href=back.href;}catch(_){}
     shelfReturnLink.textContent='← あ箱書店へ';
     shelfReturnLink.hidden=false;
     if(window.matchMedia?.('(max-width:520px)').matches){
@@ -119,6 +119,7 @@
       const clean=path=>path.replace(/\/+$/,'');
       const destinationPath=clean(destination.pathname),previousPath=clean(previous.pathname);
       if(destination.origin!==previous.origin||destinationPath!==previousPath)return false;
+      if(/\/bookstore2$/.test(destinationPath))return destination.search===previous.search;
       if(/\/bookshelf$/.test(destinationPath))return true;
       if(!/\/author$/.test(destinationPath))return false;
       const authorReference=url=>String(url.searchParams.get('u')||url.searchParams.get('id')||url.searchParams.get('author')||'').trim().toLowerCase();
@@ -587,7 +588,7 @@
     applyCover(doc);
     applyPublicCoverTypography(doc);
     buildEnding(doc);
-    syncPublicOwnCopy(doc);
+    ownCopyReady=syncPublicOwnCopy(doc);
     continueButton.hidden = safeProgress() <= 0;
   }
 
@@ -790,6 +791,7 @@
       ownCopyButton.textContent=commercePreviewLocked(doc)?`${formatJPY(amount)}で続きを読む`:(commerce.mode==='copy'?`${formatJPY(amount)}でMY COPYを発行`:((commerce.mode==='reader_price'||commerce.mode==='support')?'価格を決めてMY COPYを受け取る':`${formatJPY(amount)}で購入して受け取る`));
       ownCopyButton.onclick=()=>purchasePublicOwnCopy(commerce);
       if(ownCopyStatus)ownCopyStatus.textContent=commercePreviewLocked(doc)?'購入すると、この続きから再開します。MY COPYも本棚に届きます。':'決済後、この作品を自分の本棚に受け取れます。';
+      return {commerce};
     }catch(error){
       console.warn('Commerce price lookup failed',error);
       ownCopyButton.disabled=false;
@@ -1522,12 +1524,16 @@
   }
 
   let shopEntryActive=false,shopEntryConsumed=false;
-  function leaveShopEntry(){if(!shopEntryActive)return;shopEntryActive=false;ending.classList.remove('is-shop-entry');buildEnding(documentData);}
+  function leaveShopEntry(){if(!shopEntryActive)return;shopEntryActive=false;ending.classList.remove('is-shop-entry','is-shop-preparing');buildEnding(documentData);}
   function showShopEntry(){
     shopEntryConsumed=true;shopEntryActive=true;intro.hidden=true;host.hidden=true;ending.hidden=false;ending.classList.add('is-visible','is-shop-entry');setReportVisible(false);
     endingLabel.textContent=String(documentData?.title||'この一冊を、本棚へ');endingLabel.hidden=false;endingLeft.hidden=true;endingRight.hidden=true;
     const label=endingCoverButton?.querySelector('strong');if(label)label.textContent='まず読んでみる';
     const next=new URL(location.href);next.searchParams.delete('shop');history.replaceState(null,'',next.toString());
+    ending.classList.add('is-shop-preparing');
+    // The bookstore purchase click is the explicit intent. Reuse the existing
+    // confirmation and payment flow once; never auto-pay or bypass consent.
+    ownCopyReady.then(async result=>{if(!shopEntryActive)return;if(!result?.commerce){ending.classList.remove('is-shop-preparing');return;}try{await purchasePublicOwnCopy(result.commerce);}finally{ending.classList.remove('is-shop-preparing');}}).catch(error=>{ending.classList.remove('is-shop-preparing');if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);});
   }
   function returnToCover() {
     leaveShopEntry();
