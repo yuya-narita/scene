@@ -1367,3 +1367,63 @@ html{
 /* Author work counts; existing strength cards and relay trees remain separate. */
 .author-work-counts{padding:16px 0 22px;border-bottom:1px solid #e5dfd5;margin-bottom:20px}.work-count-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.work-count-head small{font-size:10px;color:#85817b;letter-spacing:.16em}.work-count-head h3{font-size:17px;margin:5px 0 12px}.work-count-refresh,.work-count-period button{appearance:none;border:1px solid #d9d6d0;border-radius:999px;background:#fff;color:#686765;padding:8px 13px;font:inherit;font-size:12px;cursor:pointer}.work-count-period{display:flex;flex-wrap:wrap;gap:7px}.work-count-period button[aria-pressed="true"]{background:#1e1e1e;border-color:#1e1e1e;color:#fff}.work-count-note{font-size:11px;color:#827d75;line-height:1.8;margin:12px 0}.work-count-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.work-count-card{display:flex;flex-direction:column;min-width:0;padding:13px 11px;background:#fff;border:1px solid #e5dfd5;border-radius:12px}.work-count-card>span{font-size:11px;line-height:1.6;color:#5c5955}.work-count-card>strong{font-size:23px;font-weight:700;line-height:1.4;overflow-wrap:anywhere;margin:7px 0}.work-count-card>small{font-size:10px;color:#8c857c;line-height:1.6}.author-work-counts h4{font-size:13px;margin:20px 0 11px}.work-count-error{font-size:12px;color:#a3483b;line-height:1.8}.work-count-period button:focus-visible,.work-count-refresh:focus-visible{outline:2px solid #1763c8;outline-offset:3px}
 @media(max-width:520px){.work-count-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.work-count-card>strong{font-size:21px}}
+
+/* V1.29 — compact author overview and a separate work journey */
+.author-detail-compact .master-primary-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding-bottom:20px}
+.author-detail-compact .master-primary-actions .edit{grid-column:auto;border-radius:10px;min-height:44px}
+.author-detail-compact .master-primary-actions .edit:only-child{grid-column:1/-1}
+.author-detail-compact .master-primary-actions .edit+ .edit{background:white;color:#26362d;border:1px solid #d7ddd7}
+.author-work-description{margin:0 26px 16px;color:#78817b;font-size:11px}
+.author-work-description summary{cursor:pointer}.author-work-description .detail-work-info{margin:10px 0 0;padding:12px;background:#f7f8f5;border:0}
+.author-work-counts{margin:0 26px 18px;padding:0;border:0;color:#242a29}
+.work-count-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:15px}
+.work-count-head h3{font-size:14px;line-height:1.5;margin:0;font-weight:650}
+.work-count-period{display:flex;gap:2px;flex-wrap:nowrap;border-radius:7px;background:#f2f4f0;padding:3px}
+.work-count-period button{font-size:10px;padding:5px 8px;border:0;border-radius:5px;background:transparent;white-space:nowrap;color:#78817b;min-height:30px}
+.work-count-period button[aria-pressed="true"]{background:white;color:#273f32;box-shadow:0 1px 4px #0001}
+.author-work-counts .work-count-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.author-work-counts .work-count-card{border:0;border-right:1px solid #e3e6df;border-radius:0;background:none;padding:0 6px 0 0;min-width:0}
+.author-work-counts .work-count-card:last-child{border:0}.work-count-card>span{font-size:11px;color:#68726b}
+.work-count-card>strong{font-size:29px;line-height:1.4;letter-spacing:-.03em;font-weight:650;margin:5px 0 0}
+.work-count-card strong small{font-size:10px;margin-left:3px;color:#78817b;font-weight:400;letter-spacing:0}
+.work-count-salesline{display:flex;gap:12px;align-items:center;justify-content:space-between;background:#f7f8f5;border-radius:8px;padding:11px 12px;margin:16px 0 0;color:#68726b;font-size:11px}
+.work-count-salesline b{font-size:15px;color:#303d34;margin-left:5px}.work-count-salesline small{font-size:9px}
+.work-count-definitions{font-size:10px;color:#80877f;line-height:1.8;margin-top:14px}.work-count-definitions summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;padding:4px 0}
+.work-count-definitions summary::after{content:'＋'}.work-count-definitions[open] summary::after{content:'−'}.work-count-definitions p{margin:10px 0}.work-count-refresh{border-radius:7px;border:1px solid #dbe1d8;background:white;padding:7px 11px;color:#62705e;font-size:10px}
+.author-tree-entry{display:flex;align-items:center;gap:12px;text-align:left;width:calc(100% - 52px);margin:0 26px 20px;padding:16px 15px;background:#eef3ed;border:1px solid #dbe5d9;border-radius:13px;color:#304d3e}
+.author-tree-entry>svg{width:80px;height:70px;flex:none}.author-tree-entry>span{flex:1;min-width:0}.author-tree-entry strong{display:block;font-family:"Hiragino Mincho ProN","Yu Mincho",serif;font-size:18px;margin-bottom:4px}
+.author-tree-entry small{display:block;font-size:11px;color:#758273;font-weight:400;line-height:1.6}.author-tree-entry em{display:block;color:#4e705a;font-size:10px;font-weight:400;font-style:normal;margin-top:7px}.author-tree-entry>b{font-size:24px;font-weight:400;color:#52705b}
+.author-detail-compact .master-file-actions{gap:10px;padding-bottom:12px}.author-detail-compact .master-file-actions button{font-size:10px;color:#837e73;border:0;background:none;padding:5px 0;min-height:32px;font-weight:400}
+.author-detail-compact .master-management{margin-top:0}.author-detail-compact .detail-note{font-size:9px;color:#929488;line-height:1.7}
+.author-tree-dialog{position:fixed;inset:0;width:100%;max-width:none;height:100dvh;max-height:none;margin:0;padding:0;border:0;border-radius:0;background:#fffefa;color:#242a29;overflow:auto;overscroll-behavior:contain}
+.author-tree-dialog::backdrop{background:#24292288}.author-tree-inner{max-width:1200px;padding:26px 36px 40px;margin:auto}
+.author-tree-topline{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:26px}
+.author-tree-topline button{background:none;border:0;padding:7px 0;color:#606e62;font-size:12px}.author-tree-topline>span{color:#78817b;letter-spacing:.18em;font-size:10px}
+.author-tree-title{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:28px}.author-tree-title h2{font-size:32px;letter-spacing:.04em;font-family:"Hiragino Mincho ProN","Yu Mincho",serif;margin:0}
+.author-tree-title p{font-size:12px;color:#78817b;margin:7px 0 0}.author-tree-title>strong{font-size:12px;font-weight:500;max-width:35%;overflow-wrap:anywhere}
+.author-tree-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:28px}.author-tree-layout>section,.author-tree-layout>aside{min-width:0}
+.author-tree-board{border:1px solid #e0e5db;border-radius:18px;background:radial-gradient(ellipse at 50% 40%,#e8eedf,#f4f6ef 70%);overflow:hidden}
+.author-tree-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 22px;font-size:10px;color:#697866}.author-tree-toolbar>span:first-child{letter-spacing:.12em}
+.author-tree-scroll{overflow:auto;padding:14px 18px 20px;max-height:66dvh;min-height:320px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.author-tree-scroll>svg{display:block;width:100%;height:auto;max-width:none;margin:auto;overflow:visible;min-height:320px}
+.author-tree-branches path{fill:none;stroke:#a4b495;stroke-width:2;stroke-linecap:round}.author-tree-mark{fill:#5a7b54;stroke:#6e8b60;stroke-width:1.6}.author-tree-node.pending .author-tree-mark{fill:#fffefa}.author-tree-node.issue .author-tree-mark,.author-tree-root circle{fill:#b3996b;stroke:#b3996b}
+.author-tree-hit{fill:transparent;stroke:none}.author-tree-node{cursor:pointer}.author-tree-root text{font-size:10px;fill:#75836c}.author-tree-node:focus{outline:none}.author-tree-node:focus .author-tree-mark,.author-tree-node:hover .author-tree-mark,.author-tree-node.is-selected .author-tree-mark{stroke:#315e4c;stroke-width:3;filter:drop-shadow(0 0 4px #a1b38e)}
+.author-tree-totals{border-top:1px solid #dfe5d8;padding:15px 22px;display:flex;justify-content:space-between;gap:10px;color:#70816a;font-size:11px}.author-tree-totals b{font-size:18px;color:#355340;font-weight:600;margin:0 4px}
+.author-tree-inspector{background:#edf1e7;border-top:1px solid #dfe5d8;padding:14px 22px;min-height:64px;font-size:11px;color:#72806b;line-height:1.8}.author-tree-inspector strong{display:block;color:#355340;font-weight:600}.author-tree-inspector span{display:block;font-size:10px}
+.author-tree-help{font-size:10px;line-height:1.9;color:#78816f;background:#f1f4ec;border-radius:8px;padding:10px 12px;margin:12px 0 0}
+.author-tree-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;text-align:center;color:#78816f;padding:15px}
+.author-tree-sprout{width:70px;height:80px;margin-bottom:14px}.author-tree-empty strong{font-family:"Yu Mincho",serif;font-size:17px;color:#496343}.author-tree-empty p{font-size:11px;line-height:1.9}
+.work-count-reading{background:white;border:1px solid #e3e6df;border-radius:14px;padding:17px 20px;margin:0 0 16px}.work-count-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:1px solid #edf0e8;padding:10px 0;font-size:12px}.work-count-row:last-of-type{border:0}.work-count-row b{font-size:23px;font-weight:600;overflow-wrap:anywhere}.work-count-row b small{font-size:10px;font-weight:400;color:#78817b;margin-left:4px}.work-count-reading .work-count-note{font-size:10px;color:#78817b;line-height:1.8}
+.work-count-receipt{border:1px solid #e6e1d5;border-radius:13px;background:#f6f4ed;padding:18px 20px}.work-count-receipt h3{font-size:14px;margin:0 0 5px}.work-count-receipt .work-count-row{border:0;font-size:11px;padding:7px 0}.work-count-receipt .work-count-row b{font-size:16px}
+#authorTreeCounts>.work-count-refresh{margin-top:12px}.author-tree-loading,.author-tree-load-error{padding:30px;border:1px solid #dbe5d9;border-radius:14px;background:#f4f6ef;color:#697866;font-size:12px}
+.author-tree-entry:focus-visible,.author-tree-dialog button:focus-visible{outline:2px solid #245bc4;outline-offset:4px}
+@media(max-width:680px){
+ .author-work-counts{margin:0 18px 16px}.author-work-description{margin:0 18px 14px}.author-tree-entry{width:calc(100% - 36px);margin:0 18px 16px;padding:13px 12px;gap:8px}.author-tree-entry>svg{width:68px;height:64px}.author-tree-entry strong{font-size:17px}.author-tree-entry small{font-size:10px}.author-tree-entry em{font-size:9px}.work-count-card>strong{font-size:26px}.work-count-period button{padding:4px 7px}.work-count-salesline{padding:10px;font-size:10px;gap:6px}.work-count-salesline b{font-size:14px}.work-count-head h3{font-size:13px}
+ .author-tree-inner{padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}.author-tree-title{margin-bottom:22px}.author-tree-title h2{font-size:28px}.author-tree-title p{font-size:11px}.author-tree-title>strong{display:none}.author-tree-layout{grid-template-columns:minmax(0,1fr);gap:24px}.author-tree-topline{margin-bottom:20px}.author-tree-toolbar{padding:17px 15px;font-size:9px}.author-tree-scroll{padding:0 10px 12px;min-height:280px;max-height:58dvh}.author-tree-scroll>svg{min-height:280px}.author-tree-totals{padding:13px 15px;font-size:10px}.author-tree-totals b{font-size:16px}.author-tree-inspector{padding:12px 15px}.author-tree-empty{min-height:280px}
+}
+.author-detail-compact .detail-cover{width:94px;height:126px;flex:0 0 94px;aspect-ratio:auto}
+.author-detail-compact .detail-cover img{width:100%;height:100%;object-fit:cover}
+.author-detail-compact .detail-hero{align-items:center;gap:20px;padding-bottom:18px}
+.author-detail-compact .detail-copy h2{font-size:21px}
+.author-detail-compact .detail-hero-facts,.author-detail-compact .detail-hero-date{font-size:10px}
+@media(max-width:680px){.author-detail-compact .detail-cover{width:82px;height:110px;flex-basis:82px}.author-detail-compact .detail-hero{gap:16px}.author-detail-compact .detail-copy h2{font-size:19px}}

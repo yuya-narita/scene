@@ -18,7 +18,7 @@
   <meta name="twitter:description" content="手元の一冊を読み、作者が公開した作品と出会う場所です。">
   <meta name="twitter:image" content="https://yuya-narita.github.io/scene/studio/ogp-ahako-beta.png">
   <link rel="manifest" href="../ahako.webmanifest?v=20261016-v27">
-  <link rel="stylesheet" href="bookshelf.css?v=20261120-work-counts-v1">
+  <link rel="stylesheet" href="bookshelf.css?v=20261120-author-tree-v129">
   <link rel="stylesheet" href="../ahako-shelf-wait.css?v=3">
   <link rel="stylesheet" href="../ios-input-guard.css?v=70.4">
 </head>
@@ -227,6 +227,14 @@
     </div>
   </dialog>
 
+  <dialog id="authorTreeDialog" class="author-tree-dialog" aria-labelledby="authorTreeTitle">
+    <div class="author-tree-inner">
+      <div class="author-tree-topline"><button id="closeAuthorTree" type="button">← 作品の詳細へ</button><span>WORK JOURNEY</span></div>
+      <header class="author-tree-title"><div><h2 id="authorTreeTitle">作品の木</h2><p>読まれて、手渡されて。この一冊が外へ出ていく。</p></div><strong id="authorTreeWorkTitle"></strong></header>
+      <div class="author-tree-layout"><section id="authorTreeBody" aria-label="一冊の旅"></section><aside id="authorTreeCounts" aria-label="読書と受取の件数"></aside></div>
+    </div>
+  </dialog>
+
   <dialog id="treeDialog" class="tree-dialog">
     <header class="tree-dialog-bar">
       <div><p class="eyebrow">WORK TREE</p><h2 id="treeDialogTitle">作品の木</h2></div>
@@ -255,7 +263,8 @@
   <script src="../ahako-dialog.js?v=70.3"></script>
   <script src="../ahako-shelf-wait.js?v=3"></script>
   <script src="../ahako-file-save.js?v=20261015-v20"></script>
-  <script src="work-counts.js?v=1.28"></script>
-<script src="bookshelf.js?v=20261120-work-counts-v1"></script>
+  <script src="work-counts.js?v=1.29"></script>
+  <script src="author-tree.js?v=1.29"></script>
+<script src="bookshelf.js?v=20261120-author-tree-v129"></script>
 </body>
 </html>
