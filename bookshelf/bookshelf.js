@@ -554,7 +554,7 @@ function readerBookSceneBlob(book){
   if(bytes)return new Blob([bytes],{type:'application/octet-stream'});
   return book?.blob instanceof Blob?book.blob:null;
 }
-async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);await assertMyCopyImportable(info.copyId);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!old){const order=readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==info.copyId);writeIdList(SHELF_ORDER_KEYS.owned,[info.copyId,...order]);}if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
+async function addDistribution(file,{silent=false}={}){const info=await inspectDistribution(file);await assertMyCopyImportable(info.copyId);const old=await getReaderBook(info.copyId);const now=new Date().toISOString();await putReaderBook({...info,fileName:file.name||`${info.title}_distribution.scene`,addedAt:old?.addedAt||now,updatedAt:now});if(!old){const order=readIdList(SHELF_ORDER_KEYS.owned).filter(id=>id!==info.copyId);writeIdList(SHELF_ORDER_KEYS.owned,[info.copyId,...order]);}try{fetch(`${API_BASE}/bookshelf-event`,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',keepalive:true,body:JSON.stringify({event:'own_copy_saved',workId:String(info.workId||''),copyId:String(info.copyId||'')})}).catch(()=>{});}catch{}if(!silent)toast(old?'同じ一冊を更新しました。':'自分の一冊を本棚に追加しました。');return info.copyId;}
 
 
 // Build display Blobs in this document, rather than reuse IndexedDB's Blob

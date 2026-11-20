@@ -314,11 +314,14 @@
     }
   }
 
+  function measureReading(event,index=0){
+    window.AhakoWorkMeasurement?.track(currentWorkId(),event,{surface:'public-player',scope:commercePreviewLocked(documentData)?'preview':'full',index,sceneCount:documentData?.scenes?.length||0,percent:100*Math.max(0,index)/Math.max(1,(documentData?.scenes?.length||1)-1)});
+  }
   function sendAnalytics(event, extra={}){
     const workId=currentWorkId();
     if(!workId)return;
     const payload={
-      event, workId, sessionId:analyticsSessionId,
+      event, workId, sessionId:analyticsSessionId,measurementVersion:2,readingScope:commercePreviewLocked(documentData)?'preview':'full',
       title:String(documentData?.title||'').slice(0,200),
       sceneCount:Array.isArray(documentData?.scenes)?documentData.scenes.length:0,
       sceneAdvances:analyticsSceneAdvances,
@@ -1305,6 +1308,7 @@
     if(!analyticsViewSent && currentWorkId()){
       analyticsViewSent=true;
       sendAnalytics('view');
+      window.AhakoWorkMeasurement?.track(currentWorkId(),params.get('shop')==='mycopy'?'copy_entry_open':'player_open',{surface:'public-player'});
     }
 
     intro.hidden = false;
@@ -1387,6 +1391,7 @@
     if(e.detail?.direction==='next'){
       analyticsSceneAdvances += 1;
       sendAnalytics('progress',{index});
+      measureReading('read_progress',index);
       if(player?.auto)invalidateResonance();
     }
 
@@ -1461,7 +1466,9 @@
     applyPreviewLockEnding();
     if(!analyticsCompleted){
       analyticsCompleted=true;
-      sendAnalytics('complete',{index:Array.isArray(documentData?.scenes)?documentData.scenes.length-1:0});
+      const locked=commercePreviewLocked(documentData),index=Array.isArray(documentData?.scenes)?documentData.scenes.length-1:0;
+      sendAnalytics(locked?'preview_complete':'complete',{index,completed:!locked});
+      measureReading(locked?'preview_complete':'full_complete',index);
     }
 
     // Keep player/audio alive underneath the ending screen.
@@ -1626,6 +1633,8 @@
     // begin() unlocks audio and enters Scene 1/continue Scene from the same
     // trusted user gesture that pressed START / CONTINUE.
     player.begin();
+    sendAnalytics('read_start',{index:startAt});
+    measureReading('read_start',startAt);
 
     await openingBreath();
 
