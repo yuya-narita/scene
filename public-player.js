@@ -315,7 +315,9 @@
     }
   }
 
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sceneReachReady&&player&&!host.hidden)sceneReachTracker?.reach(player.index);});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sceneReachReady&&player&&!host.hidden){sceneReachTracker?.reach(player.index);observeReadingReturn();}});
+  function observeReadingReturn(){try{if(isOperatorGuide()||document.hidden||!sceneReachReady||host.hidden)return;window.AhakoReadingReturn?.observe(currentWorkId(),documentData?.publication?.authorId,commercePreviewLocked(documentData)?'preview':'full');}catch(_){}}
+  window.addEventListener('online',observeReadingReturn);
   function measureReading(event,index=0){
     window.AhakoWorkMeasurement?.track(currentWorkId(),event,{surface:'public-player',scope:commercePreviewLocked(documentData)?'preview':'full',readingSource:window.AhakoWorkMeasurement?.resolveReadingSource(),index,sceneCount:documentData?.scenes?.length||0,percent:100*Math.max(0,index)/Math.max(1,(documentData?.scenes?.length||1)-1)});
   }
@@ -1394,7 +1396,7 @@
 
   function onSceneChange(e) {
     const index = Number(e.detail?.index);
-    if(sceneReachReady&&!host.hidden)sceneReachTracker?.reach(index);
+    if(sceneReachReady&&!host.hidden){sceneReachTracker?.reach(index);if(Number.isInteger(index))observeReadingReturn();}
     if (Number.isInteger(index) && index > 0) {
       localStorage.setItem(storageKey(), String(index));
     }
@@ -1668,7 +1670,7 @@
     host.style.visibility = '';
     host.style.pointerEvents = '';
     sceneReachReady=Boolean(player)&&!host.hidden;
-    if(sceneReachReady)sceneReachTracker?.reach(Number.isInteger(player?.index)?player.index:startAt);
+    if(sceneReachReady){sceneReachTracker?.reach(Number.isInteger(player?.index)?player.index:startAt);observeReadingReturn();}
     // V128 — Public Player has an outer cover/opening shell. Core focuses the
     // stage during begin(), but openingBreath() keeps the Player hidden and the
     // START button can retain focus. Re-focus once the readable surface is
