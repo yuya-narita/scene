@@ -1312,7 +1312,7 @@
     }
     applyDocumentMeta(doc);
     if(!isOperatorGuide()&&/^[A-Za-z0-9_-]{6,80}$/.test(currentWorkId()||'')){let canonical=document.querySelector('link[rel="canonical"]');if(!canonical){canonical=document.createElement('link');canonical.rel='canonical';document.head.append(canonical);}canonical.href='https://scene-studio-api.a-hako.workers.dev/book/'+encodeURIComponent(currentWorkId());}
-    for(const [key,target]of [['intro',intro],['ending',document.getElementById('publicEndingActions')]]){
+    for(const [key,target]of [['intro',intro],['ending',document.getElementById('publicEndingUtilities')||document.getElementById('publicEndingActions')]]){
       if(!target)continue;let share=target.querySelector('[data-public-share]');
       if(!share){share=document.createElement('button');share.type='button';share.dataset.publicShare=key;share.className='public-share-work';share.textContent='この作品を共有';target.append(share);}
       const id=currentWorkId();share.hidden=!id;share.dataset.workShareId=id||'';share.dataset.workShareTitle=doc.title||'作品を共有';
