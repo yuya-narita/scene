@@ -16,7 +16,7 @@ body #publicEnding #publicOwnCopy{min-height:50px!important;padding:12px 18px!im
 body #publicEnding #publicOwnCopyStatus{min-height:0!important;margin:0!important;white-space:normal!important;font-size:11px!important;line-height:1.5!important;overflow-wrap:anywhere}
 body #publicEnding .public-ending-utilities{order:4;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:10px}
 body #publicEnding .public-ending-utilities:empty{display:none}
-body #publicEnding .public-ending-utilities>.public-share-work{display:flex;justify-content:center;align-items:center;min-height:44px;min-width:0;width:100%;padding:10px 8px;border:1px solid var(--public-line);border-radius:8px;background:transparent;color:var(--public-text);font:12px/1.5 system-ui;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+body #publicEnding .public-ending-utilities>.public-share-work{display:flex;justify-content:center;align-items:center;min-height:44px;min-width:0;width:100%;padding:10px 8px;border:1px solid transparent;border-radius:0;box-shadow:none;background:transparent;color:var(--public-text);font:12px/1.5 system-ui;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
 body #publicEnding .public-ending-utilities>.public-share-work:only-child{grid-column:1/-1;justify-self:center;width:auto;min-width:160px;max-width:100%}
 body #publicEnding .public-ending-utilities>[hidden]{display:none!important}
 body #publicEnding .public-journey{order:5;width:100%!important;margin:0!important}
