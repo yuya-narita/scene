@@ -422,6 +422,7 @@
   }
 
   function buildEnding(doc) {
+    window.AhakoSceneLetter?.reset();
     const families={serif:'"Yu Mincho","Hiragino Mincho ProN",serif',sans:'-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif',mono:'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'};
     endingLabel.style.fontFamily=families[doc?.ending?.fontFamily]||families.serif;
     // Public shell owns the visible cover/ending DOM around Player Core, so it
@@ -1468,6 +1469,7 @@
   }
 
   function onEnd() {
+    if(!commercePreviewLocked(documentData))void window.AhakoSceneLetter?.show(currentWorkId(),ending);
     setShelfReturnReading(false);
     if(!commercePreviewLocked(documentData))localStorage.removeItem(storageKey());
     if(resonanceSession?.valid){
