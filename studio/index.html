@@ -392,7 +392,10 @@
       <details class="easy-illustration" id="easyIllustrationPanel">
         <summary><img src="./cage-icons/cage.png" alt=""><span>この子に一枚描いてもらう</span><span id="easyIllustrationCount" class="easy-illustration-count"></span></summary>
         <div class="easy-illustration-content">
-        <p>本文の冒頭・中盤・末尾から抜粋をCloudflareのAIへ送ります。</p>
+        <p>本文の抜粋から、顔を描かずに作品の景色を描きます。3匹あわせて1日1回。生成・確認に失敗した場合も含みます。</p>
+        <label for="easyIllustrationComposition">人物の描き方</label>
+        <select id="easyIllustrationComposition"><option value="scenery">人物を描かない（風景・小道具）</option><option value="back">必要な場合だけ、遠くの後ろ姿まで</option></select>
+        <p>本文の冒頭・中盤・末尾の抜粋と生成画像をCloudflareのAIへ送り、場面選びと顔・文字の確認に使います。AIの確認には見落としがあるため、採用前に絵をご確認ください。</p>
         <div class="easy-illustration-readers" role="group" aria-label="絵を思い浮かべる子">
           <button class="easy-illustration-reader is-selected" type="button" data-illustrator="cage" aria-label="CAGE、墨絵" aria-pressed="true"><img src="./cage-icons/cage.png" alt=""><span><strong>CAGE</strong><small>墨絵</small></span></button>
           <button class="easy-illustration-reader" type="button" data-illustrator="coral" aria-label="珊瑚色の子、アニメ" aria-pressed="false"><img src="./cage-icons/coral.png" alt=""><span><strong>珊瑚</strong><small>アニメ</small></span></button>
@@ -1403,7 +1406,7 @@
 <script src="./rpg-command-editor.js?v=card-kinds-v1"></script>
 <script src="./script.js?v=1.35"></script>
 <script src="./cage.js?v=25"></script>
-<script src="./easy-illustration.js?v=11"></script>
+<script src="./easy-illustration.js?v=1.43"></script>
 
 
 

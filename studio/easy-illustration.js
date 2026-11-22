@@ -70,11 +70,12 @@
     let token='';try{token=String(JSON.parse(localStorage.getItem('ahako-author-session-v1')||'null')?.token||'');}catch(_){}
     if(!token){status.textContent='画像を描くには作者ログインが必要です。';return;}
     const requestedIllustrator=illustrator;
-    generate.disabled=true;status.textContent='本文から場面を選んで、一枚描いています…';
+    const composition=$('easyIllustrationComposition')?.value==='back'?'back':'scenery';
+    generate.disabled=true;status.textContent='本文に沿った景色を丁寧に描き、顔や文字を確認しています。しばらくお待ちください…';
     try{
       const response=await fetch('https://scene-studio-api.a-hako.workers.dev/cage/illustrate',{
         method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
-        body:JSON.stringify({title:title?.value||'',excerpt:excerpt(text),illustrator:requestedIllustrator})
+        body:JSON.stringify({title:title?.value||'',excerpt:excerpt(text),illustrator:requestedIllustrator,composition})
       });
       const data=await response.json().catch(()=>({}));
       if(!response.ok||!data.ok||typeof data.image!=='string')throw new Error(data.error||'画像を描けませんでした。');
