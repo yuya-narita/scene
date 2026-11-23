@@ -125,7 +125,8 @@
       if(count>=5000||t>=30000){find('output').textContent='記録上限に達しました。';finishStroke();}
     }
     canvas.onpointermove=e=>{if(pan?.id===e.pointerId){panX=e.clientX-pan.x;panY=e.clientY-pan.y;view();}else sample(e,false);};
-    canvas.onpointerup=e=>{if(active?.id===e.pointerId||pan?.id===e.pointerId){sample(e,true);finishStroke();}};
+    canvas.onpointerup=e=>{if(active?.id===e.pointerId||pan?.id===e.pointerId){if(active)active.stroke.releasedAt=Math.min(30000,Math.round(active.start+Math.max(0,e.timeStamp-active.now)));
+      sample(e,true);finishStroke();}};
     canvas.onlostpointercapture=e=>{if(active?.id===e.pointerId||pan?.id===e.pointerId)finishStroke();};
     // Time spent in controls is outside the drawing timeline.
     dialog.addEventListener('pointerdown',e=>{if(e.target!==canvas)wallEnd=null;});

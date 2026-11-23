@@ -4,6 +4,51 @@
   const W = 1000, H = 600;
   const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
   const number = (n, fallback, min, max) => Number.isFinite(n) ? clamp(n, min, max) : fallback;
+  // Estimate motion over the final 64 ms, including a pause before pen-up.
+  function flickLength(marks, releasedAt) {
+    const end=marks.at(-1);
+    if(!end || end.distance<4 || !['brush','fountain'].includes(end.pen))return 0;
+    const release=number(releasedAt,end.time,end.time,30000);
+    const startTime=Math.max(marks[0].time,release-64);
+    let distance=end.distance;
+    for(let i=marks.length-1;i>0;i--){
+      const a=marks[i-1], b=marks[i];
+      if(b.time<=startTime)break;
+      const part=clamp((startTime-a.time)/Math.max(1,b.time-a.time),0,1);
+      distance=a.distance+(b.distance-a.distance)*part;
+      if(a.time<=startTime)break;
+    }
+    const speed=(end.distance-distance)/Math.max(8,release-startTime);
+    if(speed<=.12)return 0;
+    const strength=clamp((speed-.12)/.8,0,1);
+    return Math.min(end.distance*.58, (end.pen==='brush'?3:2)*Math.max(6,end.width)*strength);
+  }
+
+  // One repeatable sheet-space texture per ink color. Translucent and bare
+  // fibers show the underlying Scene, including when it has a dark background.
+  const waxTiles=new Map();
+  function waxPattern(ctx,color){
+    let tile=waxTiles.get(color);
+    if(!tile){
+      tile=document.createElement('canvas');tile.width=tile.height=128;
+      const brush=tile.getContext('2d'),image=brush.createImageData(128,128);
+      let seed=73123;
+      function random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}
+      const coarse=Float32Array.from({length:32*64},random);
+      const rgb=parseInt(color.slice(1),16);
+      for(let y=0;y<128;y++)for(let x=0;x<128;x++){
+        const i=(y*128+x)*4;
+        const fiber=coarse[(y>>1)*32+(((x+(y>>2))&127)>>2)];
+        const tooth=.55*fiber+.45*random();
+        image.data[i]=rgb>>16;image.data[i+1]=(rgb>>8)&255;image.data[i+2]=rgb&255;
+        image.data[i+3]=Math.round(255*clamp((tooth-.25)*1.85,0,.98));
+      }
+      brush.putImageData(image,0,0);
+      if(waxTiles.size>=12)waxTiles.delete(waxTiles.keys().next().value);
+      waxTiles.set(color,tile);
+    }
+    return ctx.createPattern(tile,'repeat');
+  }
   function prepare(layer) {
     const strokes = [];
     let count = 0;
@@ -36,7 +81,7 @@
         previous = {x,y,time};
         lastTime = time; count++;
       }
-      if(marks.length)strokes.push({marks,tip});
+      if(marks.length)strokes.push({marks,tip,tail:flickLength(marks,stroke.releasedAt)});
     }
     return {strokes,lastTime};
   }
@@ -50,13 +95,15 @@
     const flat=tip==='flat', angle=flat?-Math.PI/4:0;
     const c=Math.cos(angle), s=Math.sin(angle), squash=flat?.23:1;
     ctx.rotate(angle);ctx.scale(1,squash);
-    ctx.fillStyle=first.color;ctx.globalAlpha=first.alpha;
+    ctx.fillStyle=first.pen==='crayon'?waxPattern(ctx,first.color):first.color;ctx.globalAlpha=first.alpha;
     ctx.beginPath();
     let last;
     function nib(x,y,width,distance){
       const nx=c*x+s*y, ny=(-s*x+c*y)/squash;
       const taper=tip==='pointed'?clamp(.05+distance/Math.max(8,first.width),.05,1):1;
-      const r=width*taper/2;
+      const remaining=marks.at(-1).distance-distance;
+      const exit=stroke.tail ? .045+.955*clamp(remaining/stroke.tail,0,1) : 1;
+      const r=width*Math.min(taper,exit)/2;
       if(last){
         const dx=nx-last.x,dy=ny-last.y,len=Math.hypot(dx,dy);
         if(len){
@@ -69,14 +116,7 @@
       ctx.moveTo(nx+r,ny);ctx.arc(nx,ny,r,0,Math.PI*2);ctx.closePath();
       last={x:nx,y:ny,r};
     }
-    function grain(m,i){
-      if(first.pen!=='crayon')return;
-      for(let j=1;j<=6;j++){
-        const a=i*31+j*17,r=m.width*(.25+.09*j);
-        ctx.rect(m.x+Math.cos(a)*r,m.y+Math.sin(a)*r,1.2,1.2);
-      }
-    }
-    nib(first.x,first.y,first.width,0);grain(first,0);
+    nib(first.x,first.y,first.width,0);
     for(let i=1;i<marks.length;i++){
       const a=marks[i-1], b=marks[i];
       if(time<a.time)break;
@@ -85,12 +125,18 @@
         a.width+(b.width-a.width)*k,a.distance+(b.distance-a.distance)*k);}
       // A fast first movement may cross the whole pointed entry in one sample.
       const ramp=Math.max(8,first.width)*.95;
-      if(tip==='pointed' && a.distance<ramp && b.distance>ramp){
-        const k=(ramp-a.distance)/(b.distance-a.distance);if(k<f)at(k);
+      const entryEnd=tip==='pointed'?ramp:Infinity;
+      const exitStart=stroke.tail?marks.at(-1).distance-stroke.tail:Infinity;
+      function boundary(d){
+        if(d>a.distance && d<b.distance){
+          const k=(d-a.distance)/(b.distance-a.distance);if(k<f)at(k);
+        }
       }
+      boundary(Math.min(entryEnd,exitStart));
+      if(entryEnd!==exitStart)boundary(Math.max(entryEnd,exitStart));
       at(f);
       if(f<1)break;
-      grain(b,i);
+
     }
     ctx.fill();ctx.restore();
   }
