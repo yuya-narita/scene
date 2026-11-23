@@ -295,7 +295,8 @@
     @keyframes easy-paper-fade{0%{opacity:1}55%{opacity:.55}100%{opacity:0}}
     @media(prefers-reduced-motion:reduce){.easy-illustration-paper.is-revealing .easy-illustration-figure,.easy-illustration-paper.is-revealing:after{animation:none}.easy-illustration-paper.is-revealing:after{display:none}}
 </style>
-<link rel="stylesheet" href="../shared/work-share.css?v=1.35"><script src="../shared/work-share.js?v=1.36" defer></script></head>
+<link rel="stylesheet" href="../shared/work-share.css?v=1.35"><script src="../shared/work-share.js?v=1.36" defer></script><link rel="stylesheet" href="./draw-editor.css?v=1">
+</head>
 <body>
 <main id="app">
   <aside id="cageHome" class="cage-home" aria-label="CAGE 最初の読者" hidden>
@@ -726,6 +727,7 @@
         </section>
 
         <div class="adv-grid">
+          <button type="button" id="editSceneDraw">手書きレイヤー</button>
           <label class="adv-field"><span>種類</span><select id="sceneTypeSelect"><option value="text">テキスト</option><option value="dialogue">セリフ</option><option value="sound">音だけ</option></select></label>
           <label class="adv-field"><span>表示</span><select id="sceneDisplaySelect"><option value="stack">前の文章を残す</option><option value="solo">この文章だけ</option><option value="overlay">前Sceneに重ねる</option></select></label>
           <label class="adv-field"><span>Sceneの流れ</span><select id="sceneFlowSelect"><option value="vertical">縦方向（上へ送る）</option><option value="horizontal">横方向（ページ送り）</option></select></label>
@@ -1392,6 +1394,7 @@
 
 <script src="./scene-studio-i18n.js?v=142"></script>
 <script src="./scene-player-core.js?v=20261117-spatial-heading-v1"></script>
+<script src="../draw-layer.js?v=1"></script>
 <link rel="stylesheet" href="../shared/scene-rpg-player.css?v=20261112-card-kinds-v1">
 <script src="../shared/scene-rpg-command.js?v=phase-c1"></script>
 <script src="../shared/scene-rpg-player.js?v=20261112-card-kinds-v1"></script>
@@ -1404,7 +1407,8 @@
 <script src="../ahako-file-save.js?v=20261015-v20"></script>
 
 <script src="./rpg-command-editor.js?v=card-kinds-v1"></script>
-<script src="./script.js?v=1.35"></script>
+<script src="./draw-editor.js?v=1"></script>
+<script src="./script.js?v=1.35-draw1"></script>
 <script src="./cage.js?v=25"></script>
 <script src="./easy-illustration.js?v=1.43"></script>
 

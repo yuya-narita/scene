@@ -15210,6 +15210,7 @@ function openDesktopTextDetail(){
 
     const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
     bodyCard.prepend(makeAutoRubyBodyControl(scene));
+    bodyCard.append(desktopAction(u('手書きレイヤー','Drawing layer'),()=>openDrawing(scene)));
     // Scene type is part of the manuscript's meaning, so keep it beside the
     // body instead of hiding it in the typography inspector. The former quick
     // Text card is not mounted in the current tab layout, which made these
@@ -17542,6 +17543,21 @@ function openDesktopTextDetail(){
     renderLiveEditSceneMenu();
   }
 
+  function openDrawing(scene){
+    if(!scene)return;
+    if(player?.auto)player.stopAuto();
+    window.editAhakoDrawing(scene.presentation?.draw, layer=>{
+      if(!workingDocument?.scenes.includes(scene))return;
+      if(!layer && !scene.presentation?.draw)return;
+      captureUndo('手書きレイヤーの変更を元に戻せます');
+      if(layer)ensurePresentation(scene).draw=layer;
+      else delete scene.presentation.draw;
+      scheduleDraftSave(0);
+      if(player)refreshLivePlayer({preserveSheet:true});
+      syncEasyPublishButton();
+    });
+  }
+  document.getElementById('editSceneDraw')?.addEventListener('click',()=>openDrawing(currentScene()));
   function renderLiveEditSceneMenu(){
     const {index}=liveEditScene();
     finishInlineTextEdit();
@@ -17551,6 +17567,7 @@ function openDesktopTextDetail(){
     const grid=document.createElement('div');grid.className='live-edit-scene-actions';
     const action=(label,fn,disabled=false,danger=false)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.disabled=disabled;if(danger)b.classList.add('is-danger');b.addEventListener('click',fn);return b;};
     grid.append(
+      action(u('手書きレイヤー','Drawing layer'),()=>openDrawing(liveEditScene().scene)),
       action(u('上へ移動','Move up'),()=>liveEditMoveScene(-1),index===0),
       action(u('下へ移動','Move down'),()=>liveEditMoveScene(1),index===workingDocument.scenes.length-1),
       action(u('前のSceneと結合','Merge with previous'),liveEditMergePrevious,index===0),
