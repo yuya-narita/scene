@@ -336,3 +336,14 @@
 #detailDialog .detail-pop-actions summary{display:list-item;cursor:pointer;padding:10px 0;color:var(--blue);font-size:13px;font-weight:650;min-height:44px}
 #detailDialog .detail-pop-links{display:flex;gap:8px 24px;flex-wrap:wrap;padding:0 0 4px 14px}
 #detailDialog .detail-pop-links button{border:0;background:none;box-shadow:none;border-radius:0;color:var(--blue);font:inherit;font-size:13px;min-height:44px;padding:7px 0;text-align:left}
+
+/* V1.47: reader POP count note on covers, separate from staff POPs. */
+.book-art>.reader-pop-count{position:absolute;right:8px;bottom:8px;z-index:4;max-width:calc(100% - 16px);min-height:30px;padding:5px 9px;border:0;border-radius:2px 2px 3px 2px;background:#fff18a;color:#29303a;font-size:10px;line-height:1.3;font-weight:800;letter-spacing:.02em;box-shadow:0 2px 7px #1113;transform:rotate(2deg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.book-art>.reader-pop-count:after{content:"";position:absolute;right:0;top:0;width:0;height:0;border-top:7px solid #f4dc62;border-left:7px solid transparent}
+.detail-sticky-purchase{display:none}
+@media(max-width:799px){
+ #detailDialog{padding-bottom:92px}
+ #detailDialog .detail-offer [data-measure-offer="purchase_click"]{display:none}
+ #detailStickyPurchase:not([hidden]){display:block;position:fixed;z-index:20;left:50%;bottom:max(12px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(484px,calc(100vw - 56px));padding:8px 0 0;background:linear-gradient(180deg,#fff0 0%,#fffffff2 26%,#fff 100%)}
+ #detailStickyPurchase .button{display:flex;align-items:center;justify-content:center;width:100%;min-height:54px;border-radius:12px;box-shadow:0 5px 16px #10274724;font-size:15px}
+}
