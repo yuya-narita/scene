@@ -81,7 +81,7 @@
     });
     function point(e,t){
       const r=canvas.getBoundingClientRect(),unit=n=>Math.round(10000*Math.max(0,Math.min(1,n)))/10000;
-      const p=[unit((e.clientX-r.left)/r.width),unit((e.clientY-r.top)/r.height),Math.min(30000,Math.round(t))];
+      const p=[unit((e.clientX-r.left)/r.width),unit((e.clientY-r.top)/r.height),Math.min(300000,Math.round(t))];
       if(e.pointerType==='pen'&&e.pressure>0)p.push(unit(e.pressure));
       return p;
     }
@@ -95,7 +95,7 @@
       if(field('tool').value==='pan'){pan={id:e.pointerId,x:e.clientX-panX,y:e.clientY-panY};return;}
       if(!layer.strokes.length)wallEnd=null;
       const now=performance.now(),start=endTime()+(wallEnd===null?0:Math.min(2000,now-wallEnd));
-      if(layer.strokes.length>=100||count>=5000||start>=30000){find('output').textContent='記録上限（30秒・100筆・5,000点）に達しました。';return;}
+      if(layer.strokes.length>=1000||count>=20000||start>=300000){find('output').textContent='記録上限（300秒・1,000筆・20,000点）に達しました。';return;}
       // Cache finished strokes once per gesture. Only the pen tip changes on move.
       redrawInk();
       const backing=document.createElement('canvas');
@@ -118,14 +118,14 @@
       if(!active||e.pointerId!==active.id)return;
       const t=active.start+Math.max(0,e.timeStamp-active.now),points=active.stroke.points,previous=points.at(-1);
       const p=point(e,t);
-      if(count<5000&&(p[0]!==previous[0]||p[1]!==previous[1])&&(last||p[2]-previous[2]>=8)){
+      if(count<20000&&(p[0]!==previous[0]||p[1]!==previous[1])&&(last||p[2]-previous[2]>=8)){
         points.push(p);count++;
         if(!paintFrame)paintFrame=requestAnimationFrame(()=>{paintFrame=0;if(dialog.open)renderTip();});
       }
-      if(count>=5000||t>=30000){find('output').textContent='記録上限に達しました。';finishStroke();}
+      if(count>=20000||t>=300000){find('output').textContent='記録上限に達しました。';finishStroke();}
     }
     canvas.onpointermove=e=>{if(pan?.id===e.pointerId){panX=e.clientX-pan.x;panY=e.clientY-pan.y;view();}else sample(e,false);};
-    canvas.onpointerup=e=>{if(active?.id===e.pointerId||pan?.id===e.pointerId){if(active)active.stroke.releasedAt=Math.min(30000,Math.round(active.start+Math.max(0,e.timeStamp-active.now)));
+    canvas.onpointerup=e=>{if(active?.id===e.pointerId||pan?.id===e.pointerId){if(active)active.stroke.releasedAt=Math.min(300000,Math.round(active.start+Math.max(0,e.timeStamp-active.now)));
       sample(e,true);finishStroke();}};
     canvas.onlostpointercapture=e=>{if(active?.id===e.pointerId||pan?.id===e.pointerId)finishStroke();};
     // Time spent in controls is outside the drawing timeline.

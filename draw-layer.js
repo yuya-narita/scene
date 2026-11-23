@@ -8,7 +8,7 @@
   function flickLength(marks, releasedAt) {
     const end=marks.at(-1);
     if(!end || end.distance<4 || !['brush','fountain'].includes(end.pen))return 0;
-    const release=number(releasedAt,end.time,end.time,30000);
+    const release=number(releasedAt,end.time,end.time,300000);
     const startTime=Math.max(marks[0].time,release-64);
     let distance=end.distance;
     for(let i=marks.length-1;i>0;i--){
@@ -53,16 +53,16 @@
     const strokes = [];
     let count = 0;
     let lastTime = 0;
-    for (const stroke of (Array.isArray(layer.strokes) ? layer.strokes : []).slice(0, 100)) {
+    for (const stroke of (Array.isArray(layer.strokes) ? layer.strokes : []).slice(0, 1000)) {
       if (!Array.isArray(stroke?.points)) continue;
       const tip = stroke.pen === 'brush' ? (stroke.tip || 'round') : 'round';
       const marks = [];
       let previous, distance = 0;
       const points = stroke.points;
-      for (let i = 0; i < points.length && count < 5000; i++) {
+      for (let i = 0; i < points.length && count < 20000; i++) {
         const point = points[i];
         if (!Array.isArray(point) || !point.slice(0,3).every(Number.isFinite) || point.length < 3) continue;
-        const time = Math.max(lastTime, clamp(point[2], 0, 30000));
+        const time = Math.max(lastTime, clamp(point[2], 0, 300000));
         let x = clamp(point[0], 0, 1) * W, y = clamp(point[1], 0, 1) * H;
         const next = points[i+1], prior = points[i-1];
         if (layer.smooth !== 'off' && Array.isArray(next) && Array.isArray(prior)) {
