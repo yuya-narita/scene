@@ -301,3 +301,27 @@
 @media(max-width:799px){.work-picker{width:100%;max-width:none;height:100dvh;max-height:100dvh;border-radius:0;margin:0}.picker-top{padding:calc(10px + env(safe-area-inset-top)) 16px 10px}.picker-top h2{font-size:16px}.picker-scroll{padding:16px 12px calc(24px + env(safe-area-inset-bottom))}.picker-books{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 10px}.picker-result-line{align-items:flex-start;flex-direction:column;gap:0}.work-choice{align-items:stretch;flex-direction:column;gap:10px}.picker-direct .filter-row{flex-direction:column}.picker-chips{gap:6px}}
 
 .book-intro-link{display:block;font-size:11px;color:#5376ac;margin-top:10px}.book-intro-link:hover{text-decoration:underline}
+
+/* Reader POPs and shared account settings. */
+#readerPopsDialog h2,#readerPopEditor h2,#readerPopConfirm h2,#accountDialog h2{font-size:22px;line-height:1.5;margin:8px 0 12px}
+.reader-pop-list{display:grid;gap:12px;margin:20px 0;max-height:min(48dvh,480px);overflow:auto}
+.reader-pop-card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fcfcfb}
+.reader-pop-card p{font-size:16px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 12px}
+.reader-pop-card small{color:var(--muted);font-size:11px}
+.reader-pop-tools{display:flex;justify-content:flex-end;gap:14px;margin-top:8px}
+.reader-pop-tools .text-button{font-size:12px}
+.reader-spoiler-label{display:block;border:0;border-radius:5px;background:#eef0f2;color:#48505a;padding:5px 8px;font-size:11px;margin-bottom:7px}
+.reader-pop-copy[data-spoiler=hidden]{filter:blur(5px);user-select:none;cursor:pointer}
+#readerPopEditor textarea{display:block;width:100%;min-height:140px;resize:vertical;border:1px solid var(--line);border-radius:9px;padding:14px;font:inherit;font-size:16px;line-height:1.8;background:white}
+.reader-pop-form-meta,.reader-pop-form-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}
+.reader-pop-form-meta label{font-size:13px}.reader-pop-form-meta span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.reader-pop-preview{padding:18px;border:1px solid var(--line);border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:17px;line-height:1.8}
+#accountDialog label{display:block;font-size:13px;font-weight:650;margin:16px 0 7px}
+#accountDialog input{width:100%;padding:12px;border:1px solid #d9dee8;border-radius:8px;background:white;font-size:16px}
+#accountDialog input[type=submit],#accountDialog .button{margin-top:15px}
+#accountEmailForm .button,#accountCodeForm .button{width:100%}
+#accountCodeForm .text-button{display:block;margin:10px auto}
+.account-status{display:grid;gap:4px;padding:15px;border-radius:9px;background:#f4f7fb}
+.account-status small{color:var(--muted);font-size:12px}
+.account-terms{margin-top:20px;line-height:1.8}.account-terms a{text-decoration:underline}
+@media(max-width:480px){.reader-pop-form-actions .button{flex:1;padding:10px 8px}.reader-pop-card{padding:12px}.reader-pop-card p{font-size:15px}}
