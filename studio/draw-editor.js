@@ -2,7 +2,7 @@
   'use strict';
   const defaults={strokes:[],smooth:'standard',rate:1,seconds:0,delay:0,display:'play',
     x:50,y:50,width:70,height:100,angle:0,opacity:1,order:'front'};
-  const styleDefaults={pen:'ball',color:'#181818',width:6,opacity:1};
+  const styleDefaults={pen:'ball',tip:'pointed',color:'#181818',width:6,opacity:1};
   window.editAhakoDrawing=function(source,commit){
     const layer=Object.assign(structuredClone(defaults),structuredClone(source||{}));
     const brush=Object.assign({},styleDefaults,layer.brush);
@@ -17,6 +17,7 @@
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
+      <label data-nib>筆先<select name="tip"><option value="pointed">穂先（細入り）</option><option value="flat">平筆（斜め）</option><option value="round">丸筆</option></select></label>
       <label>色<input name="color" type="color"></label><label>太さ<input name="width" type="number" min="1" max="80"></label>
       <label>インク濃度<input name="opacity" type="number" min="0" max="1" step=".05"></label>
       <button data-action="restyle">全筆跡にペン設定を適用</button></div>
@@ -61,6 +62,7 @@
       count=layer.strokes.reduce((n,s)=>n+s.points.length,0);
     }
     function view(){
+      find('[data-nib]').style.display=brush.pen==='brush'?'':'none';
       const zoom=Number(field('zoom').value);
       sheet.style.transform='translate('+panX+'px,'+panY+'px) scale('+zoom+')';
       sheet.classList.toggle('guided',field('grid').checked);

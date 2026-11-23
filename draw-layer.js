@@ -5,13 +5,16 @@
   const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
   const number = (n, fallback, min, max) => Number.isFinite(n) ? clamp(n, min, max) : fallback;
   function prepare(layer) {
-    const marks = [];
+    const strokes = [];
+    let count = 0;
     let lastTime = 0;
     for (const stroke of (Array.isArray(layer.strokes) ? layer.strokes : []).slice(0, 100)) {
       if (!Array.isArray(stroke?.points)) continue;
-      let previous;
+      const tip = stroke.pen === 'brush' ? (stroke.tip || 'round') : 'round';
+      const marks = [];
+      let previous, distance = 0;
       const points = stroke.points;
-      for (let i = 0; i < points.length && marks.length < 5000; i++) {
+      for (let i = 0; i < points.length && count < 5000; i++) {
         const point = points[i];
         if (!Array.isArray(point) || !point.slice(0,3).every(Number.isFinite) || point.length < 3) continue;
         const time = Math.max(lastTime, clamp(point[2], 0, 30000));
@@ -27,50 +30,105 @@
         const pressure = number(point[3],1/(1+speed),0,1);
         const width = number(stroke.width,6,1,80);
         const factor = {fountain:.45+pressure, brush:.5+2*pressure,marker:2,crayon:1.4}[stroke.pen] || 1;
-        marks.push({from,x,y,time,width:width*factor,color:/^#[0-9a-f]{6}$/i.test(stroke.color)?stroke.color:'#171717',
+        distance += Math.hypot(x-from.x,y-from.y);
+        marks.push({x,y,time,width:width*factor,distance,color:/^#[0-9a-f]{6}$/i.test(stroke.color)?stroke.color:'#171717',
           pen:stroke.pen,alpha:number(stroke.opacity,1,0,1)*(stroke.pen==='marker'?.38:1),first:!previous});
         previous = {x,y,time};
-        lastTime = time;
+        lastTime = time; count++;
+      }
+      if(marks.length)strokes.push({marks,tip});
+    }
+    return {strokes,lastTime};
+  }
+  // Build a single filled silhouette per pen-down. All subpaths wind clockwise,
+  // so intersections inside one stroke receive its ink opacity only once.
+  function paintStroke(ctx, stroke, time) {
+    const {marks,tip}=stroke;
+    const first=marks[0];
+    if(time<first.time)return;
+    ctx.save();
+    const flat=tip==='flat', angle=flat?-Math.PI/4:0;
+    const c=Math.cos(angle), s=Math.sin(angle), squash=flat?.23:1;
+    ctx.rotate(angle);ctx.scale(1,squash);
+    ctx.fillStyle=first.color;ctx.globalAlpha=first.alpha;
+    ctx.beginPath();
+    let last;
+    function nib(x,y,width,distance){
+      const nx=c*x+s*y, ny=(-s*x+c*y)/squash;
+      const taper=tip==='pointed'?clamp(.05+distance/Math.max(8,first.width),.05,1):1;
+      const r=width*taper/2;
+      if(last){
+        const dx=nx-last.x,dy=ny-last.y,len=Math.hypot(dx,dy);
+        if(len){
+          const ox=-dy/len,oy=dx/len;
+          ctx.moveTo(last.x+ox*last.r,last.y+oy*last.r);
+          ctx.lineTo(last.x-ox*last.r,last.y-oy*last.r);
+          ctx.lineTo(nx-ox*r,ny-oy*r);ctx.lineTo(nx+ox*r,ny+oy*r);ctx.closePath();
+        }
+      }
+      ctx.moveTo(nx+r,ny);ctx.arc(nx,ny,r,0,Math.PI*2);ctx.closePath();
+      last={x:nx,y:ny,r};
+    }
+    function grain(m,i){
+      if(first.pen!=='crayon')return;
+      for(let j=1;j<=6;j++){
+        const a=i*31+j*17,r=m.width*(.25+.09*j);
+        ctx.rect(m.x+Math.cos(a)*r,m.y+Math.sin(a)*r,1.2,1.2);
       }
     }
-    return {marks,lastTime};
+    nib(first.x,first.y,first.width,0);grain(first,0);
+    for(let i=1;i<marks.length;i++){
+      const a=marks[i-1], b=marks[i];
+      if(time<a.time)break;
+      const f=time>=b.time?1:(time-a.time)/(b.time-a.time);
+      function at(k){nib(a.x+(b.x-a.x)*k,a.y+(b.y-a.y)*k,
+        a.width+(b.width-a.width)*k,a.distance+(b.distance-a.distance)*k);}
+      // A fast first movement may cross the whole pointed entry in one sample.
+      const ramp=Math.max(8,first.width)*.95;
+      if(tip==='pointed' && a.distance<ramp && b.distance>ramp){
+        const k=(ramp-a.distance)/(b.distance-a.distance);if(k<f)at(k);
+      }
+      at(f);
+      if(f<1)break;
+      grain(b,i);
+    }
+    ctx.fill();ctx.restore();
   }
   function painter(canvas, layer) {
     const ctx = canvas.getContext('2d');
-    const {marks,lastTime} = prepare(layer);
+    const {strokes,lastTime} = prepare(layer);
     const duration = layer.display==='still' ? 0 : layer.seconds>0 ?
       number(layer.seconds,5,.1,300)*1000 : lastTime/number(layer.rate,1,.5,3);
     const delay = number(layer.delay,0,0,60)*1000;
     const pixels = Math.min(2, Math.max(.5, (canvas.clientWidth || W) * (window.devicePixelRatio || 1) / W));
     canvas.width = Math.round(W*pixels); canvas.height = Math.round(H*pixels);
     ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
-    let cursor = 0, fraction = 0;
+    let cursor=0, underlay=null, partial=false, previousTime=-1;
     function render(elapsed) {
       if (elapsed < delay) return false;
-      const t = elapsed === Infinity ? Infinity : duration ? (elapsed-delay)*lastTime/duration : Infinity;
-      while (cursor < marks.length) {
-        const m = marks[cursor];
-        if(t<m.from.time)break;
-        const end = t>=m.time ? 1 : (t-m.from.time)/(m.time-m.from.time);
-        if(end<=fraction)break;
-        const dx=m.x-m.from.x, dy=m.y-m.from.y;
-        const x=m.from.x+dx*end, y=m.from.y+dy*end;
-        ctx.strokeStyle = ctx.fillStyle = m.color;
-        ctx.lineWidth = m.width; ctx.lineCap = 'round'; ctx.globalAlpha = m.alpha;
-        if (m.first) {
-          ctx.beginPath(); ctx.arc(m.x,m.y,m.width/2,0,2*Math.PI); ctx.fill();
-        } else {
-          ctx.beginPath(); ctx.moveTo(m.from.x+dx*fraction,m.from.y+dy*fraction); ctx.lineTo(x,y); ctx.stroke();
-        }
-        if (m.pen==='crayon' && end===1) {
-          for(let j=1;j<=6;j++){
-            const a=cursor*31+j*17, r=m.width*(.25+.09*j);
-            ctx.fillRect(m.x+Math.cos(a)*r,m.y+Math.sin(a)*r,1.2,1.2);
-          }
-        }
-        if(end<1){fraction=end;break;}
-        cursor++;fraction=0;
+      const t = elapsed === Infinity || !duration ? Infinity : (elapsed-delay)*lastTime/duration;
+      if(t===previousTime || cursor===strokes.length)return elapsed>=delay+duration;
+      previousTime=t;
+      if(partial){
+        ctx.save();ctx.setTransform(1,0,0,1,0,0);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(underlay,0,0);ctx.restore();
       }
+      while(cursor<strokes.length){
+        const stroke=strokes[cursor], marks=stroke.marks;
+        if(t<marks[0].time)break;
+        const done=t>=marks[marks.length-1].time;
+        if(!done && !partial){
+          underlay ||= document.createElement('canvas');
+          underlay.width=canvas.width;underlay.height=canvas.height;
+          underlay.getContext('2d').drawImage(canvas,0,0);
+        }
+        paintStroke(ctx,stroke,t);
+        partial=!done;
+        if(!done)break;
+        cursor++;
+      }
+      if(cursor===strokes.length)underlay=null;
       return elapsed>=delay+duration;
     }
     return {render, duration:delay+duration};
