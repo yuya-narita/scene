@@ -354,3 +354,21 @@
  #detailStickyPurchase:not([hidden]){display:block;flex:none;padding:10px 18px max(12px,env(safe-area-inset-bottom));border-top:1px solid var(--line);background:white}
  #detailStickyPurchase .button{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;border-radius:10px;font-size:15px}
 }
+
+/* Hand-lettered reader shelf cards */
+.reader-sign{--paper:#ffeb87;--accent:#efa629;position:relative;isolation:isolate;color:#29251e;margin:14px 6px 20px;padding:24px 22px 12px;background:var(--paper);box-shadow:1px 3px 5px #31281226;transform:rotate(-1deg)}
+.reader-sign[data-color=pink]{--paper:#ffd3df;--accent:#ef729e}
+.reader-sign[data-color=blue]{--paper:#c9edff;--accent:#62b8dd}
+.reader-sign[data-paper=note]:before{content:"";position:absolute;top:-6px;left:36%;width:29%;height:13px;transform:rotate(4deg);background:#ded1a4cc}
+.reader-sign[data-paper=speech]{border:2px solid #302d2b;border-radius:26px 28px 19px 24px;transform:rotate(1deg)}
+.reader-sign[data-paper=speech]:after{content:"";position:absolute;left:26px;bottom:-8px;width:13px;height:13px;background:var(--paper);border:solid #302d2b;border-width:0 2px 2px 0;transform:skew(-18deg) rotate(45deg)}
+.reader-sign[data-paper=band]{border-block:5px double #40372a;padding-block:15px;transform:none}
+.reader-sign-words{font:700 22px/1.55 Yomogi,"Hiragino Maru Gothic ProN",sans-serif;white-space:pre-wrap;overflow-wrap:anywhere}
+.reader-sign-words>span{background:linear-gradient(transparent 79%,var(--accent) 79%,var(--accent) 94%,transparent 94%)}
+.reader-sign>small{display:block;text-align:right;color:#443e35;font-size:11px;margin-top:8px}
+.reader-pop-card{border:0;border-radius:0;background:none;padding:5px 6px}
+.reader-pop-card>.reader-pop-tools{display:inline-flex;float:right;margin:0}
+.pop-choices{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.pop-choices label{display:grid;gap:4px;flex:1;font-size:12px;color:var(--ink)}
+.pop-choices select{min-height:40px;border:1px solid var(--line);border-radius:6px;background:white;color:var(--ink);padding:5px;font-size:16px}
+#readerPopEditor textarea{min-height:84px}
