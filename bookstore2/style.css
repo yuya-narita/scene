@@ -325,3 +325,14 @@
 .account-status small{color:var(--muted);font-size:12px}
 .account-terms{margin-top:20px;line-height:1.8}.account-terms a{text-decoration:underline}
 @media(max-width:480px){.reader-pop-form-actions .button{flex:1;padding:10px 8px}.reader-pop-card{padding:12px}.reader-pop-card p{font-size:15px}}
+
+/* V1.46: clearer work actions; purchase panel keeps its existing presentation. */
+#detailDialog .detail-read-action{margin-top:20px;display:block}
+#detailDialog .detail-read-button{width:100%;min-height:48px;border-color:#b8c9e6;background:#f5f8ff;color:var(--blue)}
+#detailDialog .detail-utility-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px 20px;margin:10px 0 0;padding:0}
+#detailDialog .detail-utility-actions a,#detailDialog .detail-utility-actions button{display:inline-flex;align-items:center;min-height:44px;padding:6px 0;border:0;border-radius:0;background:none;box-shadow:none;color:var(--muted);font:inherit;font-size:12px;line-height:1.6;text-align:left}
+#detailDialog .detail-utility-actions button[aria-pressed=true]{color:var(--blue)}
+#detailDialog .detail-pop-actions{margin-top:8px;padding:0;border:0}
+#detailDialog .detail-pop-actions summary{display:list-item;cursor:pointer;padding:10px 0;color:var(--blue);font-size:13px;font-weight:650;min-height:44px}
+#detailDialog .detail-pop-links{display:flex;gap:8px 24px;flex-wrap:wrap;padding:0 0 4px 14px}
+#detailDialog .detail-pop-links button{border:0;background:none;box-shadow:none;border-radius:0;color:var(--blue);font:inherit;font-size:13px;min-height:44px;padding:7px 0;text-align:left}
