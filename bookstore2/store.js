@@ -122,7 +122,19 @@ function accountStatus(text,error=false){$('#accountStatus').textContent=text;$(
 function syncAccountUI(){const active=!!(accountToken&&accountAuthor?.authorId);$('#accountSignedIn').hidden=!active;$('#accountEmailForm').hidden=active||!$('#accountCodeForm').hidden;$('#accountName').textContent=accountAuthor?.displayName||'ログイン中';$('#accountEmailDisplay').textContent=accountAuthor?.email||'';$('#accountEmail').value=accountAuthor?.email||$('#accountEmail').value;$('#accountEmail').readOnly=active;$('#accountDisplayName').hidden=active;$('#accountDialog').querySelector('label[for="accountDisplayName"]').hidden=active;}
 async function restoreAccount(){readAccountSession();syncAccountUI();if(!accountToken)return;try{const data=await accountRequest('/author-auth/me');if(data.author)saveAccountSession(accountToken,data.author);}catch{}}
 let bookEntryHandled=false;
-function openBookEntry(){if(bookEntryHandled)return;const id=params.get('save')||params.get('book');if(!id)return;bookEntryHandled=true;const work=works.find(w=>w.publicationId===id);if(!work){$('#loadStatus').textContent='指定された作品は現在、公開一覧にありません。';return;}detail(id);if(params.get('save')){try{const saved=window.AhakoStoreReader?.later().some(w=>w.publicationId===id);if(!saved){window.AhakoStoreReader.toggleLater(work);measure(id,'later_add');}refreshLaterButton();$('#detailMessage').textContent=saved?'あとで読むに保存済みです。':'あとで読むに保存しました。';}catch(e){$('#detailMessage').textContent=e.message||'保存できませんでした。';}}}
+function openBookEntry(){
+ if(bookEntryHandled)return;
+ const id=params.get('save')||params.get('book');
+ if(!id)return;
+ bookEntryHandled=true;
+ // Keep attribution in the original params, but consume the entry action in browser history.
+ const shelfUrl=new URL(location.href);
+ shelfUrl.searchParams.delete('book');
+ shelfUrl.searchParams.delete('save');
+ history.replaceState(history.state,'',shelfUrl);
+ const navigation=window.performance?.getEntriesByType?.('navigation')?.[0];
+ if(navigation?.type==='reload'||(!navigation&&window.performance?.navigation?.type===1))return;
+ const work=works.find(w=>w.publicationId===id);if(!work){$('#loadStatus').textContent='指定された作品は現在、公開一覧にありません。';return;}detail(id);if(params.get('save')){try{const saved=window.AhakoStoreReader?.later().some(w=>w.publicationId===id);if(!saved){window.AhakoStoreReader.toggleLater(work);measure(id,'later_add');}refreshLaterButton();$('#detailMessage').textContent=saved?'あとで読むに保存済みです。':'あとで読むに保存しました。';}catch(e){$('#detailMessage').textContent=e.message||'保存できませんでした。';}}}
 async function load(){ $('#retry').hidden=true;$('#loadStatus').textContent='本を並べています…';try{const d=await request('/discover');if(!Array.isArray(d.works))throw new Error('作品一覧の応答を確認できませんでした');works=d.works.filter(w=>/^[A-Za-z0-9_-]{6,80}$/.test(w.publicationId));render();$('#loadStatus').textContent=works.length?'':'公開中の作品はまだありません。';await Promise.all([loadPops(),loadReaderPopCounts()]);openBookEntry();if(returnState){window.scrollTo(0,Math.max(0,Number(returnState.y)||0));returnState=null;try{sessionStorage.removeItem('ahako:popstore:return');}catch{}}else if(!userMoved&&!scrollLock)window.scrollTo(0,0);}catch(e){$('#loadStatus').textContent=e.name==='AbortError'?'接続に時間がかかっています。もう一度お試しください。':'本を読み込めませんでした。通信環境をご確認のうえ、もう一度お試しください。';$('#retry').hidden=false;}}
 async function loadPops(){
  let failures=0;
