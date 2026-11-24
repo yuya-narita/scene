@@ -191,7 +191,7 @@
       if(state?.signature===signature&&state.canvas.isConnected)return;
       clear();
       const canvas=document.createElement('canvas');canvas.setAttribute('aria-label','手書きレイヤー');
-      Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,200)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
+      Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,600)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
       const anchor=page.querySelector(key==='cover'?'.public-intro-frame':'.public-ending-inner');
       if(layer.order==='behind'&&anchor){anchor.style.position='relative';anchor.style.zIndex='2';anchor.before(canvas);}else page.append(canvas);
       const paint=painter(canvas,layer),start=performance.now();
@@ -221,7 +221,7 @@
       if (!layer?.strokes?.length) continue;
       const canvas=document.createElement('canvas');
       canvas.setAttribute('aria-label','手書きレイヤー');
-      const width=number(layer.width,70,1,200);
+      const width=number(layer.width,70,1,600);
       Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',
         top:number(layer.y,50,0,100)+'%',width:width+'%',height:'auto',aspectRatio:'5 / 3',
         transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',
@@ -295,7 +295,7 @@
     if(!replay&&old?.signature===signature&&old.canvas.isConnected)return;
     clearPage(this,key);
     const canvas=document.createElement('canvas');canvas.setAttribute('aria-label','手書きレイヤー');
-    Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,200)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
+    Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,600)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
     const anchor=page.querySelector(key==='cover'?'.sp-cover-copy':'.sp-ending-copy');
     if(layer.order==='behind'&&anchor)anchor.before(canvas);else page.append(canvas);
     const paint=painter(canvas,layer),start=performance.now();

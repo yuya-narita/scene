@@ -5,6 +5,7 @@
   const styleDefaults={pen:'ball',tip:'pointed',color:'#181818',width:6,opacity:1};
   window.editAhakoDrawing=function(source,commit){
     const layer=Object.assign(structuredClone(defaults),structuredClone(source||{}));
+    const baseWidth=70;
     const brush=Object.assign({},styleDefaults,layer.brush);
     const dialog=document.createElement('dialog');
     dialog.className='draw-editor';
@@ -23,7 +24,8 @@
       <button data-action="restyle">全筆跡にペン設定を適用</button></div>
       <div class="draw-row"><label>手ブレ補正<select name="smooth"><option value="off">OFF</option><option value="standard">標準</option><option value="strong">強</option></select></label>
       <label>操作<select name="tool"><option value="draw">描く</option><option value="pan">用紙を動かす</option></select></label>
-      <label>拡大<select name="zoom"><option>1</option><option>1.5</option><option>2</option><option>3</option></select></label>
+      <label>編集ズーム<select name="zoom"><option>1</option><option>1.5</option><option>2</option><option>3</option></select></label>
+      <label>Scene表示倍率（標準幅70%基準）<select name="sceneZoom"><option value="1">1倍</option><option value="1.5">1.5倍</option><option value="2">2倍</option><option value="3">3倍</option><option value="custom">任意</option></select></label>
       <label><input name="grid" type="checkbox" checked>ガイド</label></div>
       <details open><summary>再生</summary><div class="draw-row">
       <label>表示<select name="display"><option value="play">手書き再生</option><option value="still">完成形</option></select></label>
@@ -34,7 +36,7 @@
       <details><summary>Scene上の配置</summary><div class="draw-map" aria-label="ドラッグで配置"><canvas></canvas></div><div class="draw-row draw-position"></div></details></div>`;
     const find=s=>dialog.querySelector(s), field=n=>find('[name="'+n+'"]');
     const sheet=find('.draw-sheet'),canvas=sheet.querySelector('canvas'), map=find('.draw-map'),small=map.querySelector('canvas');
-    for(const [key,label,min,max,step] of [['x','中心X（%）',0,100,1],['y','中心Y（%）',0,100,1],['width','幅（%）',1,200,1],['height','縦倍率（%）',10,300,1],['angle','回転（度）',-180,180,1],['opacity','全体の不透明度',0,1,.05]]){
+    for(const [key,label,min,max,step] of [['x','中心X（%）',0,100,1],['y','中心Y（%）',0,100,1],['width','幅（%）',1,600,1],['height','縦倍率（%）',10,300,1],['angle','回転（度）',-180,180,1],['opacity','全体の不透明度',0,1,.05]]){
       const el=document.createElement('label');el.textContent=label;
       const input=document.createElement('input');Object.assign(input,{name:'pos-'+key,type:'number',min,max,step,value:layer[key]});el.append(input);find('.draw-position').append(el);
     }
@@ -43,6 +45,7 @@
     for(const k of ['smooth','display','delay','rate','order'])field(k).value=layer[k];
     field('timing').value=[0,3,5,10].includes(layer.seconds)?layer.seconds:'custom';
     field('seconds').value=layer.seconds||5;
+    field('sceneZoom').value=[1,1.5,2,3].includes(layer.width/baseWidth)?String(layer.width/baseWidth):'custom';
     let active=null,wallEnd=null,preview=0,panX=0,panY=0,pan=null,redo=[], count=0;
     const endTime=()=>layer.strokes.at(-1)?.points.at(-1)?.[2]||0;
     function redrawInk(target=canvas, strokes=layer.strokes){
@@ -71,7 +74,14 @@
       const input=e.target,n=input.name;
       if(!n)return;
       if(input.type==='number'&&(!input.value||!input.validity.valid)){input.reportValidity();return;}
-      if(n.startsWith('pos-'))layer[n.slice(4)]=Number(input.value);
+      if(n==='sceneZoom'){
+        if(input.value==='custom'){find('details:last-child').open=true;field('pos-width').focus();return;}
+        layer.width=Math.min(600,Math.max(1,Math.round(baseWidth*Number(input.value))));
+        field('pos-width').value=layer.width;
+      }else if(n.startsWith('pos-')){
+        layer[n.slice(4)]=Number(input.value);
+        if(n==='pos-width')field('sceneZoom').value='custom';
+      }
       else if(n in styleDefaults)brush[n]=input.type==='number'?Number(input.value):input.value;
       else if(n==='timing'||n==='seconds')layer.seconds=field('timing').value==='custom'?Number(field('seconds').value):Number(field('timing').value);
       else if(['smooth','display','order'].includes(n))layer[n]=input.value;
