@@ -5108,9 +5108,9 @@ return flowCommentCard;}
     }
 
     entries.unshift(
-      {name:'scene.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(packaged,null,2))},
-      {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest,null,2))},
-      {name:'studio-state.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(studioState,null,2))}
+      {name:'scene.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(packaged))},
+      {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest))},
+      {name:'studio-state.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(studioState))}
     );
 
     onProgress?.(60,'.sceneを生成しています…');
@@ -5194,8 +5194,8 @@ return flowCommentCard;}
       output.push({name,bytes});
     }
     output.unshift(
-      {name:'scene.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(doc,null,2))},
-      {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest,null,2))}
+      {name:'scene.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(doc))},
+      {name:'manifest.json',bytes:ZIP_TEXT_ENCODER.encode(JSON.stringify(manifest))}
     );
 
     onProgress?.(65,'配布版を生成しています…');
@@ -5657,7 +5657,7 @@ return flowCommentCard;}
     try{
       const doc=sceneDocumentForExport();
       const name=`${safeFileStem(doc.title)}.scene.json`;
-      downloadTextFile(name,JSON.stringify(doc,null,2));
+      downloadTextFile(name,JSON.stringify(doc));
       setProjectIoStatus(t('io.exported',{name}));
     }catch(error){
       console.error(error); setProjectIoStatus(t('io.invalid'),{error:true});

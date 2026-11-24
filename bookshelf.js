@@ -137,8 +137,8 @@ async function recoveredMasterFileFromServer(work){
   if(recoveredId!==workId||!/^[A-Za-z0-9_-]{32,128}$/.test(ownerKey))throw new Error('RECOVERED_MASTER_IDENTITY_INVALID');
   const manifest={package:'scene-package',packageVersion:'1.0',sceneFormat:'1.0',title:String(doc.title||work?.title||'Untitled'),author:String(doc.author||work?.author||''),language:String(doc.language||'und'),entry:'scene.json'};
   const blob=await makeStoreZip([
-    {name:'scene.json',bytes:te.encode(JSON.stringify(doc,null,2))},
-    {name:'manifest.json',bytes:te.encode(JSON.stringify(manifest,null,2))}
+    {name:'scene.json',bytes:te.encode(JSON.stringify(doc))},
+    {name:'manifest.json',bytes:te.encode(JSON.stringify(manifest))}
   ]);
   const safe=String(doc.title||work?.title||workId).replace(/[\\/:*?"<>|]+/g,'_');
   return new File([blob],`${safe}.scene`,{type:'application/zip'});
@@ -193,7 +193,7 @@ async function syncRecoveredMasterSeriesMetadata(){
         if(doc.publication&&typeof doc.publication==='object')delete doc.publication.series;
       }
       const out=[];for(const [name,bytes] of entries){if(name!=='scene.json')out.push({name,bytes});}
-      out.push({name:'scene.json',bytes:te.encode(JSON.stringify(doc,null,2))});
+      out.push({name:'scene.json',bytes:te.encode(JSON.stringify(doc))});
       const blob=await makeStoreZip(out);
       await putWork({...row,blob,seriesId,seriesTitle,episodeNumber,episode:String(work?.episodeLabel||work?.episode||''),episodeTitle:String(work?.episodeTitle||''),updatedAt:row.updatedAt||new Date().toISOString()});changed++;
     }catch(error){console.warn('Recovered Master series sync skipped',workId,error);}
@@ -609,8 +609,8 @@ async function distributionFileFromClaimScene(scene){
     title:String(scene?.title||'Untitled'),author:String(scene?.author||'')
   };
   const blob=await makeStoreZip([
-    {name:'scene.json',bytes:te.encode(JSON.stringify(packed.scene,null,2))},
-    {name:'manifest.json',bytes:te.encode(JSON.stringify(manifest,null,2))},
+    {name:'scene.json',bytes:te.encode(JSON.stringify(packed.scene))},
+    {name:'manifest.json',bytes:te.encode(JSON.stringify(manifest))},
     ...packed.assets
   ]);
   return new File([blob],`${safeClaimFileBase(scene?.title||'book')}_distribution.scene`,{type:'application/octet-stream'});
@@ -1961,7 +1961,7 @@ async function makeSelfContainedRecoveredMasterBlob(w,onProgress=null){
   rewrite(doc);
   const out=[];
   for(const [name,bytes] of entries){if(name!=='scene.json'&&!name.startsWith('assets/'))out.push({name,bytes});}
-  out.push({name:'scene.json',bytes:te.encode(JSON.stringify(doc,null,2))},...packed);
+  out.push({name:'scene.json',bytes:te.encode(JSON.stringify(doc))},...packed);
   return makeStoreZip(out);
 }
 async function exportMasterBlob(w){

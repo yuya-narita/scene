@@ -444,8 +444,8 @@
       title:String(scene?.title||'Untitled'),author:String(scene?.author||'')
     };
     const blob=buildStoredZip([
-      ['scene.json',textBytes(JSON.stringify(scene,null,2))],
-      ['manifest.json',textBytes(JSON.stringify(manifest,null,2))]
+      ['scene.json',textBytes(JSON.stringify(scene))],
+      ['manifest.json',textBytes(JSON.stringify(manifest))]
     ]);
     // iOS Safari: persist immutable bytes instead of a transient Blob so a
     // received MY COPY can be reopened reliably after navigation.
