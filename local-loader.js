@@ -443,7 +443,7 @@
       relayEnabled:scene?.sharing?.relay?.enabled!==false,
       title:String(scene?.title||'Untitled'),author:String(scene?.author||'')
     };
-    const blob=buildStoredZip([
+    const blob=await buildStoredZip([
       ['scene.json',textBytes(JSON.stringify(scene))],
       ['manifest.json',textBytes(JSON.stringify(manifest))]
     ]);
@@ -1039,14 +1039,26 @@
   }
   function writeU16(a,o,v){a[o]=v&255;a[o+1]=(v>>>8)&255;}
   function writeU32(a,o,v){a[o]=v&255;a[o+1]=(v>>>8)&255;a[o+2]=(v>>>16)&255;a[o+3]=(v>>>24)&255;}
-  function buildStoredZip(files){
+  async function packSceneZipEntry(name,data){
+  // Only JSON benefits substantially; preserve existing media bytes.
+  if(!/\.json$/i.test(name)||data.length<128||typeof CompressionStream!=='function'||typeof DecompressionStream!=='function')return {method:0,packed:data};
+  try{
+    new DecompressionStream('deflate-raw');
+    const stream=new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    const packed=new Uint8Array(await new Response(stream).arrayBuffer());
+    if(packed.length<data.length)return {method:8,packed};
+  }catch(_){ /* Unsupported browser or compression failure: retain STORE. */ }
+  return {method:0,packed:data};
+}
+async function buildStoredZip(files){
     const locals=[],centrals=[];let offset=0;const now=dosDateTime(new Date());
     for(const [name0,data0] of files){
       const name=norm(name0),nameBytes=enc.encode(name),data=data0 instanceof Uint8Array?data0:new Uint8Array(data0),crc=crc32(data);
-      const local=new Uint8Array(30+nameBytes.length+data.length);
-      writeU32(local,0,0x04034b50);writeU16(local,4,20);writeU16(local,6,0x0800);writeU16(local,8,0);writeU16(local,10,now.time);writeU16(local,12,now.date);writeU32(local,14,crc);writeU32(local,18,data.length);writeU32(local,22,data.length);writeU16(local,26,nameBytes.length);writeU16(local,28,0);local.set(nameBytes,30);local.set(data,30+nameBytes.length);locals.push(local);
+      const {method,packed}=await packSceneZipEntry(name,data);
+      const local=new Uint8Array(30+nameBytes.length+packed.length);
+      writeU32(local,0,0x04034b50);writeU16(local,4,20);writeU16(local,6,0x0800);writeU16(local,8,method);writeU16(local,10,now.time);writeU16(local,12,now.date);writeU32(local,14,crc);writeU32(local,18,packed.length);writeU32(local,22,data.length);writeU16(local,26,nameBytes.length);writeU16(local,28,0);local.set(nameBytes,30);local.set(packed,30+nameBytes.length);locals.push(local);
       const central=new Uint8Array(46+nameBytes.length);
-      writeU32(central,0,0x02014b50);writeU16(central,4,20);writeU16(central,6,20);writeU16(central,8,0x0800);writeU16(central,10,0);writeU16(central,12,now.time);writeU16(central,14,now.date);writeU32(central,16,crc);writeU32(central,20,data.length);writeU32(central,24,data.length);writeU16(central,28,nameBytes.length);writeU16(central,30,0);writeU16(central,32,0);writeU16(central,34,0);writeU16(central,36,0);writeU32(central,38,0);writeU32(central,42,offset);central.set(nameBytes,46);centrals.push(central);
+      writeU32(central,0,0x02014b50);writeU16(central,4,20);writeU16(central,6,20);writeU16(central,8,0x0800);writeU16(central,10,method);writeU16(central,12,now.time);writeU16(central,14,now.date);writeU32(central,16,crc);writeU32(central,20,packed.length);writeU32(central,24,data.length);writeU16(central,28,nameBytes.length);writeU16(central,30,0);writeU16(central,32,0);writeU16(central,34,0);writeU16(central,36,0);writeU32(central,38,0);writeU32(central,42,offset);central.set(nameBytes,46);centrals.push(central);
       offset+=local.length;
     }
     const centralOffset=offset,centralSize=centrals.reduce((n,a)=>n+a.length,0),count=centrals.length;

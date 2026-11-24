@@ -4623,10 +4623,19 @@ return flowCommentCard;}
     }
   }
 
-  // Minimal standards-compliant ZIP writer using STORE (method 0).
-  // STORE is deliberate: browser-side implementation stays dependency-free,
-  // while images/audio are already compressed formats in most projects.
-  async function makeStoreZip(entries,onProgress=null){
+  // ZIP writer: DEFLATE JSON when supported; STORE media and fallback.
+  async function packSceneZipEntry(name,data){
+  // Only JSON benefits substantially; preserve existing media bytes.
+  if(!/\.json$/i.test(name)||data.length<128||typeof CompressionStream!=='function'||typeof DecompressionStream!=='function')return {method:0,packed:data};
+  try{
+    new DecompressionStream('deflate-raw');
+    const stream=new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    const packed=new Uint8Array(await new Response(stream).arrayBuffer());
+    if(packed.length<data.length)return {method:8,packed};
+  }catch(_){ /* Unsupported browser or compression failure: retain STORE. */ }
+  return {method:0,packed:data};
+}
+async function makeStoreZip(entries,onProgress=null){
     const locals=[];
     const centrals=[];
     let offset=0;
@@ -4635,21 +4644,22 @@ return flowCommentCard;}
       const nameBytes=ZIP_TEXT_ENCODER.encode(entry.name);
       const data=entry.bytes instanceof Uint8Array ? entry.bytes : new Uint8Array(entry.bytes);
       const crc=crc32(data);
+      const {method,packed}=await packSceneZipEntry(entry.name,data);
 
-      const local=new Uint8Array(30+nameBytes.length+data.length);
+      const local=new Uint8Array(30+nameBytes.length+packed.length);
       const lv=new DataView(local.buffer);
       zipU32(lv,0,0x04034b50);
       zipU16(lv,4,20);
       zipU16(lv,6,0x0800); // UTF-8 names
-      zipU16(lv,8,0);      // STORE
+      zipU16(lv,8,method);      // compression method
       zipU16(lv,10,0); zipU16(lv,12,0);
       zipU32(lv,14,crc);
-      zipU32(lv,18,data.length);
+      zipU32(lv,18,packed.length);
       zipU32(lv,22,data.length);
       zipU16(lv,26,nameBytes.length);
       zipU16(lv,28,0);
       local.set(nameBytes,30);
-      local.set(data,30+nameBytes.length);
+      local.set(packed,30+nameBytes.length);
       locals.push(local);
 
       const central=new Uint8Array(46+nameBytes.length);
@@ -4658,10 +4668,10 @@ return flowCommentCard;}
       zipU16(cv,4,20);
       zipU16(cv,6,20);
       zipU16(cv,8,0x0800);
-      zipU16(cv,10,0);
+      zipU16(cv,10,method);
       zipU16(cv,12,0); zipU16(cv,14,0);
       zipU32(cv,16,crc);
-      zipU32(cv,20,data.length);
+      zipU32(cv,20,packed.length);
       zipU32(cv,24,data.length);
       zipU16(cv,28,nameBytes.length);
       zipU16(cv,30,0); zipU16(cv,32,0);
