@@ -205,30 +205,60 @@
   window.AhakoDraw = {painter,bindShellDrawing};
   const P=window.ScenePlayerCore?.prototype;
   if (!P) return;
+  // Ink belongs to the Scene article, so its transform, age and exit follow text.
+  function attachInk(core,node,layer,active,history=false){
+    const wrap=document.createElement('span');wrap.className='sp-ink-sheet';
+    const canvas=document.createElement('canvas');canvas.setAttribute('aria-label','手書きレイヤー');
+    const width=number(layer.width,70,1,600),height=number(layer.height,100,10,300)/100;
+    const stageWidth=core.els.stage.clientWidth||W;
+    Object.assign(wrap.style,{display:'block',position:'relative',width:'100%',height:history?'auto':Math.max(1,stageWidth*width/100*.6*height)+'px',aspectRatio:history?'5 / 3':'auto',pointerEvents:'none'});
+    Object.assign(canvas.style,{display:'block',position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:history?width+'%':stageWidth*width/100+'px',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+height+')',opacity:String(number(layer.opacity,1,0,1))});
+    wrap.append(canvas);
+    if(layer.order==='behind')node.prepend(wrap);else node.append(wrap);
+    const entry={canvas,layer,active,paint:null};
+    wrap._inkEntry=entry;
+    return entry;
+  }
+  function paintEntry(entry,complete){
+    if(!entry.paint)entry.paint=painter(entry.canvas,entry.layer);
+    if(complete)entry.paint.render(Infinity);
+    return entry;
+  }
+  const sceneNode=P._sceneNode;
+  P._sceneNode=function(scene,active,age){
+    const node=sceneNode.apply(this,arguments),layer=scene.presentation?.draw;
+    if(layer?.strokes?.length)attachInk(this,node,layer,active&&!this._simultaneousHistoryBuilding);
+    return node;
+  };
+  const measure=P._measureSceneGeometry;
+  P._measureSceneGeometry=function(node,stageRect){
+    const result=measure.apply(this,arguments),sheet=node.querySelector(':scope > .sp-ink-sheet');
+    if(!sheet)return result;
+    const rect=this._logicalRect(sheet.getBoundingClientRect()),base=this._logicalRect(node.getBoundingClientRect());
+    const canvas=sheet.querySelector('canvas'),ink=this._logicalRect(canvas.getBoundingClientRect());
+    result.inkLeft=Math.min(result.inkLeft,ink.left-base.left);result.inkRight=Math.max(result.inkRight,ink.right-base.left);
+    result.inkTop=Math.min(result.inkTop,rect.top-base.top,ink.top-base.top);result.inkBottom=Math.max(result.inkBottom,rect.bottom-base.top,ink.bottom-base.top);
+    result.inkCenterX=(result.inkLeft+result.inkRight)/2;result.inkCenterY=(result.inkTop+result.inkBottom)/2;
+    if(this._simultaneousHistoryBuilding||node.closest('.sp-history-item'))paintEntry(sheet._inkEntry,true);
+    return result;
+  };
   function clear(core) {
     const state=core._ink;
     if (!state) return;
     cancelAnimationFrame(state.frame);
     core.host.removeEventListener('sceneplayer:advanceintent',state.guard,true);
-    for(const item of state.items)item.canvas.remove();
+    for(const item of state.items) item.paint.render(Infinity);
     core._ink=null;
   }
   function mount(core) {
-    const group=core._simultaneousBounds?.(core.index) || {start:core.index,end:core.index};
     const items=[];
-    for(let i=group.start;i<=group.end;i++){
-      const layer=core.document.scenes[i]?.presentation?.draw;
-      if (!layer?.strokes?.length) continue;
-      const canvas=document.createElement('canvas');
-      canvas.setAttribute('aria-label','手書きレイヤー');
-      const width=number(layer.width,70,1,600);
-      Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',
-        top:number(layer.y,50,0,100)+'%',width:width+'%',height:'auto',aspectRatio:'5 / 3',
-        transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',
-        opacity:String(number(layer.opacity,1,0,1))});
-      const scenes=core.els.scenes;
-      if(layer.order==='behind') scenes.before(canvas); else scenes.after(canvas);
-      items.push({canvas,paint:painter(canvas,layer)});
+    for(const node of core.els.scenes.querySelectorAll('.sp-scene')){
+      const entry=node.querySelector(':scope > .sp-ink-sheet')?._inkEntry;
+      if(!entry)continue;
+      const active=node.classList.contains('is-active');
+      if(!active){paintEntry(entry,true);continue;}
+      if(entry.paint)continue;
+      items.push(paintEntry(entry,false));
     }
     if(!items.length)return;
     const state=core._ink={items,busy:true,frame:0};
@@ -318,6 +348,17 @@
   }
   const begin=P._beginFromCover;
   P._beginFromCover=function(){const r=begin.apply(this,arguments);clearPage(this,'cover');return r;};
+  const renderHistory=P._renderHistory;
+  P._renderHistory=function(){
+    const result=renderHistory.apply(this,arguments);
+    for(const item of this.els.historyList.querySelectorAll('.sp-history-item')){
+      const layer=this.document.scenes[Number(item.dataset.index)]?.presentation?.draw;
+      const body=item.querySelector('.sp-history-body');
+      if(!body||!layer?.strokes?.length||body.querySelector('.sp-ink-sheet'))continue;
+      paintEntry(attachInk(this,body,layer,false,true),true);
+    }
+    return result;
+  };
   const history=P.openHistory, close=P.closeHistory;
   P.openHistory=function(){const r=history.apply(this,arguments);if(this.historyOpen)clear(this);return r;};
   P.closeHistory=function(options){const open=this.historyOpen;const r=close.apply(this,arguments);
