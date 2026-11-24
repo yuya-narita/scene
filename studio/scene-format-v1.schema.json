@@ -1926,6 +1926,7 @@
     "cover": {
       "type": "object",
       "properties": {
+        "draw": {"$ref": "#/$defs/presentation/properties/draw"},
         "startMode": {
           "enum": [
             "scene",
@@ -2093,6 +2094,7 @@
     "ending": {
       "type": "object",
       "properties": {
+        "draw": {"$ref": "#/$defs/presentation/properties/draw"},
         "label": {
           "type": "string",
           "description": "Author-entered LF line breaks are significant and must be preserved by Players."

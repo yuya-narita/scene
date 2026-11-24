@@ -259,10 +259,42 @@
   };
   const endingSound=P._playEndingAudio;
   P._playEndingAudio=function(){if(!this._ink?.busy)return endingSound.apply(this,arguments);};
+  // Shell drawings have their own lifecycle: never block Scene navigation or AUTO.
+  function clearPage(core,key){
+    const state=core._pageInk?.[key];if(!state)return;
+    cancelAnimationFrame(state.frame);state.canvas.remove();delete core._pageInk[key];
+  }
+  P.refreshPageDrawing=function(key,replay=false){
+    const page=this.els?.[key],layer=this.document?.[key]?.draw;
+    if(!page||page.hidden||!layer?.strokes?.length){clearPage(this,key);return;}
+    this._pageInk ||= {};
+    const signature=JSON.stringify(layer),old=this._pageInk[key];
+    if(!replay&&old?.signature===signature&&old.canvas.isConnected)return;
+    clearPage(this,key);
+    const canvas=document.createElement('canvas');canvas.setAttribute('aria-label','手書きレイヤー');
+    Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,200)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
+    const anchor=page.querySelector(key==='cover'?'.sp-cover-copy':'.sp-ending-copy');
+    if(layer.order==='behind'&&anchor)anchor.before(canvas);else page.append(canvas);
+    const paint=painter(canvas,layer),start=performance.now();
+    const state=this._pageInk[key]={canvas,signature,frame:0};
+    const frame=now=>{if(this._pageInk?.[key]!==state)return;if(page.hidden){clearPage(this,key);return;}if(!paint.render(now-start))state.frame=requestAnimationFrame(frame);};
+    frame(start);
+  };
+  const chrome=P.refreshDocumentChrome;
+  P.refreshDocumentChrome=function(){const r=chrome.apply(this,arguments);for(const key of ['cover','ending'])this.refreshPageDrawing(key);return r;};
   for(const name of ['finish','destroy','showCover']){
     const original=P[name];
-    P[name]=function(){clear(this);const result=original.apply(this,arguments);if(name==='showCover')clear(this);return result;};
+    P[name]=function(){
+      if(name==='finish'&&this.ended)return original.apply(this,arguments);
+      clear(this);for(const key of ['cover','ending'])clearPage(this,key);
+      const result=original.apply(this,arguments);
+      if(name==='showCover'){clear(this);this.refreshPageDrawing('cover',true);}
+      if(name==='finish')this.refreshPageDrawing('ending',true);
+      return result;
+    };
   }
+  const begin=P._beginFromCover;
+  P._beginFromCover=function(){const r=begin.apply(this,arguments);clearPage(this,'cover');return r;};
   const history=P.openHistory, close=P.closeHistory;
   P.openHistory=function(){const r=history.apply(this,arguments);if(this.historyOpen)clear(this);return r;};
   P.closeHistory=function(options){const open=this.historyOpen;const r=close.apply(this,arguments);

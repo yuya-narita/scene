@@ -2738,6 +2738,7 @@
       label:String(endingLabelInput?.value||'').trim(),
       fontFamily:endingFontFamily,
       ...(Object.keys(preservedStyle).length?{style:preservedStyle}:{}),
+      ...(workingDocument?.ending?.draw?{draw:clone(workingDocument.ending.draw)}:{}),
       ...(workingDocument?.ending?.image?.src?{image:clone(workingDocument.ending.image)}:{}),
       ...(endingAudioFromFields().length?{audio:endingAudioFromFields()}:{}),
       coverButton:{kicker:'COVER',label:t('ending.cover')},
@@ -3310,6 +3311,7 @@
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
         fontFamily:coverFontFamily,
+        ...(workingDocument?.cover?.draw?{draw:clone(workingDocument.cover.draw)}:{}),
         ...(workingDocument?.cover?.styles && Object.keys(workingDocument.cover.styles).length
           ? {styles:clone(workingDocument.cover.styles)}
           : {}),
@@ -3772,9 +3774,10 @@
     applyRelayPolicyToDocument(workingDocument);
     applyOwnCopyPolicyToDocument(workingDocument);
     applyCommerceDraftToDocument(workingDocument);
+    const preservedCoverDraw=workingDocument.cover?.draw;
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
-    workingDocument.cover={...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,startMode:coverStartMode==='comic'?'comic':'scene',startTrigger:coverStartTrigger,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
+    workingDocument.cover={...(preservedCoverDraw?{draw:preservedCoverDraw}:{}),...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,startMode:coverStartMode==='comic'?'comic':'scene',startTrigger:coverStartTrigger,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -14968,6 +14971,29 @@ function openDesktopTextDetail(){
     shell.append(rail,stage);desktopLivePanelBody.appendChild(shell);activate(active);
   }
 
+  function buildPageDrawingEditor(key){
+    const card=desktopCard(u('手書きレイヤー','Drawing layer'));
+    const layer=workingDocument?.[key]?.draw;
+    const ops=document.createElement('div');ops.className='desktop-live-scene-ops';
+    const commit=next=>{
+      captureUndo(u('手書きレイヤーの変更を元に戻せます','Undo drawing change'));
+      workingDocument[key]||={};
+      if(next?.strokes?.length)workingDocument[key].draw=clone(next);else delete workingDocument[key].draw;
+      refreshLivePlayerDocumentChrome();player?.refreshPageDrawing?.(key,true);
+      syncEasyPublishButton();scheduleDraftSave(0);renderDesktopLivePanel();
+    };
+    ops.append(desktopAction(layer?u('編集','Edit'):u('新規作成','Create'),()=>window.editAhakoDrawing(layer,commit)));
+    if(layer){ops.append(desktopAction(u('再生確認','Replay'),()=>player?.refreshPageDrawing?.(key,true)),desktopAction(u('削除','Remove'),()=>{if(confirm(u('手書きレイヤーを削除しますか？','Remove drawing?')))commit(null);}));}
+    card.append(ops);
+    const sources=(workingDocument.scenes||[]).map((scene,i)=>({scene,i})).filter(x=>x.scene.presentation?.draw?.strokes?.length);
+    if(sources.length){
+      const select=document.createElement('select');select.setAttribute('aria-label',u('複製元Scene','Source Scene'));
+      for(const {scene,i} of sources){const opt=document.createElement('option');opt.value=String(i);opt.textContent=`Scene ${i+1} (${scene.presentation.draw.strokes.length})`;select.append(opt);}
+      card.append(select,desktopAction(u('Sceneから複製','Copy from Scene'),()=>{const source=workingDocument.scenes[Number(select.value)]?.presentation?.draw;if(source&&(!layer||confirm(u('現在の手書きレイヤーを置き換えますか？','Replace current drawing?'))))commit(source);}));
+    }
+    return card;
+  }
+
   function renderDesktopCoverPanel(){
     desktopSceneLabel.textContent=t('cover.label');desktopPrevScene.disabled=true;desktopNextScene.disabled=false;
     if(desktopV2Chrome)desktopV2Chrome.hidden=false;
@@ -15031,7 +15057,7 @@ function openDesktopTextDetail(){
     const pageKicker=document.createElement('small');pageKicker.textContent='COVER';
     const pageTitle=document.createElement('strong');pageTitle.textContent=u('表紙を編集','Edit cover');
     pageHead.append(pageKicker,pageTitle);
-    shell.append(pageHead,textCard,styleCard,imageCard,startCard);
+    shell.append(pageHead,textCard,styleCard,imageCard,buildPageDrawingEditor('cover'),startCard);
     desktopLivePanelBody.appendChild(shell);
   }
 
@@ -15110,7 +15136,7 @@ function openDesktopTextDetail(){
     const pageKicker=document.createElement('small');pageKicker.textContent='ENDING';
     const pageTitle=document.createElement('strong');pageTitle.textContent=u('読了ページを編集','Edit ending page');
     pageHead.append(pageKicker,pageTitle);
-    shell.append(pageHead,textCard,buildEndingImageEditor(),styleCard,seCard,linksCard);
+    shell.append(pageHead,textCard,buildEndingImageEditor(),buildPageDrawingEditor('ending'),styleCard,seCard,linksCard);
     desktopLivePanelBody.appendChild(shell);
   }
 
