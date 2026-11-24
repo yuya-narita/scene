@@ -26,3 +26,9 @@ body #publicEnding.is-preview-lock #publicEndingActions,body #publicEnding.is-pr
 @media(orientation:landscape) and (max-height:600px){body #publicEnding .public-ending-inner{gap:10px!important;padding-top:max(62px,calc(env(safe-area-inset-top) + 48px))!important}body #publicEnding #publicEndingLabel{min-height:70px!important}body #publicEnding .public-resonance-result strong{font-size:30px!important}}
 body #publicEnding .public-ending-inner:not(:has(#publicEndingLabel:not([hidden])))::before{content:"";order:-1;flex:1 0 40px}
 body #publicEnding .public-ending-inner:not(:has(#publicEndingLabel:not([hidden])))::after{content:"";order:6;flex:1 0 20px}
+
+/* Preserve the normal ending's central slot even when the author leaves it blank.
+   Preview-lock has its own layout and must not acquire an empty slot. */
+body #publicEnding:not(.is-preview-lock) #publicEndingLabel[hidden]{display:grid!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+body #publicEnding:not(.is-preview-lock) .public-ending-inner:not(:has(#publicEndingLabel:not([hidden])))::before,
+body #publicEnding:not(.is-preview-lock) .public-ending-inner:not(:has(#publicEndingLabel:not([hidden])))::after{content:none}
