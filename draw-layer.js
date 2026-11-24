@@ -179,7 +179,30 @@
     }
     return {render, duration:delay+duration};
   }
-  window.AhakoDraw = {painter};
+  // Public/Local shells are separate from Core's internal cover and ending.
+  function bindShellDrawing(page, getLayer, key){
+    if(!page)return;
+    let state=null;
+    function clear(){if(state){cancelAnimationFrame(state.frame);state.canvas.remove();state=null;}}
+    function sync(){
+      const layer=getLayer();
+      if(page.hidden||page.classList.contains('is-shop-entry')||!layer?.strokes?.length){clear();return;}
+      const signature=JSON.stringify(layer);
+      if(state?.signature===signature&&state.canvas.isConnected)return;
+      clear();
+      const canvas=document.createElement('canvas');canvas.setAttribute('aria-label','手書きレイヤー');
+      Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,200)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
+      const anchor=page.querySelector(key==='cover'?'.public-intro-frame':'.public-ending-inner');
+      if(layer.order==='behind'&&anchor){anchor.style.position='relative';anchor.style.zIndex='2';anchor.before(canvas);}else page.append(canvas);
+      const paint=painter(canvas,layer),start=performance.now();
+      const current=state={canvas,signature,frame:0};
+      function frame(now){if(state!==current)return;if(page.hidden){clear();return;}if(!paint.render(now-start))current.frame=requestAnimationFrame(frame);}
+      frame(start);
+    }
+    const observer=new MutationObserver(sync);observer.observe(page,{attributes:true,attributeFilter:['hidden','class']});
+    sync();return sync;
+  }
+  window.AhakoDraw = {painter,bindShellDrawing};
   const P=window.ScenePlayerCore?.prototype;
   if (!P) return;
   function clear(core) {

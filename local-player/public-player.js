@@ -555,7 +555,11 @@
     }
   }
 
+  let syncCoverInk, syncEndingInk;
   function applyDocumentMeta(doc) {
+    syncCoverInk ||= window.AhakoDraw?.bindShellDrawing(intro,()=>documentData?.cover?.draw,'cover');
+    syncEndingInk ||= window.AhakoDraw?.bindShellDrawing(ending,()=>documentData?.ending?.draw,'ending');
+    syncCoverInk?.();syncEndingInk?.();
     intro.dataset.startTrigger=['center','bottom','tap'].includes(doc?.cover?.startTrigger)?doc.cover.startTrigger:'bottom';
     const cleanTitle=String(doc.title||'').trim()==='Untitled'?'':String(doc.title||'');
     document.title = cleanTitle || 'Scene';

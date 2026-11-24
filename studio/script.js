@@ -14971,6 +14971,24 @@ function openDesktopTextDetail(){
     shell.append(rail,stage);desktopLivePanelBody.appendChild(shell);activate(active);
   }
 
+  function appendDrawingCopyControls(card,target,layer,commit){
+    const sources=[];
+    for(const key of ['cover','ending']){
+      const draw=workingDocument?.[key]?.draw;
+      if(target!==key&&draw?.strokes?.length)sources.push({draw,label:key==='cover'?u('表紙','Cover'):u('読了ページ','Ending')});
+    }
+    (workingDocument.scenes||[]).forEach((scene,i)=>{const draw=scene.presentation?.draw;if(scene!==target&&draw?.strokes?.length)sources.push({draw,label:`Scene ${i+1}`});});
+    if(!sources.length)return;
+    const select=document.createElement('select');select.setAttribute('aria-label',u('複製元','Drawing source'));
+    sources.forEach(({draw,label},i)=>{const opt=document.createElement('option');opt.value=String(i);opt.textContent=`${label} (${draw.strokes.length})`;select.append(opt);});
+    card.append(select,desktopAction(u('手書きレイヤーを複製','Copy drawing'),()=>{const source=sources[Number(select.value)]?.draw;if(source&&(!layer||confirm(u('現在の手書きレイヤーを置き換えますか？','Replace current drawing?'))))commit(clone(source));}));
+  }
+  function copyDrawingToScene(scene,layer){
+    if(!workingDocument?.scenes.includes(scene))return;
+    captureUndo(u('手書きレイヤーの変更を元に戻せます','Undo drawing change'));
+    ensurePresentation(scene).draw=clone(layer);scheduleDraftSave(0);
+    if(player)refreshLivePlayer({preserveSheet:true});syncEasyPublishButton();renderDesktopLivePanel();
+  }
   function buildPageDrawingEditor(key){
     const card=desktopCard(u('手書きレイヤー','Drawing layer'));
     const layer=workingDocument?.[key]?.draw;
@@ -14985,12 +15003,7 @@ function openDesktopTextDetail(){
     ops.append(desktopAction(layer?u('編集','Edit'):u('新規作成','Create'),()=>window.editAhakoDrawing(layer,commit)));
     if(layer){ops.append(desktopAction(u('再生確認','Replay'),()=>player?.refreshPageDrawing?.(key,true)),desktopAction(u('削除','Remove'),()=>{if(confirm(u('手書きレイヤーを削除しますか？','Remove drawing?')))commit(null);}));}
     card.append(ops);
-    const sources=(workingDocument.scenes||[]).map((scene,i)=>({scene,i})).filter(x=>x.scene.presentation?.draw?.strokes?.length);
-    if(sources.length){
-      const select=document.createElement('select');select.setAttribute('aria-label',u('複製元Scene','Source Scene'));
-      for(const {scene,i} of sources){const opt=document.createElement('option');opt.value=String(i);opt.textContent=`Scene ${i+1} (${scene.presentation.draw.strokes.length})`;select.append(opt);}
-      card.append(select,desktopAction(u('Sceneから複製','Copy from Scene'),()=>{const source=workingDocument.scenes[Number(select.value)]?.presentation?.draw;if(source&&(!layer||confirm(u('現在の手書きレイヤーを置き換えますか？','Replace current drawing?'))))commit(source);}));
-    }
+    appendDrawingCopyControls(card,key,layer,commit);
     return card;
   }
 
@@ -15237,6 +15250,7 @@ function openDesktopTextDetail(){
     const bodyCard=desktopCard(u('本文','Text'),'desktop-live-body-card');
     bodyCard.prepend(makeAutoRubyBodyControl(scene));
     bodyCard.append(desktopAction(u('手書きレイヤー','Drawing layer'),()=>openDrawing(scene)));
+    appendDrawingCopyControls(bodyCard,scene,scene.presentation?.draw,layer=>copyDrawingToScene(scene,layer));
     // Scene type is part of the manuscript's meaning, so keep it beside the
     // body instead of hiding it in the typography inspector. The former quick
     // Text card is not mounted in the current tab layout, which made these
