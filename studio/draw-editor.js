@@ -17,6 +17,7 @@
       <div class="draw-row"><button data-action="undo">一筆戻す</button><button data-action="redo">やり直す</button>
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
+      <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
       <label data-nib>筆先<select name="tip"><option value="pointed">穂先（細入り）</option><option value="flat">平筆（斜め）</option><option value="round">丸筆</option></select></label>
       <label>色<input name="color" type="color"></label><label>太さ<input name="width" type="number" min="1" max="80"></label>
@@ -46,6 +47,7 @@
     field('timing').value=[0,3,5,10].includes(layer.seconds)?layer.seconds:'custom';
     field('seconds').value=layer.seconds||5;
     field('sceneZoom').value=[1,1.5,2,3].includes(layer.width/baseWidth)?String(layer.width/baseWidth):'custom';
+    let traceWorker=null, traceBusy=false;
     let active=null,wallEnd=null,preview=0,panX=0,panY=0,pan=null,redo=[], count=0;
     const endTime=()=>layer.strokes.at(-1)?.points.at(-1)?.[2]||0;
     function redrawInk(target=canvas, strokes=layer.strokes){
@@ -72,7 +74,7 @@
     }
     dialog.addEventListener('change',e=>{
       const input=e.target,n=input.name;
-      if(!n)return;
+      if(!n||n.startsWith("trace"))return;
       if(input.type==='number'&&(!input.value||!input.validity.valid)){input.reportValidity();return;}
       if(n==='sceneZoom'){
         if(input.value==='custom'){find('details:last-child').open=true;field('pos-width').focus();return;}
@@ -100,7 +102,7 @@
       pan=null;
     }
     canvas.onpointerdown=e=>{
-      if(active||pan||e.button!==0)return;
+      if(traceBusy||active||pan||e.button!==0)return;
       cancelAnimationFrame(preview);e.preventDefault();canvas.setPointerCapture(e.pointerId);
       if(field('tool').value==='pan'){pan={id:e.pointerId,x:e.clientX-panX,y:e.clientY-panY};return;}
       if(!layer.strokes.length)wallEnd=null;
@@ -149,10 +151,33 @@
     }
     map.onpointerdown=e=>{map.setPointerCapture(e.pointerId);place(e);};
     map.onpointermove=e=>{if(map.hasPointerCapture(e.pointerId))place(e);};
+    async function traceImage(){
+      const file=field('traceFile').files[0], threshold=Number(field('traceThreshold').value), out=find('output');
+      if(!file){out.textContent='画像を選択してください。';return;}
+      if(!field('traceThreshold').reportValidity())return;
+      if(layer.strokes.length&&!confirm('現在の筆跡を生成結果で置き換えますか？'))return;
+      traceBusy=true;find('[data-action="trace"]').disabled=true;out.textContent='画像を解析中…';
+      let url;
+      try{
+        url=URL.createObjectURL(file);const img=new Image();img.src=url;await img.decode();
+        if(!dialog.open)return;
+        const scale=Math.min(1,800/Math.max(img.naturalWidth,img.naturalHeight));
+        const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));
+        const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);const rgba=ctx.getImageData(0,0,c.width,c.height).data;
+        traceWorker=new Worker('./auto-trace-worker.js?v=1');
+        const result=await new Promise((resolve,reject)=>{traceWorker.onmessage=e=>resolve(e.data);traceWorker.onerror=e=>reject(new Error(e.message));traceWorker.postMessage({rgba,w:c.width,h:c.height,threshold},[rgba.buffer]);});
+        if(!dialog.open)return;if(result.error)throw new Error(result.error);if(!result.strokes.length)throw new Error('線が見つかりません。検出感度を調整してください。');
+        layer.strokes=result.strokes;redo=[];wallEnd=null;layer.smooth='off';field('smooth').value='off';panX=panY=0;field('zoom').value='1';view();redraw();
+        out.textContent=`生成完了：${result.strokes.length}筆・${result.count}点`+(result.total>result.strokes.length?'（上限により一部省略）':'');
+      }catch(e){out.textContent='変換できませんでした：'+e.message;}
+      finally{if(url)URL.revokeObjectURL(url);traceWorker?.terminate();traceWorker=null;traceBusy=false;find('[data-action="trace"]').disabled=false;}
+    }
     dialog.onclick=e=>{
       const action=e.target.closest('button')?.dataset.action;
       if(!action)return;
       if(action==='cancel'){dialog.close();return;}
+      if(traceBusy)return;
+      if(action==='trace'){traceImage();return;}
       if(action==='save'){
         for(const i of dialog.querySelectorAll('input[type=number]:enabled'))if(!i.value||!i.reportValidity())return;
         layer.brush={...brush};commit(layer.strokes.length?layer:null);dialog.close();return;
@@ -168,7 +193,7 @@
         preview=requestAnimationFrame(frame);
       }
     };
-    dialog.onclose=()=>{cancelAnimationFrame(paintFrame);cancelAnimationFrame(preview);dialog.remove();};
+    dialog.onclose=()=>{traceWorker?.terminate();cancelAnimationFrame(paintFrame);cancelAnimationFrame(preview);dialog.remove();};
     dialog.onkeydown=e=>{if(e.key!=='Escape')e.stopPropagation();};
     document.body.append(dialog);dialog.showModal();view();redraw();
   };
