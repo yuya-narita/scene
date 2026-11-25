@@ -257,7 +257,7 @@
   function bindShellDrawing(page, getLayer, key){
     if(!page)return;
     let state=null;
-    function clear(){if(state){cancelAnimationFrame(state.frame);state.canvas.remove();state=null;}}
+    function clear(){if(state){cancelAnimationFrame(state.frame);state.reader?.dispose();state.canvas.remove();state=null;}}
     function sync(){
       const layer=getLayer();
       if(page.hidden||page.classList.contains('is-shop-entry')||!hasInk(layer)){clear();return;}
@@ -268,8 +268,9 @@
       Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,600)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
       const anchor=page.querySelector(key==='cover'?'.public-intro-frame':'.public-ending-inner');
       if(layer.order==='behind'&&anchor){anchor.style.position='relative';anchor.style.zIndex='2';anchor.before(canvas);}else page.append(canvas);
-      const paint=painter(canvas,layer),start=performance.now();
       const current=state={canvas,signature,frame:0};
+      if(readerMode(layer)){current.reader=readerScratch(canvas,layer);return;}
+      const paint=painter(canvas,layer),start=performance.now();
       function frame(now){if(state!==current)return;if(page.hidden){clear();return;}if(!paint.render(now-start))current.frame=requestAnimationFrame(frame);}
       frame(start);
     }
@@ -392,7 +393,7 @@
   // Shell drawings have their own lifecycle: never block Scene navigation or AUTO.
   function clearPage(core,key){
     const state=core._pageInk?.[key];if(!state)return;
-    cancelAnimationFrame(state.frame);state.canvas.remove();delete core._pageInk[key];
+    cancelAnimationFrame(state.frame);state.reader?.dispose();state.canvas.remove();delete core._pageInk[key];
   }
   P.refreshPageDrawing=function(key,replay=false){
     const page=this.els?.[key],layer=this.document?.[key]?.draw;
@@ -405,8 +406,9 @@
     Object.assign(canvas.style,{position:'absolute',pointerEvents:'none',left:number(layer.x,50,0,100)+'%',top:number(layer.y,50,0,100)+'%',width:number(layer.width,70,1,600)+'%',height:'auto',aspectRatio:'5 / 3',transform:'translate(-50%, -50%) rotate('+number(layer.angle,0,-180,180)+'deg) scaleY('+number(layer.height,100,10,300)/100+')',opacity:String(number(layer.opacity,1,0,1)),zIndex:layer.order==='behind'?'1':'4'});
     const anchor=page.querySelector(key==='cover'?'.sp-cover-copy':'.sp-ending-copy');
     if(layer.order==='behind'&&anchor)anchor.before(canvas);else page.append(canvas);
-    const paint=painter(canvas,layer),start=performance.now();
     const state=this._pageInk[key]={canvas,signature,frame:0};
+    if(readerMode(layer)){state.reader=readerScratch(canvas,layer);return;}
+    const paint=painter(canvas,layer),start=performance.now();
     const frame=now=>{if(this._pageInk?.[key]!==state)return;if(page.hidden){clearPage(this,key);return;}if(!paint.render(now-start))state.frame=requestAnimationFrame(frame);};
     frame(start);
   };
