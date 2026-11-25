@@ -6655,8 +6655,27 @@ async function makeStoreZip(entries,onProgress=null){
     if(pos.length!==count)throw Error('Sample count mismatch');
     const ss=children(st).find(b=>b.t==='stss'), keys=ss?new Set(Array.from({length:U(ss.p+4)},(_,i)=>U(ss.p+8+i*4))):null;
     let clock=0;const pts=durations.map((n,i)=>{const t=clock+offsets[i];clock+=n;return t;});const origin=Math.min(...pts), times=pts.map(t=>Math.round((t-origin)*1e6/scale)), lens=durations.map(t=>Math.round(t*1e6/scale));
-    const end=Math.max(...times.map((t,i)=>t+lens[i]));if(Math.abs(end/1e6-meta.duration)>.06)throw Error('MP4 edit/timing unsupported; master retained');
-    const dc={codec,description:desc}, ec={codec:'vp09.00.10.08',width:meta.width,height:meta.height,bitrate:Math.max(100000,Math.min(12000000,Math.round(blob.size*8/meta.duration*factor))),framerate:count/meta.duration,latencyMode:'quality'};
+    const videoEnd=Math.max(...times.map((t,i)=>t+lens[i]));
+    // Validate simple rate-1 edits against the actual presentation timeline.
+    const mv=get(moov,'mvhd'), movieScale=U(mv.p+(a[mv.p]===1?20:12));
+    function simpleEdit(track,trackScale,first,span){
+      const ed=children(track).find(b=>b.t==='edts');if(!ed)return;
+      const list=get(ed,'elst'), v=a[list.p], p=list.p+8;
+      if(!movieScale||!trackScale||v>1||U(list.p+4)!==1)throw Error('Complex MP4 edit unsupported; master retained');
+      const dur=v?Number(d.getBigUint64(p)):U(p), start=v?Number(d.getBigInt64(p+8)):S(p+4), rate=p+(v?16:8);
+      if(H(rate)!==1||H(rate+2)!==0||Math.abs((start-first)/trackScale)>.002||Math.abs(dur/movieScale-span)>.003)throw Error('MP4 edit requires trimming or offset; master retained');
+    }
+    simpleEdit(tr,scale,origin,videoEnd/1e6);
+    let end=videoEnd;
+    if(audioTracks.length){
+      const am=get(get(audioTracks[0],'mdia'),'mdhd'), v=a[am.p], as=U(am.p+(v===1?20:12)), ad=v===1?Number(d.getBigUint64(am.p+24)):U(am.p+16);
+      if(!as||!ad)throw Error('Invalid audio timeline');
+      const audioSpan=ad/as;
+      simpleEdit(audioTracks[0],as,0,audioSpan);
+      if(Math.abs(Math.max(videoEnd/1e6,audioSpan)-meta.duration)>.06||Math.abs(audioSpan-videoEnd/1e6)>.5)throw Error('MP4 track timing unsupported; master retained');
+      end=Math.max(videoEnd,Math.round(audioSpan*1e6));
+    }else if(Math.abs(videoEnd/1e6-meta.duration)>.06)throw Error('MP4 edit/timing unsupported; master retained');
+    const dc={codec,description:desc}, ec={codec:'vp09.00.10.08',width:meta.width,height:meta.height,bitrate:Math.max(100000,Math.min(12000000,Math.round(blob.size*8/meta.duration*factor))),framerate:count/(videoEnd/1e6),latencyMode:'quality'};
     if(!(await VideoDecoder.isConfigSupported(dc)).supported||!(await VideoEncoder.isConfigSupported(ec)).supported)throw Error('AVC decoder or VP9 encoder unavailable');
     // Bounded sampled luma quality check, aligned by original presentation timestamp.
     const sampleTimes=new Set([...times].sort((a,b)=>a-b).filter((_,i)=>i%Math.max(1,Math.floor(count/(strict?24:12)))===0||i===count-1));
@@ -6688,7 +6707,7 @@ async function makeStoreZip(entries,onProgress=null){
       const ac=new AudioContext({sampleRate:48000});let pcm;
       try{pcm=await ac.decodeAudioData(a.buffer.slice(0));}finally{await ac.close();}check();
       const channels=pcm.numberOfChannels, rate=48000, length=pcm.length;
-      if(channels<1||channels>2||pcm.sampleRate!==rate||length*channels*4>64*1024*1024||Math.abs(length/rate-meta.duration)>.06)throw Error('Unsupported audio layout or duration; master retained');
+      if(channels<1||channels>2||pcm.sampleRate!==rate||length*channels*4>64*1024*1024||Math.abs(length/rate-end/1e6)>.06)throw Error('Unsupported audio layout or duration; master retained');
       const config={codec:'opus',sampleRate:rate,numberOfChannels:channels,bitrate:channels===1?64000:96000,opus:{frameDuration:20000}};
       if(!(await AudioEncoder.isConfigSupported(config)).supported)throw Error('Opus encoder unavailable');
       let head,err;const ap=[];const ae=new AudioEncoder({output:(c,m)=>{if(m?.decoderConfig?.description){const v=m.decoderConfig.description;head=new Uint8Array(v.buffer||v,v.byteOffset||0,v.byteLength).slice();}const b=new Uint8Array(c.byteLength);c.copyTo(b);ap.push({t:c.timestamp,d:c.duration,b,key:true,audio:true});},error:e=>err=e});
@@ -6712,8 +6731,9 @@ async function makeStoreZip(entries,onProgress=null){
     const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),el(0xe0,ui(0xb0,meta.width),ui(0xba,meta.height))),...(audio?[el(0xae,ui(0xd7,2),ui(0x73c5,2),ui(0x83,2),txt(0x86,'A_OPUS'),el(0x63a2,audio.head),ui(0x56aa,audio.delay),ui(0x56bb,80000000),el(0xe1,el(0xb5,hz),ui(0x9f,audio.channels)))]:[]));
     const clusters=[], cues=[];let base=0, blocks=[], offset=info.length+track.length;
     function finish(){if(!blocks.length)return;const c=el(0x1f43b675,ui(0xe7,base),...blocks);clusters.push(c);offset+=c.length;blocks=[];}
+    const lastVideoTime=Math.max(...times);
     const muxPackets=audio?[...packets,...audio.packets].sort((a,b)=>a.t-b.t||Number(!!a.audio)-Number(!!b.audio)):packets;
-    for(const p of muxPackets){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;if(!p.audio&&p.key)cues.push(el(0xbb,ui(0xb3,t),el(0xb7,ui(0xf7,1),ui(0xf1,offset))));}const rel=t-base;const block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();
+    for(const p of muxPackets){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;if(!p.audio&&p.key)cues.push(el(0xbb,ui(0xb3,t),el(0xb7,ui(0xf7,1),ui(0xf1,offset))));}const rel=t-base;const block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(!p.audio&&p.t===lastVideoTime&&end>videoEnd){block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),ui(0x9b,Math.round((end-p.t)/1000)),...(p.key?[]:[el(0xfb,bytes(0xff))])));}else if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();
     const parts=[info,track,...clusters,el(0x1c53bb6b,...cues)];const result=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
     if(audio){const ac=new AudioContext({sampleRate:48000});let decodedAudio;try{decodedAudio=await ac.decodeAudioData(await result.arrayBuffer());}finally{await ac.close();}check();if(decodedAudio.numberOfChannels!==audio.channels||Math.abs(decodedAudio.length-audio.length)>960)throw Error('Output audio duration/channel mismatch');let power=0,error=0;for(let c=0;c<audio.channels;c++){const x=audio.pcm.getChannelData(c),y=decodedAudio.getChannelData(c);for(let i=0;i<Math.min(x.length,y.length);i+=4){power+=x[i]*x[i];error+=(x[i]-y[i])**2;}}if(error>Math.max(1e-6,power*.35))throw Error('Audio alignment/quality verification failed; master retained');}
     diagnostic?.(result,audio?'video/webm;codecs=vp9,opus':'video/webm;codecs=vp9',meta);progress(99);check();
