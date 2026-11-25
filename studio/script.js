@@ -1480,6 +1480,7 @@
       if(mode==='purchase'||mode==='locked'||mode==='reader_price'||mode==='copy')applyOwnCopyPolicyToDocument(workingDocument);
     }
 
+    const savedMasterFingerprint=latestPublishedFingerprint;
     // Compare against the actual hosted scene so an imported master .scene can
     // immediately show Published vs Changes instead of guessing.
     try{
@@ -1498,6 +1499,9 @@
 
     const localRevision=Math.max(0,Number(ident.revision)||0);
     const remoteRevision=Math.max(0,Number(status.revision)||0);
+    if(remoteRevision===localRevision && savedMasterFingerprint){
+      latestPublishedFingerprint=savedMasterFingerprint;
+    }
     if(remoteRevision>localRevision){
       staleRestoreRemoteRevision=remoteRevision;
       if(warnStale){
@@ -6815,6 +6819,10 @@ async function makeStoreZip(entries,onProgress=null){
     const out=await deliveryVideoMetadata(result);check();if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.06||out.width!==meta.width||out.height!==meta.height)throw Error('Output metadata mismatch');if(result.size>=blob.size)throw Error('No size reduction; master retained');return result;
   }
   async function optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage=()=>{}){
+    const header=new Uint8Array(await master.blob.slice(0,12).arrayBuffer());
+    if(header[0]===0x1a&&header[1]===0x45&&header[2]===0xdf&&header[3]===0xa3){
+      throw Error(u('WebM素材は再圧縮せず保持します。MP4原本がある場合は差し替えてください。','WebM source retained without recompression. Replace with original MP4 if available.'));
+    }
     const strict=mode==='ahako',deep=mode==='deep'||strict, auto=deep||mode==='auto';
     const factors=strict?[.30,.35,.40,.45,.55,.75]:deep?[.22,.18,.15,.12,.10,.07,.05,.45,.75]:auto?[.22,.45,.75]:[Number(mode)];
     let best=null,last=null;const history=[], choices=[];let choiceBytes=0;
@@ -7068,22 +7076,12 @@ async function makeStoreZip(entries,onProgress=null){
         createdAt:ident.createdAt||new Date().toISOString()
       });
 
-      // Rebuild the editor document from the exact hosted version, but put the
-      // private ownerKey back before it returns to Studio.
-      const editorDocument=clone(hostedDocument);
-      editorDocument.studio ||= {};
-      editorDocument.studio.identity ||= {};
-      Object.assign(editorDocument.studio.identity,{
-        workId:ident.workId,
-        ownerKey:ident.ownerKey,
-        revision:nextRevision,
-        createdAt:ident.createdAt||new Date().toISOString()
-      });
-
+      // The hosted document is delivery-only. Never install it in Studio.
+      // Local asset URLs remain backed by assetRegistry and draft persistence.
       return {
         id:finalId,
         revision:nextRevision,
-        document:editorDocument,
+        document:masterDocument,
         masterDocument,
         url:payload.url||`${SCENE_STUDIO_API_BASE}/work/${encodeURIComponent(finalId)}`
       };
@@ -7333,12 +7331,10 @@ async function makeStoreZip(entries,onProgress=null){
       latestPublishedId=result.id||latestPublishedId;
       latestPublishedUrl=result.url;
 
-      // Once R2 has accepted the assets, stop depending on session-only blob:
-      // URLs. This is especially important on iPhone when a published work is
-      // reopened for editing: blob URLs from a previous page lifetime are no
-      // longer valid, while the hosted URLs remain stable.
-      if(result.document){
-        workingDocument=clone(result.document);
+      // Keep the original asset references after publishing. Only the
+      // publication identity/revision from the master snapshot is adopted.
+      if(result.masterDocument){
+        workingDocument=clone(result.masterDocument);
         coverImageUrl=workingDocument.cover?.src||'';
         setCoverPositionFromValue(workingDocument.cover?.position||'center center',workingDocument.cover?.positions);
         coverLogoUrl=workingDocument.cover?.logo?.src||'';
