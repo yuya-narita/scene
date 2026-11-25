@@ -17,7 +17,7 @@
       <div class="draw-row"><button data-action="undo">一筆戻す</button><button data-action="redo">やり直す</button>
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
-      <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>残りを補完して確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>生成済みの薄い線を一筆ずつなぞります。線の形は保持し、順序と方向だけを変更します。</small></details>
+      <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>残りを補完して確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線を一筆ずつなぞります。分断された線も軌跡に沿って結合します。</small></details>
       <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
       <label data-nib>筆先<select name="tip"><option value="pointed">穂先（細入り）</option><option value="flat">平筆（斜め）</option><option value="round">丸筆</option></select></label>
@@ -60,7 +60,7 @@
       if(smart){
         const guide=document.createElement('canvas');
         redrawInk(guide,smart.pool.filter((_,i)=>!smart.used.has(i)));
-        const ctx=canvas.getContext('2d');ctx.save();ctx.globalAlpha=.23;ctx.drawImage(guide,0,0,canvas.width,canvas.height);ctx.restore();
+        const ctx=canvas.getContext('2d');ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=.23;ctx.drawImage(guide,0,0,canvas.width,canvas.height);ctx.restore();
         find('output').textContent=`SMART TRACE：${smart.used.size} / ${smart.pool.length} 筆確定`;
       }
       small.width=canvas.width;small.height=canvas.height;small.getContext('2d').drawImage(canvas,0,0);
@@ -110,33 +110,53 @@
     }
     function orderedStrokes(entries){
       let t=0;
-      return entries.map(({i,reverse})=>{
-        const src=smart.pool[i], old=src.points, first=old[0][2], last=old.at(-1)[2];
-        const pts=(reverse?old.slice().reverse():old).map(p=>{const q=p.slice();q[2]=t+(reverse?last-p[2]:p[2]-first);return q;});
-        const releasedAt=pts.at(-1)[2]+Math.max(0,(src.releasedAt??last)-last);
-        t=releasedAt+12;return {...src,points:pts,releasedAt};
+      return entries.map(entry=>{
+        const parts=entry.parts||[entry], src=smart.pool[parts[0].i], pts=[];
+        for(const {i,reverse} of parts){
+          const old=smart.pool[i].points, seq=reverse?old.slice().reverse():old;
+          for(const p of seq){const prev=pts.at(-1);if(prev&&Math.hypot(prev[0]-p[0],prev[1]-p[1])<.0001)continue;
+            const q=p.slice();q[2]=t;t+=8;pts.push(q);}
+        }
+        const releasedAt=t;t+=12;
+        const width=parts.reduce((n,p)=>n+smart.pool[p.i].width,0)/parts.length;
+        return {...src,width,points:pts,releasedAt};
       });
     }
     function smartRefresh(){layer.strokes=orderedStrokes(smart.order);redraw();}
     function smartPick(samples){
-      // Match a whole gesture to one existing stroke, never reveal neighboring branches.
       const r=canvas.getBoundingClientRect(), sx=r.width,sy=r.height;
-      const dist=(a,b)=>Math.hypot((a[0]-b[0])*sx,(a[1]-b[1])*sy);
-      const seg=(p,a,b)=>{const x=(b[0]-a[0])*sx,y=(b[1]-a[1])*sy,u=(p[0]-a[0])*sx,v=(p[1]-a[1])*sy;const f=Math.max(0,Math.min(1,(u*x+v*y)/(x*x+y*y||1)));return Math.hypot(u-f*x,v-f*y);};
-      const near=(p,ps)=>{let d=dist(p,ps[0]);for(let j=1;j<ps.length;j++)d=Math.min(d,seg(p,ps[j-1],ps[j]));return d;};
-      const g=samples.filter((_,i)=>i%Math.max(1,Math.ceil(samples.length/32))===0||i===samples.length-1);
-      const a=g[0],b=g.at(-1),radius=18;let best=null;
+      const xy=p=>[p[0]*sx,p[1]*sy], d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+      const g=samples.map(xy).filter((p,i,a)=>!i||d(p,a[i-1])>.5);
+      if(g.length<2)return;
+      const cum=[0];for(let j=1;j<g.length;j++)cum.push(cum.at(-1)+d(g[j],g[j-1]));
+      const radius=Math.max(8,Math.min(22,sx*.035)), length=cum.at(-1);
+      function project(p){let best={d:Infinity,t:0};for(let j=1;j<g.length;j++){
+        const a=g[j-1],b=g[j],x=b[0]-a[0],y=b[1]-a[1],f=Math.max(0,Math.min(1,((p[0]-a[0])*x+(p[1]-a[1])*y)/(x*x+y*y||1)));
+        const dd=d(p,[a[0]+f*x,a[1]+f*y]);if(dd<best.d)best={d:dd,t:cum[j-1]+f*(cum[j]-cum[j-1])};}return best;}
+      const candidates=[];
       for(let i=0;i<smart.pool.length;i++){
-        if(smart.used.has(i))continue;
-        const ps=smart.pool[i].points;if(!ps.length||near(a,ps)>radius)continue;
-        const f=ps[0],l=ps.at(-1),forward=dist(a,f)+dist(b,l),back=dist(a,l)+dist(b,f);
-        const reverse=back<forward, avg=g.reduce((n,p)=>n+near(p,ps),0)/g.length;
-        if(avg>radius*.7)continue;
-        const score=avg+Math.min(forward,back)*.45;
-        if(!best||score<best.score)best={i,reverse,score};
+        if(smart.used.has(i))continue;const ps=smart.pool[i].points.map(xy);if(!ps.length)continue;
+        const m=ps.map(project), first=m[0],last=m.at(-1), span=Math.abs(last.t-first.t);
+        let plen=0;for(let j=1;j<ps.length;j++)plen+=d(ps[j-1],ps[j]);
+        const avg=m.reduce((n,p)=>n+p.d,0)/m.length;
+        if(avg>radius*.65||Math.max(...m.map(p=>p.d))>radius*1.5||span<plen*.45||span<2)continue;
+        const reverse=last.t<first.t, start=reverse?last:first,end=reverse?first:last;
+        candidates.push({i,reverse,start:start.t,end:end.t,avg,a:reverse?ps.at(-1):ps[0],b:reverse?ps[0]:ps.at(-1)});
       }
-      if(best){smart.order.push({i:best.i,reverse:best.reverse});smart.used.add(best.i);smart.redo=[];smartRefresh();}
-      else find('output').textContent='近くの未確定筆跡が見つかりません。線の始点から終点へなぞってください。';
+      candidates.sort((a,b)=>a.start-b.start||a.avg-b.avg);
+      // Best connected chain, rewarding covered gesture distance and rejecting branches.
+      const scores=[],prev=[];let best=-1;
+      for(let j=0;j<candidates.length;j++){const c=candidates[j], reward=(c.end-c.start)-c.avg*.8;
+        scores[j]=reward-c.start*.8;prev[j]=-1;
+        for(let k=0;k<j;k++){const p=candidates[k],gap=c.start-p.end,join=d(p.b,c.a);
+          if(gap< -radius*.4||gap>radius*1.5||join>radius)continue;
+          const v=scores[k]+reward-Math.abs(gap)*.6-join*.5;if(v>scores[j]){scores[j]=v;prev[j]=k;}}
+        if(best<0||scores[j]-(length-c.end)*.8>scores[best]-(length-candidates[best].end)*.8)best=j;
+      }
+      if(best>=0){const parts=[];for(let j=best;j>=0;j=prev[j])parts.unshift(candidates[j]);
+        if(parts.at(-1).end-parts[0].start>=Math.min(length*.35, radius*2)){
+          smart.order.push({parts:parts.map(({i,reverse})=>({i,reverse}))});for(const p of parts)smart.used.add(p.i);smart.redo=[];smartRefresh();return;}}
+      find('output').textContent='線を確定できませんでした。薄い線に沿ってもう一度なぞってください。';
     }
     function smartEnd(complete){
       if(complete){const rest=smart.pool.flatMap((_,i)=>smart.used.has(i)?[]:[{i,reverse:false}]);layer.strokes=orderedStrokes([...smart.order,...rest]);redo=[];}
@@ -231,8 +251,8 @@
       if(smart){
         if(action==='smart-finish'){smartEnd(true);return;}
         if(action==='smart-cancel'){smartEnd(false);return;}
-        if(action==='undo'){const item=smart.order.pop();if(item){smart.used.delete(item.i);smart.redo.push(item);}smartRefresh();return;}
-        if(action==='redo'){const item=smart.redo.pop();if(item){smart.used.add(item.i);smart.order.push(item);}smartRefresh();return;}
+        if(action==='undo'){const item=smart.order.pop();if(item){for(const p of item.parts||[item])smart.used.delete(p.i);smart.redo.push(item);}smartRefresh();return;}
+        if(action==='redo'){const item=smart.redo.pop();if(item){for(const p of item.parts||[item])smart.used.add(p.i);smart.order.push(item);}smartRefresh();return;}
         if(action==='save'){find('output').textContent='先に残りを補完して確定してください。';return;}
         if(action!=='preview')return;
       }
