@@ -124,7 +124,24 @@
       const key=(x,y)=>x+','+y;
       function near(p,rad){const out=[];for(let x=Math.floor((p[0]-rad)/cell);x<=Math.floor((p[0]+rad)/cell);x++)for(let y=Math.floor((p[1]-rad)/cell);y<=Math.floor((p[1]+rad)/cell);y++)for(const i of grid.get(key(x,y))||[])if(dist(nodes[i].p,p)<=rad)out.push(i);return out;}
       function link(a,b){if(a===b||nodes[a].adj.includes(b))return;nodes[a].adj.push(b);nodes[b].adj.push(a);}
-      for(const st of smart.routing){if(!st.points.length)continue;let prev=-1;for(const p of resample(st.points.map(p=>[...xy(p),st.width*(st.pen==='brush'? .5+2*(p[3]??.5):st.pen==='fountain'? .45+(p[3]??.5):st.pen==='marker'?2:st.pen==='crayon'?1.4:1)]))){const i=nodes.length;nodes.push({p,st,adj:[]});if(prev>=0)link(prev,i);const k=key(Math.floor(p[0]/cell),Math.floor(p[1]/cell));if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);prev=i;}}
+      // Resample routing and display geometry together, using the same segment
+      // and fraction. Only routing coordinates participate in graph search.
+      for(let si=0;si<smart.routing.length;si++){
+        const st=smart.routing[si],display=smart.pool[si];if(!st.points.length)continue;
+        const source=display?.points?.length===st.points.length?display:st;
+        const widthAt=p=>source.width*(source.pen==='brush'?.5+2*(p[3]??.5):source.pen==='fountain'?.45+(p[3]??.5):source.pen==='marker'?2:source.pen==='crayon'?1.4:1);
+        const raw=st.points.map(xy),ink=source.points.map(p=>[...xy(p),widthAt(p)]);
+        let prev=-1;
+        function add(p,paint){const i=nodes.length;nodes.push({p,paint,st,adj:[]});if(prev>=0)link(prev,i);const k=key(Math.floor(p[0]/cell),Math.floor(p[1]/cell));if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);prev=i;}
+        add([...raw[0],ink[0][2]],ink[0].slice());
+        for(let i=1;i<raw.length;i++){
+          const a=raw[i-1],b=raw[i],n=Math.ceil(dist(a,b)/step);
+          for(let j=1;j<=n;j++){
+            const t=j/n,paint=ink[i-1].map((v,k)=>v+(ink[i][k]-v)*t);
+            add([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,paint[2]],paint);
+          }
+        }
+      }
       // Join only almost coincident guide points, not nearby parallel lines.
       const junction=Math.max(.65,Math.min(2,sx*.003));
       for(let i=0;i<nodes.length;i++)for(const j of near(nodes[i].p,junction))if(j<i&&nodes[i].st!==nodes[j].st)link(i,j);
@@ -175,42 +192,9 @@
         const tail=terminalTail(ids.at(-1),ids.at(-2),occupied);
         ids.unshift(...head.reverse());ids.push(...tail);
       }
-      // Correct only the neighbourhood of a graph junction after the author
-      // has chosen the complete stroke. Use logical canvas units (zoom independent).
-      const route=ids.map(i=>nodes[i].p.slice()), arc=[0];
-      const logical=(a,b)=>Math.hypot((a[0]-b[0])*1000/sx,(a[1]-b[1])*600/sy);
-      for(let k=1;k<route.length;k++)arc.push(arc[k-1]+logical(route[k],route[k-1]));
-      const zones=[];
-      for(let k=1;k<ids.length-1;k++){
-        const n=nodes[ids[k]];
-        if(n.adj.length<3 && !n.adj.some(j=>nodes[j].st!==n.st))continue;
-        const rad=Math.max(6,Math.min(38,n.p[2]*1.35));
-        let a=k,b=k;
-        while(a>0&&arc[k]-arc[a]<rad)a--;
-        while(b<ids.length-1&&arc[b]-arc[k]<rad)b++;
-        if(a===0||b===ids.length-1)continue;
-        const last=zones.at(-1);
-        if(last&&a<=last[1])last[1]=Math.max(last[1],b);else zones.push([a,b]);
-      }
-      for(const [a,b] of zones){
-        const span=arc[b]-arc[a];if(span<1||span>88)continue;
-        const A=route[a],B=route[b],chord=logical(A,B);
-        if(chord<span*.70)continue; // preserve corners and loops
-        let l=a-1,r=b+1;
-        while(l>0&&arc[a]-arc[l]<Math.max(8,A[2]*.65))l--;
-        while(r<route.length-1&&arc[r]-arc[b]<Math.max(8,B[2]*.65))r++;
-        const L=route[l],R=route[r],dl=arc[a]-arc[l],dr=arc[r]-arc[b];
-        if(dl<.1||dr<.1)continue;
-        for(let k=a+1;k<b;k++){
-          const t=(arc[k]-arc[a])/span,t2=t*t,t3=t2*t;
-          const q=[0,1].map(d=>(2*t3-3*t2+1)*A[d]+(t3-2*t2+t)*(A[d]-L[d])*span/dl+(-2*t3+3*t2)*B[d]+(t3-t2)*(R[d]-B[d])*span/dr);
-          const shift=logical(q,route[k]);
-          const cap=Math.min(14,Math.max(2,route[k][2]*.65));
-          const mix=shift>cap?cap/shift:1;
-          route[k][0]+=(q[0]-route[k][0])*mix;route[k][1]+=(q[1]-route[k][1])*mix;
-          route[k][2]=A[2]+(B[2]-A[2])*t;
-        }
-      }
+      // Preserve the worker's corrected geometry. Reordering or reversing
+      // a path must not reconstruct its shape from the routing skeleton.
+      const route=ids.map(i=>nodes[i].paint.slice());
       const unit=v=>Math.round(Math.max(0,Math.min(1,v))*10000)/10000,points=[],widths=[];
       for(let k=0;k<ids.length;k++){const n=nodes[ids[k]],q=route[k],p=[unit(q[0]/sx),unit(q[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(q[2]||n.st.width);}}
       if(!points.length||g.length>3&&points.length<2)return null;
