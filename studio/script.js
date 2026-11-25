@@ -6628,6 +6628,41 @@ async function makeStoreZip(entries,onProgress=null){
       timer=setTimeout(()=>finish(new Error('Video metadata timeout')),15000);video.src=url;
     });
   }
+  // Repair streaming WebM metadata without touching encoded audio/video packets.
+  async function normalizeDeliveryWebM(blob, expected){
+    const bytes=new Uint8Array(await blob.arrayBuffer());
+    function vint(p,id=false){
+      if(p>=bytes.length||!bytes[p])throw new Error('Invalid EBML header');
+      let n=1,mask=128;while(!(bytes[p]&mask)){n++;mask>>=1;}
+      if(n>8||p+n>bytes.length)throw new Error('Invalid EBML length');
+      let v=BigInt(id?bytes[p]:bytes[p]& (mask-1));
+      for(let i=1;i<n;i++)v=(v<<8n)|BigInt(bytes[p+i]);
+      return {n,v,unknown:!id&&v===(1n<<BigInt(7*n))-1n};
+    }
+    function element(p,end){const id=vint(p,true),z=vint(p+id.n),start=p+id.n+z.n;
+      const stop=z.unknown?end:start+Number(z.v);if(stop>end||stop<start)throw new Error('Truncated WebM');
+      return {id:Number(id.v),p,start,stop,z,idn:id.n};}
+    function size(v){for(let n=1;n<=8;n++){if(BigInt(v)<(1n<<BigInt(7*n))-1n){let x=BigInt(v)|(1n<<BigInt(7*n));const a=new Uint8Array(n);for(let i=n-1;i>=0;i--){a[i]=Number(x&255n);x>>=8n;}return a;}}throw new Error('EBML size overflow');}
+    function uint(e){let v=0;for(let i=e.start;i<e.stop;i++)v=v*256+bytes[i];return v;}
+    let seg;for(let p=0;p<bytes.length;){const e=element(p,bytes.length);if(e.id===0x18538067){seg=e;break;}p=e.stop;}
+    if(!seg)throw new Error('WebM Segment missing');
+    let info,scale=1000000, indexed=false, last=-1, previous=-1;
+    for(let p=seg.start;p<seg.stop;){const e=element(p,seg.stop);
+      if(e.id===0x114d9b74||e.id===0x1c53bb6b)indexed=true;
+      if(e.id===0x1549a966){info=e;for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if(f.id===0x2ad7b1)scale=uint(f);if(f.id===0x4489)return blob;q=f.stop;}}
+      if(e.id===0x1f43b675){let base=0;for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if(f.id===0xe7)base=uint(f);if(f.id===0xa3){const t=vint(f.start);const k=f.start+t.n;if(k+2>=f.stop)throw new Error('Invalid WebM block');let rel=(bytes[k]<<8)|bytes[k+1];if(rel>=32768)rel-=65536;const stamp=base+rel;if(stamp>last){previous=last;last=stamp;}}q=f.stop;}}
+      p=e.stop;
+    }
+    if(!info||indexed||!scale||last<0)throw new Error('WebM metadata repair unsupported for this layout');
+    const tail=last*scale/1e9, step=Math.max(0,Math.min(.1,(last-previous)*scale/1e9));
+    const duration=tail+step;
+    if(Math.abs(duration-expected)>.12)throw new Error('Recorded timestamps differ from master: '+duration.toFixed(3)+' s');
+    const field=new Uint8Array(11);field.set([0x44,0x89,0x88]);new DataView(field.buffer).setFloat64(3,duration*1e9/scale,false);
+    const infoSize=size(info.stop-info.start+field.length);
+    const delta=infoSize.length-info.z.n+field.length;
+    const segmentSize=seg.z.unknown?bytes.subarray(seg.p+seg.idn,seg.start):size(seg.stop-seg.start+delta);
+    return new Blob([bytes.subarray(0,seg.p+seg.idn),segmentSize,bytes.subarray(seg.start,info.p+info.idn),infoSize,bytes.subarray(info.start,info.stop),field,bytes.subarray(info.stop)],{type:'video/webm'});
+  }
   // Real-time, browser-native experimental delivery encoder. No master mutation.
   async function encodeDeliveryVideo(blob, factor, progress, signal, diagnostic){
     if(!window.MediaRecorder || !HTMLMediaElement.prototype.captureStream) throw new Error(u('この圧縮機能はPC版Chrome/Edgeでお試しください。','Use desktop Chrome/Edge for this encoder.'));
@@ -6645,7 +6680,7 @@ async function makeStoreZip(entries,onProgress=null){
       if(!stream.getVideoTracks().length)throw new Error('Video capture unavailable');
       const target=Math.max(150000,Math.min(8000000,Math.round(blob.size*8/meta.duration*factor)-96000));
       rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:target,audioBitsPerSecond:96000});
-      const result=await new Promise((resolve,reject)=>{
+      let result=await new Promise((resolve,reject)=>{
         abortHandler=()=>reject(new Error(u('圧縮を中止しました。','Encoding cancelled.')));signal.addEventListener('abort',abortHandler,{once:true});
         rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};rec.onerror=e=>reject(e.error||new Error('Encoder failed'));
         rec.onstop=()=>resolve(new Blob(chunks,{type:'video/webm'}));
@@ -6658,7 +6693,13 @@ async function makeStoreZip(entries,onProgress=null){
       if(result.size>=blob.size||!result.size)throw new Error(u('容量が減らなかったため原本を維持します。','No size reduction; master retained.'));
       // MediaRecorder WebM may lack duration metadata: reject rather than publish an unsafe asset.
       progress(99);
-      const out=await deliveryVideoMetadata(result);
+      let out=await deliveryVideoMetadata(result);
+      if(!Number.isFinite(out.duration)){
+        result=await normalizeDeliveryWebM(result,meta.duration);
+        diagnostic?.(result,mime,meta);
+        out=await deliveryVideoMetadata(result);
+      }
+      if(signal.aborted)throw new Error("Cancelled");
       if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.12||out.width!==meta.width||out.height!==meta.height)throw new Error(u('出力の時間・解像度を検証できません。原本を維持します。','Output duration/resolution could not be verified. Master retained.'));
       return result;
     }finally{clearTimeout(timer);if(abortHandler)signal.removeEventListener('abort',abortHandler);if(rec&&rec.state!=='inactive'){try{rec.stop();}catch{}}video.pause();stream?.getTracks().forEach(t=>t.stop());video.removeAttribute('src');video.load();video.remove();URL.revokeObjectURL(url);}
