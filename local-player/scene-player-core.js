@@ -1625,7 +1625,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // user's gesture. _safePlay handles delayed graph attachment.
       this._flushPendingAudio();
       const bgVideo=this._currentBackgroundLayer()?.querySelector('video.sp-background-video');
-      if(bgVideo && bgVideo._ahVideoConfig?.muted===false && this.audioPlaybackArmed){bgVideo.muted=false;if(!bgVideo._ahHeld && !bgVideo._ahScenePaused && bgVideo._ahVideoConfig.mode!=='freeze')bgVideo.play()?.catch(()=>{});}
+      if(bgVideo && bgVideo._ahVideoConfig?.muted===false && this.audioPlaybackArmed && !this.muted){bgVideo.muted=false;if(!bgVideo._ahHeld && !bgVideo._ahScenePaused && bgVideo._ahVideoConfig.mode!=='freeze')bgVideo.play()?.catch(()=>{});}
 
       emit(this.host, 'sceneplayer:audiounlock', {
         webAudio: !!ctx,
@@ -3508,6 +3508,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const vol = clamp(asNumber(rec?.command?.volume, 1), 0, 1);
         if (rec?.gain) this._fadeBufferGain(rec.gain, this.muted ? 0 : vol, 0);
       });
+      for(const layer of [this.els?.bgA,this.els?.bgB]){const v=layer?.querySelector('video.sp-background-video');if(v)v.muted=this.muted||!this.audioPlaybackArmed||v._ahVideoConfig?.muted!==false;}
       emit(this.host, 'sceneplayer:mutechange', { muted: this.muted });
       return this.muted;
     }
@@ -3558,6 +3559,29 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this.autoTimer = null;
     }
 
+    _videoAutoDelay(delay) {
+      const v=this._currentBackgroundLayer()?.querySelector('video.sp-background-video');
+      const cfg=v?._ahVideoConfig;
+      if(!v || !cfg || !['video','both'].includes(cfg.autoSync) || cfg.mode==='freeze' || v._ahScenePaused || v._ahVideoFailed || v.error)return delay;
+      return cfg.autoSync==='video'?0:delay;
+    }
+
+    _waitVideoAuto(callback) {
+      const idx=this.index;
+      const v=this._currentBackgroundLayer()?.querySelector('video.sp-background-video');
+      const cfg=v?._ahVideoConfig;
+      const started=performance.now();
+      const poll=()=>{
+        this.autoTimer=null;
+        if(!this.auto || this.ended || this.index!==idx)return;
+        if(v && v.isConnected && ['video','both'].includes(cfg?.autoSync) && cfg.mode!=='freeze' && !v._ahScenePaused && !v._ahHeld && !v._ahCycleDone && !v._ahVideoFailed && !v.error && !(v.readyState<2 && performance.now()-started>15000)){
+          this.autoTimer=setTimeout(poll,100);return;
+        }
+        callback();
+      };
+      poll();
+    }
+
     _scheduleAuto() {
       if (!this.auto || this.ended || !this.currentScene || this.typingState) return;
       this._clearAutoTimer();
@@ -3569,13 +3593,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const delay=Number.isFinite(targetElapsed)?Math.max(0,(this.playbackTimelineStartedAt+targetElapsed)-performance.now()):pause;
       this.autoTimer = setTimeout(() => {
         this.autoTimer = null;
+        this._waitVideoAuto(()=>{
         if (this.index >= this.document.scenes.length - 1) {
           // V2.19: open the already-primed ending-SE bank entry while AUTO's
           // audio session is still fully active. finish() then only changes UI.
           this._playEndingAudio();
           this.finish();
         } else this.next();
-      }, delay);
+      });
+      }, this._videoAutoDelay(delay));
     }
 
 
@@ -4694,6 +4720,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const command=this.document?.scenes?.[sceneIndex]?.presentation?.background?.video?.continuity||'carry';
       const entered=video._ahVideoScene!==sceneIndex;
       video._ahVideoScene=sceneIndex;
+      if(entered){video._ahCycleDone=false;video._ahLastTime=null;video._ahVideoFailed=false;}
       if(entered){
         if(command==='restart'||command==='resume')video._ahScenePaused=false;
         if(command==='pause')video._ahScenePaused=true;
@@ -4704,18 +4731,19 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const key=JSON.stringify([mode,start,end]);
       const changed=video._ahVideoKey!==key || restart;
       video._ahVideoKey=key;
-      if(changed)video._ahPendingSeek=true;
+      if(changed){video._ahPendingSeek=true;video._ahCycleDone=false;video._ahLastTime=null;}
       video._ahVideoConfig=cfg;
-      video.muted=cfg.muted!==false || !this.audioPlaybackArmed;
+      video.muted=cfg.muted!==false || !this.audioPlaybackArmed || this.muted;
       video.volume=Math.max(0,Math.min(1,Number(cfg.volume??1)||0));
       video.playbackRate=Math.max(.25,Math.min(2,Number(cfg.speed)||1));
-      video.loop=mode==='loop' && start===0 && end===null;
+      video.loop=mode==='loop' && start===0 && end===null && (!cfg.autoSync || cfg.autoSync==='scene');
+      video.onerror=()=>{video._ahVideoFailed=true;};
       const bounds=()=>{const d=Number.isFinite(video.duration)?video.duration:Infinity;const a=Math.min(start,Math.max(0,d-.05));return [a,Math.min(end??d,d)];};
-      const play=()=>{if(!this.ended && video.isConnected && mode!=='freeze' && !video._ahHeld && !video._ahScenePaused)video.play()?.catch(()=>{});};
+      const play=()=>{if(!this.ended && video.isConnected && mode!=='freeze' && !video._ahHeld && !video._ahScenePaused)video.play()?.catch(()=>{if(!video.isConnected)return;video.muted=true;video.play()?.catch(()=>{video._ahVideoFailed=true;});});};
       const init=()=>{const [a]=bounds();if(video._ahPendingSeek){video._ahPendingSeek=false;video._ahHeld=false;try{video.currentTime=a;}catch(_){}}if(mode==='freeze'||video._ahScenePaused)video.pause();else play();};
-      const finish=()=>{if(video._ahHeld||video._ahScenePaused)return;const [a,b]=bounds();if(mode==='loop'){try{video.currentTime=a;}catch(_){}play();return;}video._ahHeld=true;video.pause();if(Number.isFinite(b)&&video.currentTime>b)try{video.currentTime=b;}catch(_){}if(mode==='next' && this._currentBackgroundLayer()===layer && this.backgroundState?.src===state.src && !this.ended){const idx=this.index;queueMicrotask(()=>{if(this.index===idx && video.isConnected && this._currentBackgroundLayer()===layer)this.next();});}};
+      const finish=()=>{if(video._ahHeld||video._ahScenePaused)return;video._ahCycleDone=true;const [a,b]=bounds();if(mode==='loop'){try{video.currentTime=a;}catch(_){}play();return;}video._ahHeld=true;video.pause();if(Number.isFinite(b)&&video.currentTime>b)try{video.currentTime=b;}catch(_){}if(mode==='next' && !(this.auto && cfg.autoSync && cfg.autoSync!=='scene') && this._currentBackgroundLayer()===layer && this.backgroundState?.src===state.src && !this.ended){const idx=this.index;queueMicrotask(()=>{if(this.index===idx && video.isConnected && this._currentBackgroundLayer()===layer)this.next();});}};
       video.onloadedmetadata=init;
-      video.ontimeupdate=()=>{if(mode==='freeze'||video._ahScenePaused)return;const [,b]=bounds();if(!video.loop && video.currentTime>=b)finish();};
+      video.ontimeupdate=()=>{if(mode==='freeze'||video._ahScenePaused)return;const [,b]=bounds();if(video.loop && video._ahLastTime!=null && video.currentTime+0.05<video._ahLastTime && !video.seeking)video._ahCycleDone=true;video._ahLastTime=video.currentTime;if(!video.loop && video.currentTime>=b)finish();};
       video.onended=finish;
       if(video.readyState>=1)init();else if(mode!=='freeze')play();
 
@@ -7763,7 +7791,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     const cue=Number(scenes[g.start].cueAt),nextCue=Number(scenes[g.end+1]?.cueAt);
     if(!this.playbackTimelineStartedAt)this.playbackTimelineStartedAt=performance.now()-(Number.isFinite(cue)?cue:0);
     const delay=Number.isFinite(nextCue)?Math.max(0,this.playbackTimelineStartedAt+nextCue-performance.now()):pause;
-    this.autoTimer=setTimeout(()=>{this.autoTimer=null;this.next();},delay);
+    this.autoTimer=setTimeout(()=>{this.autoTimer=null;this._waitVideoAuto(()=>this.next());},this._videoAutoDelay(delay));
   };
   const originalAudio=P._applySceneAudio,originalQueue=P._queueInitialOneShots;
   P._applySceneAudio=function(scene,reconstruct=false){

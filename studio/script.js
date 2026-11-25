@@ -14144,6 +14144,7 @@ function openDesktopBackgroundDetail(){
       const number=(label,key,value,min,max,step,nullable=false)=>{const wrap=document.createElement('label');wrap.className='desktop-text-detail-field';const cap=document.createElement('span');cap.textContent=label;const input=document.createElement('input');input.type='number';input.min=min;input.max=max;input.step=step;input.value=value??'';input.addEventListener('change',()=>{let v=nullable&&input.value===''?null:Math.max(min,Math.min(max,Number(input.value)||0));if(key==='end'&&v!==null)v=Math.max((Number(cfg.start)||0)+.1,v);if(key==='start'&&cfg.end!=null)v=Math.min(v,Math.max(0,cfg.end-.1));input.value=v??'';change(key,v);});wrap.append(cap,input);return wrap;};
       grid.append(number(u('開始位置（秒）','Start (s)'),'start',cfg.start??0,0,86400,.1),number(u('終了位置（秒・空欄＝末尾）','End (s, blank = end)'),'end',cfg.end,0,86400,.1,true));
       grid.append(desktopDetailSelect(u('動画音声','Video audio'),[['mute',u('ミュート','Muted')],['sound',u('音声あり','Sound')]],cfg.muted===false?'sound':'mute',v=>change('muted',v!=='sound')));
+      grid.append(desktopDetailSelect(u('AUTO同期','AUTO sync'),[['scene',u('Scene時間優先','Scene timing')],['video',u('動画終了優先','Video end')],['both',u('Scene時間と動画終了を待つ','Wait for both')]],cfg.autoSync||'scene',v=>change('autoSync',v)));
       grid.append(desktopDetailSelect(u('動画音量','Volume'),Array.from({length:11},(_,i)=>[String(i/10),i*10+'%']),String(cfg.volume??1),v=>change('volume',Number(v))));
     }
 

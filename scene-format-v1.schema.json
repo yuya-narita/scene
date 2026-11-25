@@ -1653,7 +1653,7 @@
       "type": "object",
       "properties": {
         "mediaType": {"enum": ["image", "video"]},
-        "video": {"type":"object","properties":{"continuity":{"enum":["carry","restart","pause","resume"]},"mode":{"enum":["loop","hold","freeze","next"]},"start":{"type":"number","minimum":0},"end":{"type":["number","null"],"minimum":0},"speed":{"type":"number","minimum":0.25,"maximum":2},"muted":{"type":"boolean"},"volume":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":true},
+        "video": {"type":"object","properties":{"autoSync":{"enum":["scene","video","both"]},"continuity":{"enum":["carry","restart","pause","resume"]},"mode":{"enum":["loop","hold","freeze","next"]},"start":{"type":"number","minimum":0},"end":{"type":["number","null"],"minimum":0},"speed":{"type":"number","minimum":0.25,"maximum":2},"muted":{"type":"boolean"},"volume":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":true},
         "src": {
           "type": "string"
         },
