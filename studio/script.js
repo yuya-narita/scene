@@ -6699,8 +6699,8 @@ async function makeStoreZip(entries,onProgress=null){
   }
   async function optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage=()=>{}){
     const strict=mode==='ahako',deep=mode==='deep'||strict, auto=deep||mode==='auto';
-    const factors=strict?[.22,.18,.15,.12,.30,.45,.75]:deep?[.22,.18,.15,.12,.10,.07,.05,.45,.75]:auto?[.22,.45,.75]:[Number(mode)];
-    let best=null,last=null;const history=[];
+    const factors=strict?[.30,.35,.40,.45,.55,.75]:deep?[.22,.18,.15,.12,.10,.07,.05,.45,.75]:auto?[.22,.45,.75]:[Number(mode)];
+    let best=null,last=null;const history=[], choices=[];let choiceBytes=0;
     for(let i=0;i<factors.length;i++){
       if(signal.aborted)throw Error('Cancelled');
       const factor=factors[i];let metrics,candidate;
@@ -6708,22 +6708,23 @@ async function makeStoreZip(entries,onProgress=null){
       try{
         const blob=await encodeDeliveryVideo(master.blob,factor,n=>progress(Math.floor((i+n/100)*100/factors.length)),signal,(blob,mime)=>{candidate={blob,mime,name:master.name.replace(/\.[^.]+$/,'')+'.webm'};},m=>metrics=m,strict);
         candidate.metrics=metrics;candidate.factor=factor;
-        const pass=strict?(metrics.ssim>=.98&&metrics.worst>=.96&&metrics.psnr>=38&&metrics.nativePsnr>=34&&metrics.tileWorst>=24&&metrics.coverPsnr>=35&&metrics.coverWorst>=32&&metrics.edgePsnr>=34):!auto||(metrics.ssim>=.96&&metrics.worst>=.92&&metrics.psnr>=32&&(!deep||(metrics.detailPsnr>=30&&metrics.detailWorst>=24)));
+        const pass=strict?(metrics.ssim>=.985&&metrics.worst>=.965&&metrics.psnr>=40&&metrics.nativePsnr>=36&&metrics.tileWorst>=26&&metrics.coverPsnr>=37&&metrics.coverWorst>=34&&metrics.edgePsnr>=36):!auto||(metrics.ssim>=.96&&metrics.worst>=.92&&metrics.psnr>=32&&(!deep||(metrics.detailPsnr>=30&&metrics.detailWorst>=24)));
         history.push({factor,size:blob.size,pass,metrics});
-        if(!pass){candidate.error='Sampled quality below threshold';last=candidate;continue;}
+        if(strict && choiceBytes+blob.size<=32*1024*1024){choices.push({...candidate,pass});choiceBytes+=blob.size;}
+        candidate.pass=pass;if(!pass){candidate.error='Sampled quality below threshold';last=candidate;continue;}
         if(!best||blob.size<best.blob.size)best=candidate;
         if(!strict&&(!deep||factor>=.45))break;
         // Higher bitrate fallback is unnecessary once a low-rate candidate passes.
         if(i===6&&best)break;
-      }catch(e){if(signal.aborted)throw e;history.push({factor,pass:false,error:String(e)});if(candidate){candidate.metrics=metrics;candidate.error=String(e);last=candidate;}else if(!last)last={error:String(e)};if(!auto){if(candidate)diagnostic(candidate);throw e;}}
+      }catch(e){if(signal.aborted)throw e;history.push({factor,pass:false,error:String(e)});if(candidate){candidate.pass=false;candidate.metrics=metrics;candidate.error=String(e);last=candidate;}else if(!last)last={error:String(e)};if(!auto){if(candidate)diagnostic(candidate);throw e;}}
       if(deep&&i===6&&best)break;
     }
     if(signal.aborted)throw Error('Cancelled');
     if(!best){if(last?.blob){last.history=history;diagnostic(last);}throw Error(last?.error||'No candidate passed');}
-    best.history=history;diagnostic(best);return best.blob;
+    best.history=history;if(strict){for(const c of choices)c.history=history;best.choices=choices;}diagnostic(best);return best.blob;
   }
   // Local diagnostics only: no publishing, payment, or mutation of the master.
-  function showDeliveryComparison(master,result,accepted){
+  function showDeliveryComparison(master,result,accepted,onAdopt=null,choices=result.choices||[],portraitStart=false){
     const dialog=document.createElement('dialog');dialog.style.cssText='width:min(94vw,900px);max-height:85vh;overflow:auto;padding:18px;background:Canvas;color:CanvasText;border-radius:12px';
     const title=document.createElement('h3');title.textContent=u('圧縮前後の比較','Compression comparison');dialog.append(title);
     const summary=document.createElement('p');summary.textContent=(accepted?u('公開用に登録済み','Adopted for delivery'):u('診断用・公開未採用','Diagnostic only / not adopted'))+' | '+(master.blob.size/1e6).toFixed(2)+' MB → '+(result.blob.size/1e6).toFixed(2)+' MB | '+u('削減率 ','Reduction ')+(100*(1-result.blob.size/master.blob.size)).toFixed(1)+'%';dialog.append(summary);if(result.metrics){const m=result.metrics,q=document.createElement('p');q.textContent='SSIM '+m.ssim.toFixed(4)+' / worst '+m.worst.toFixed(4)+' / PSNR '+m.psnr.toFixed(1)+' dB | '+m.samples+' sampled / '+m.frames+' frames ('+(m.evalWidth||320)+'px luma)';dialog.append(q);if(m.strict){const z=document.createElement("p");z.textContent="AHAKO | Native RGB "+m.nativePsnr.toFixed(1)+" dB / worst tile "+m.tileWorst.toFixed(1)+" / 9:16 center "+m.coverPsnr.toFixed(1)+" / worst frame "+m.coverWorst.toFixed(1)+" / edge "+m.edgePsnr.toFixed(1);dialog.append(z);}if(m.detailPsnr!==undefined){const d=document.createElement('p');d.textContent='Native RGB crops PSNR '+m.detailPsnr.toFixed(1)+' dB / worst '+m.detailWorst.toFixed(1)+' dB (5 crops/frame)';dialog.append(d);}}if(result.history){const h=document.createElement('pre');h.style.cssText='white-space:pre-wrap;font-size:12px';h.textContent=result.history.map(v=>Math.round(v.factor*100)+'% | '+(v.size!==undefined?(v.size/1e6).toFixed(2)+' MB | ':'')+(v.pass?'PASS':'FAIL')+(v.metrics?' | SSIM '+v.metrics.ssim.toFixed(4)+' | RGB '+v.metrics.detailPsnr.toFixed(1)+' dB':'')+(v.error?' | '+v.error:'')).join('\n');dialog.append(h);}if(result.error){const error=document.createElement('p');error.textContent=u('未採用の理由：','Reason: ')+result.error;dialog.append(error);}
@@ -6741,7 +6742,15 @@ async function makeStoreZip(entries,onProgress=null){
     button(u('同時再生（無音）','Play both (muted)'),async()=>{try{const t=videos[0].currentTime;for(const v of videos){v.muted=true;v.currentTime=t;}await Promise.all(videos.map(v=>v.play()));}catch(e){videos.forEach(v=>v.pause());if(!closed)msg.textContent=String(e);}});
     button(u('両方停止','Pause both'),()=>videos.forEach(v=>v.pause()));
     button(u('原本の位置に合わせる','Match master position'),()=>{videos.forEach(v=>v.pause());try{videos[1].currentTime=videos[0].currentTime;}catch(e){msg.textContent=String(e);}});
-    let portrait=false;button(u('縦画面比較 9:16','Compare portrait 9:16'),()=>{portrait=!portrait;for(const v of videos){v.style.aspectRatio=portrait?'9 / 16':'16 / 9';v.style.objectFit=portrait?'cover':'contain';v.style.height=portrait?'min(55vh,520px)':'auto';v.style.width=portrait?'auto':'100%';v.style.maxWidth='100%';}});
+    let portrait=false;const portraitButton=button(u('縦画面比較 9:16','Compare portrait 9:16'),()=>{portrait=!portrait;for(const v of videos){v.style.aspectRatio=portrait?'9 / 16':'16 / 9';v.style.objectFit=portrait?'cover':'contain';v.style.height=portrait?'min(55vh,520px)':'auto';v.style.width=portrait?'auto':'100%';v.style.maxWidth='100%';}});
+    if(portraitStart)portraitButton.click();
+    if(choices.length){
+      const select=document.createElement('select');select.setAttribute('aria-label',u('圧縮候補','Compression candidate'));
+      const available=choices.some(c=>c.blob===result.blob)?choices:[result,...choices];
+      for(const c of available){const o=document.createElement('option');o.value=String(available.indexOf(c));o.textContent=Math.round(c.factor*100)+'% | '+(c.blob.size/1e6).toFixed(2)+' MB | '+(c.pass===false?'FAIL':'PASS');o.selected=c.blob===result.blob;select.append(o);}
+      controls.append(select);select.onchange=()=>{const next=available[Number(select.value)];dialog.close();showDeliveryComparison(master,next,onAdopt?.isCurrent(next)??false,onAdopt,available,portrait);};
+      const adopt=button(u('この候補を公開用に採用','Adopt this candidate'),()=>{if(onAdopt?.apply(result)){msg.textContent=u('公開用に登録済み','Adopted for delivery');summary.textContent=summary.textContent.replace(u('診断用・公開未採用','Diagnostic only / not adopted'),u('公開用に登録済み','Adopted for delivery'));adopt.disabled=true;}});adopt.disabled=!onAdopt||result.pass===false||accepted;
+    }
     button(u('軽量版を保存','Download result'),()=>downloadBlobFile(result.name,result.blob));
     button(u('閉じる','Close'),()=>dialog.close());
     dialog.addEventListener('close',()=>{closed=true;for(const v of videos){v.pause();v.removeAttribute('src');v.load();}urls.forEach(url=>URL.revokeObjectURL(url));dialog.remove();},{once:true});document.body.append(dialog);dialog.showModal();
@@ -6767,25 +6776,25 @@ async function makeStoreZip(entries,onProgress=null){
     for(const [src,ref] of refs){
       const master=assetRegistry.get(src), row=document.createElement('div');row.style.cssText='border-top:1px solid #888;padding:12px 0;overflow-wrap:anywhere';
       const label=document.createElement('p'), pick=document.createElement('input'), reset=document.createElement('button');pick.type='file';pick.accept='video/mp4,video/webm,.mp4,.webm';reset.type='button';reset.textContent=u('原本に戻す','Use master');
-      let candidate=null;
+      let candidate=null, choices=[];
       const compare=document.createElement('button'), save=document.createElement('button');
       compare.type=save.type='button';compare.textContent=u('圧縮前後を比較','Compare videos');save.textContent=u('軽量版を保存','Download result');
       const update=()=>{const d=deliveryVideos.get(src);label.textContent=master.name+' | MASTER '+mb(master.blob.size)+' → DELIVERY '+mb(d?.blob.size??master.blob.size)+(d?' ('+d.name+')':'');reset.disabled=!d||!!activeEncode;compare.disabled=save.disabled=!(candidate||d)||!!activeEncode;};
-      compare.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)showDeliveryComparison(master,d,deliveryVideos.get(src)?.blob===d.blob);};
+      compare.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)showDeliveryComparison(master,d,deliveryVideos.get(src)?.blob===d.blob,{isCurrent:c=>deliveryVideos.get(src)?.blob===c.blob,apply:c=>{if(activeEncode||!panel.open||assetRegistry.get(src)!==master||c.pass===false)return false;candidate=c;deliveryVideos.set(src,{...c,choices:undefined});status.textContent=u("公開用に登録済み（手動選択）","Adopted manually");update();return true;}},choices);};
       save.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)downloadBlobFile(d.name,d.blob);};
-      reset.onclick=()=>{deliveryVideos.delete(src);candidate=null;update();};
+      reset.onclick=()=>{deliveryVideos.delete(src);candidate=null;choices=[];update();};
       pick.onchange=async()=>{const file=pick.files?.[0];if(!file)return;pick.disabled=true;reset.disabled=true;try{
         const mime=/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':'';
         if(!mime||file.size>=master.blob.size)throw new Error(u('原本より小さいMP4/WebMを指定してください。','Choose a smaller MP4/WebM.'));
         const blob=file.slice(0,file.size,mime), [a,b]=await Promise.all([deliveryVideoMetadata(master.blob),deliveryVideoMetadata(blob)]);
         if(!Number.isFinite(a.duration)||!Number.isFinite(b.duration)||!a.width||!b.width||Math.abs(a.duration-b.duration)>.12||Math.abs(a.width/a.height-b.width/b.height)>.01)throw new Error(u('動画の長さまたは縦横比が原本と異なります。','Duration or aspect ratio differs from master.'));
         if(assetRegistry.get(src)!==master||!panel.open)return;
-        candidate=null;deliveryVideos.set(src,{blob,name:file.name});
+        candidate=null;choices=[];deliveryVideos.set(src,{blob,name:file.name});
       }catch(e){await appAlert(String(e));}finally{pick.value='';pick.disabled=false;update();}};
       const encode=document.createElement('button'), cancel=document.createElement('button'), quality=document.createElement('select'), status=document.createElement('p');
       encode.type=cancel.type='button';encode.textContent=u('試験圧縮（WebM）','Experimental encode (WebM)');cancel.textContent=u('中止','Cancel');cancel.disabled=true;
-      for(const [v,t] of [['ahako','AHAKO — 実機画質優先（試験）'],['auto','AUTO — 画質優先'],['deep','DEEP — 圧縮限界探索（低速）'],['0.75','QUALITY 75%'],['0.45','BALANCED 45%'],['0.22','ULTRA 22%']]){const o=document.createElement('option');o.value=v;o.textContent=t;quality.append(o);}quality.value='ahako';
-      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideo(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){if(candidate)candidate.error=String(e);status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
+      for(const [v,t] of [['ahako','AHAKO — 実機画質優先・候補比較'],['auto','AUTO — 画質優先'],['deep','DEEP — 圧縮限界探索（低速）'],['0.75','QUALITY 75%'],['0.45','BALANCED 45%'],['0.22','ULTRA 22%']]){const o=document.createElement('option');o.value=v;o.textContent=t;quality.append(o);}quality.value='ahako';
+      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideo(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
       cancel.onclick=()=>activeEncode?.abort();
       row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();
     }
