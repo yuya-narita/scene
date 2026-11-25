@@ -174,8 +174,44 @@
         const tail=terminalTail(ids.at(-1),ids.at(-2),occupied);
         ids.unshift(...head.reverse());ids.push(...tail);
       }
+      // Correct only the neighbourhood of a graph junction after the author
+      // has chosen the complete stroke. Use logical canvas units (zoom independent).
+      const route=ids.map(i=>nodes[i].p.slice()), arc=[0];
+      const logical=(a,b)=>Math.hypot((a[0]-b[0])*1000/sx,(a[1]-b[1])*600/sy);
+      for(let k=1;k<route.length;k++)arc.push(arc[k-1]+logical(route[k],route[k-1]));
+      const zones=[];
+      for(let k=1;k<ids.length-1;k++){
+        const n=nodes[ids[k]];
+        if(n.adj.length<3 && !n.adj.some(j=>nodes[j].st!==n.st))continue;
+        const rad=Math.max(4,Math.min(24,n.p[2]*.85));
+        let a=k,b=k;
+        while(a>0&&arc[k]-arc[a]<rad)a--;
+        while(b<ids.length-1&&arc[b]-arc[k]<rad)b++;
+        if(a===0||b===ids.length-1)continue;
+        const last=zones.at(-1);
+        if(last&&a<=last[1])last[1]=Math.max(last[1],b);else zones.push([a,b]);
+      }
+      for(const [a,b] of zones){
+        const span=arc[b]-arc[a];if(span<1||span>48)continue;
+        const A=route[a],B=route[b],chord=logical(A,B);
+        if(chord<span*.75)continue; // preserve corners and loops
+        let l=a-1,r=b+1;
+        while(l>0&&arc[a]-arc[l]<6)l--;
+        while(r<route.length-1&&arc[r]-arc[b]<6)r++;
+        const L=route[l],R=route[r],dl=arc[a]-arc[l],dr=arc[r]-arc[b];
+        if(dl<.1||dr<.1)continue;
+        for(let k=a+1;k<b;k++){
+          const t=(arc[k]-arc[a])/span,t2=t*t,t3=t2*t;
+          const q=[0,1].map(d=>(2*t3-3*t2+1)*A[d]+(t3-2*t2+t)*(A[d]-L[d])*span/dl+(-2*t3+3*t2)*B[d]+(t3-t2)*(R[d]-B[d])*span/dr);
+          const shift=logical(q,route[k]);
+          const cap=Math.min(5,Math.max(1,route[k][2]*.22));
+          const mix=shift>cap?cap/shift:1;
+          route[k][0]+=(q[0]-route[k][0])*mix;route[k][1]+=(q[1]-route[k][1])*mix;
+          route[k][2]=A[2]+(B[2]-A[2])*t;
+        }
+      }
       const unit=v=>Math.round(Math.max(0,Math.min(1,v))*10000)/10000,points=[],widths=[];
-      for(const i of ids){const n=nodes[i],p=[unit(n.p[0]/sx),unit(n.p[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(n.p[2]||n.st.width);}}
+      for(let k=0;k<ids.length;k++){const n=nodes[ids[k]],q=route[k],p=[unit(q[0]/sx),unit(q[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(q[2]||n.st.width);}}
       if(!points.length||g.length>3&&points.length<2)return null;
       const base=Math.max(1,Math.min(80,Math.max(...widths)/2.5));
       return {...brush,pen:"brush",tip:"round",width:base,points:points.map((p,i)=>[...p,Math.max(0,Math.min(1,(widths[i]/base-.5)/2))])};
