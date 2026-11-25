@@ -8131,17 +8131,38 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 // Phase 3.1: page video is separate from static cover art and ending logo.
 (function(global){
  const P=global.ScenePlayerCore?.prototype;if(!P)return;
+ const iosPageLoop=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ function stopPageVideo(v){clearInterval(v._ahPageWatch);v._ahPageWatch=null;v.onended=null;v.onseeked=null;v.pause();v.removeAttribute('src');v.load();}
+ function guardPageVideo(v,root){
+  if(!iosPageLoop||v._ahPageWatch)return;
+  v.loop=false;
+  const active=()=>v.isConnected&&!root.hidden&&!document.hidden&&!v.error&&!!v.getAttribute('src');
+  const play=()=>{if(active())v.play()?.catch(()=>{});};
+  const restart=()=>{if(!active()||v.seeking)return;try{v.currentTime=0;}catch(_){}play();};
+  v.onended=restart;v.onseeked=()=>{if(v.paused)play();};
+  let last=-1,still=0,attempts=0;
+  v._ahPageWatch=setInterval(()=>{
+   if(!v.isConnected||root.hidden){clearInterval(v._ahPageWatch);v._ahPageWatch=null;return;}
+   if(!active()||v.seeking){still=0;return;}
+   const t=v.currentTime,d=v.duration;
+   if(Math.abs(t-last)>.02){still=0;attempts=0;}else still++;
+   last=t;
+   if(still<3||attempts>=3)return;
+   if(v.ended||(Number.isFinite(d)&&t>=d-.15)){attempts++;still=0;restart();}
+   else if(v.paused&&v.readyState>=2){attempts++;still=0;play();}
+  },250);
+ }
  P._syncPageVideos=function(){
   for(const page of ['cover','ending']){
    const root=this.els?.[page];if(!root)continue;
    const target=page==='cover'?this.els.coverBg:root;
    const cfg=this.document?.[page]?.backgroundVideo;
    let layer=target.querySelector(':scope > .sp-page-video-layer');
-   if(root.hidden||!cfg?.src){if(layer){const v=layer.querySelector('video');v.pause();v.removeAttribute('src');v.load();layer.remove();}continue;}
+   if(root.hidden||!cfg?.src){if(layer){const v=layer.querySelector('video');stopPageVideo(v);layer.remove();}continue;}
    if(!layer){layer=document.createElement('div');layer.className='sp-page-video-layer';Object.assign(layer.style,{position:'absolute',inset:'0',overflow:'hidden',pointerEvents:'none',zIndex:page==='ending'?'-1':'0'});const v=document.createElement('video');v.muted=true;v.defaultMuted=true;v.playsInline=true;v.loop=true;v.preload='metadata';Object.assign(v.style,{width:'100%',height:'100%',display:'block'});layer.append(v);target.prepend(layer);}
-   const v=layer.querySelector('video');v.style.objectFit=cfg.fit==='contain'?'contain':'cover';v.style.objectPosition=cfg.position||'center center';if(v.getAttribute('src')!==cfg.src){v.src=cfg.src;v.play()?.catch(()=>{});}else if(v.paused)v.play()?.catch(()=>{});
+   const v=layer.querySelector('video');guardPageVideo(v,root);v.style.objectFit=cfg.fit==='contain'?'contain':'cover';v.style.objectPosition=cfg.position||'center center';if(v.getAttribute('src')!==cfg.src){v.src=cfg.src;v.play()?.catch(()=>{});}else if(v.paused)v.play()?.catch(()=>{});
   }
  };
  for(const key of ['load','refreshDocumentChrome','showCover','finish']){const old=P[key];if(!old)continue;P[key]=function(){const result=old.apply(this,arguments);if(!this._pageVideoObserver&&this.els?.cover&&this.els?.ending){this._pageVideoObserver=new MutationObserver(()=>this._syncPageVideos());for(const page of ['cover','ending'])this._pageVideoObserver.observe(this.els[page],{attributes:true,attributeFilter:['hidden']});}this._syncPageVideos();return result;};}
- const destroy=P.destroy;P.destroy=function(){this._pageVideoObserver?.disconnect();this._pageVideoObserver=null;for(const page of ['cover','ending']){const root=this.els?.[page];const layer=root?.querySelector('.sp-page-video-layer');if(layer){const v=layer.querySelector('video');v.pause();v.removeAttribute('src');v.load();layer.remove();}}return destroy.apply(this,arguments);};
+ const destroy=P.destroy;P.destroy=function(){this._pageVideoObserver?.disconnect();this._pageVideoObserver=null;for(const page of ['cover','ending']){const root=this.els?.[page];const layer=root?.querySelector('.sp-page-video-layer');if(layer){const v=layer.querySelector('video');stopPageVideo(v);layer.remove();}}return destroy.apply(this,arguments);};
 })(typeof window!=='undefined'?window:globalThis);
