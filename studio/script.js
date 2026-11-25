@@ -2168,6 +2168,7 @@
   // value: Blob/File + original filename. This lets Package Export carry the
   // actual binary data instead of only the blob: reference.
   const assetRegistry = new Map();
+  const deliveryVideos = new Map(); // Session-only, never serialized into Master.
 
   function registerAsset(url, blob, name='asset'){
     if(!url || !blob)return;
@@ -2199,6 +2200,7 @@
     liveEditSheetBody?.replaceChildren();desktopLivePanelBody?.replaceChildren();
     undoHistory=[];redoHistory=[];undoSnapshot=null;syncHistoryUi();
     latestDraftSummary=null;pendingUnpublishDraft=null;sceneBackgroundPositionContext=null;
+    deliveryVideos.clear();
     assetRegistry.forEach((_,url)=>{
       if(keepAssetUrls.has(url))return;
       if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}
@@ -6543,9 +6545,9 @@ async function makeStoreZip(entries,onProgress=null){
     if(episodeNumberInput)episodeNumberInput.value=String(episodeNumber);
   }
 
-  async function uploadPublishAsset(src){
+  async function uploadPublishAsset(src, override=null){
     if(!src || !/^blob:/i.test(src))return src;
-    const item=assetRegistry.get(src);
+    const item=override||assetRegistry.get(src);
     if(!item?.blob)throw new Error(`Local asset is unavailable: ${item?.name||'asset'}`);
 
     const response=await fetch(`${SCENE_STUDIO_API_BASE}/asset`,{
@@ -6616,6 +6618,42 @@ async function makeStoreZip(entries,onProgress=null){
     }catch(e){await appAlert(String(e));}finally{button.disabled=false;}
   }
 
+  function deliveryVideoMetadata(blob){
+    return new Promise((resolve,reject)=>{
+      const video=document.createElement('video'), url=URL.createObjectURL(blob);
+      let timer;
+      const finish=(error)=>{clearTimeout(timer);const meta={duration:video.duration,width:video.videoWidth,height:video.videoHeight};video.onloadedmetadata=null;video.onerror=null;video.removeAttribute('src');video.load();URL.revokeObjectURL(url);if(error)reject(error);else resolve(meta);};
+      video.preload='metadata';video.muted=true;video.playsInline=true;
+      video.onloadedmetadata=()=>finish();video.onerror=()=>finish(new Error('Video metadata unavailable'));
+      timer=setTimeout(()=>finish(new Error('Video metadata timeout')),15000);video.src=url;
+    });
+  }
+  function showDeliveryVideoSettings(){
+    const doc=workingDocument||buildSceneDocument(), refs=new Map();
+    walkAssetRefs(doc,ref=>{if(isPublishVideoRef(ref)&&assetRegistry.get(ref.src)?.blob)refs.set(ref.src,ref);});
+    const panel=document.createElement('dialog');panel.style.cssText='width:min(90vw,560px);max-height:80vh;overflow:auto;padding:20px;color:inherit;background:Canvas;border:1px solid #888;border-radius:12px';
+    const heading=document.createElement('h3');heading.textContent=u('公開用動画（DELIVERY）','Delivery videos');panel.append(heading);
+    const note=document.createElement('p');note.textContent=u('試験版：設定は現在の編集セッションのみ有効です。保存・再読み込み後は再指定してください。原本は変更しません。音声・映像内容が同じ軽量版を指定してください。','Experimental: session only; reselect after reopening. Master stays unchanged. Select a smaller version with matching content and audio.');panel.append(note);
+    const mb=n=>(n/1000000).toFixed(2)+' MB';
+    for(const [src,ref] of refs){
+      const master=assetRegistry.get(src), row=document.createElement('div');row.style.cssText='border-top:1px solid #888;padding:12px 0;overflow-wrap:anywhere';
+      const label=document.createElement('p'), pick=document.createElement('input'), reset=document.createElement('button');pick.type='file';pick.accept='video/mp4,video/webm,.mp4,.webm';reset.type='button';reset.textContent=u('原本に戻す','Use master');
+      const update=()=>{const d=deliveryVideos.get(src);label.textContent=master.name+' | MASTER '+mb(master.blob.size)+' → DELIVERY '+mb(d?.blob.size??master.blob.size)+(d?' ('+d.name+')':'');reset.disabled=!d;};
+      reset.onclick=()=>{deliveryVideos.delete(src);update();};
+      pick.onchange=async()=>{const file=pick.files?.[0];if(!file)return;pick.disabled=true;reset.disabled=true;try{
+        const mime=/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':'';
+        if(!mime||file.size>=master.blob.size)throw new Error(u('原本より小さいMP4/WebMを指定してください。','Choose a smaller MP4/WebM.'));
+        const blob=file.slice(0,file.size,mime), [a,b]=await Promise.all([deliveryVideoMetadata(master.blob),deliveryVideoMetadata(blob)]);
+        if(!Number.isFinite(a.duration)||!Number.isFinite(b.duration)||!a.width||!b.width||Math.abs(a.duration-b.duration)>.12||Math.abs(a.width/a.height-b.width/b.height)>.01)throw new Error(u('動画の長さまたは縦横比が原本と異なります。','Duration or aspect ratio differs from master.'));
+        if(assetRegistry.get(src)!==master||!panel.open)return;
+        deliveryVideos.set(src,{blob,name:file.name});
+      }catch(e){await appAlert(String(e));}finally{pick.value='';pick.disabled=false;update();}};
+      row.append(label,pick,reset);panel.append(row);update();
+    }
+    if(!refs.size){const empty=document.createElement('p');empty.textContent=u('ローカル動画がありません。','No local videos.');panel.append(empty);}
+    const close=document.createElement('button');close.type='button';close.textContent=u('閉じる','Close');close.onclick=()=>panel.close();panel.append(close);panel.addEventListener('close',()=>panel.remove(),{once:true});document.body.append(panel);panel.showModal();
+  }
+
   async function prepareDocumentForPublish(sceneDocument){
     const hosted=stripPrivateMasterIdentity(sceneDocument);
     const cache=new Map();
@@ -6627,14 +6665,15 @@ async function makeStoreZip(entries,onProgress=null){
       if(!/^blob:/i.test(ref.src))continue;
       let hostedUrl=cache.get(ref.src);
       if(!hostedUrl){
-        const blob=assetRegistry.get(ref.src)?.blob;
+        const delivery=isPublishVideoRef(ref)?deliveryVideos.get(ref.src):null;
+        const blob=delivery?.blob||assetRegistry.get(ref.src)?.blob;
         if(blob&&isPublishVideoRef(ref)){
           const key=blob.size+':'+blob.type;
           const group=videoUploads.get(key)||[];
           for(const candidate of group){
             if(await sameVideoBlob(blob,candidate.blob)){hostedUrl=candidate.url;break;}
           }
-          if(!hostedUrl){hostedUrl=await uploadPublishAsset(ref.src);group.push({blob,url:hostedUrl});videoUploads.set(key,group);}
+          if(!hostedUrl){hostedUrl=await uploadPublishAsset(ref.src,delivery);group.push({blob,url:hostedUrl});videoUploads.set(key,group);}
         }else hostedUrl=await uploadPublishAsset(ref.src);
         cache.set(ref.src,hostedUrl);
       }
@@ -14215,6 +14254,7 @@ function openDesktopBackgroundDetail(){
 
     const sizeButton=desktopAction(u('作品の素材容量を確認','Check work asset sizes'),()=>showWorkAssetSizes(sizeButton));
     sourceSec.appendChild(sizeButton);
+    sourceSec.appendChild(desktopAction(u('公開用動画を設定（試験）','Set delivery videos (experimental)'),showDeliveryVideoSettings));
 
     // Framing row: position control + background size, aligned as two equal fields.
     const sourcePositionGrid=two(sourceSec);
