@@ -13,3 +13,31 @@
 .draw-editor input[type=number]{width:5em}
 .draw-map{position:relative;width:min(180px,40vw);aspect-ratio:9/16;background:#dedbd3;overflow:hidden;touch-action:none;margin:8px auto}
 .draw-map canvas{position:absolute;pointer-events:none}
+/* Phase 5.0: scoped controls; do not inherit Studio's large form widgets. */
+.draw-editor[open]{width:min(900px,100vw);height:min(900px,100dvh);gap:8px;padding:12px;font:14px/1.4 system-ui,sans-serif}
+.draw-editor .draw-modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:#eae8e3;padding:4px;border-radius:9px;flex:none}
+.draw-editor button,.draw-editor select,.draw-editor input{box-sizing:border-box;font:inherit;min-width:0;min-height:0;margin:0;letter-spacing:normal}
+.draw-editor button,.draw-editor select,.draw-editor input[type=number],.draw-editor input[type=file]{border:1px solid #d0cec8;border-radius:6px;background:#fff;color:#292825;padding:6px 9px;min-height:34px;height:auto;width:auto;box-shadow:none}
+.draw-editor button:disabled{opacity:.45}
+.draw-editor button[data-action=save],.draw-editor .draw-modes button[aria-pressed=true]{background:#30302e;color:white;border-color:#30302e}
+.draw-editor .draw-modes button{padding:6px 2px;font-size:13px;border-color:transparent}
+.draw-editor .draw-window{flex:1 0 37%;min-height:140px;border-radius:7px}
+.draw-editor .draw-scroll{flex:0 1 auto;min-height:0;padding:0 2px 4px;overflow:auto}
+.draw-editor .draw-toolbar{flex:none;justify-content:flex-start;padding:0;gap:5px}
+.draw-editor output{display:block;min-height:18px;font-size:12px;color:#666;flex:none}
+.draw-editor details{border:1px solid #dedbd5;border-radius:8px;padding:6px 9px;margin:6px 0;background:#fff}
+.draw-editor details[hidden]{display:none!important}
+.draw-editor summary{font-weight:600;cursor:pointer;padding:5px 0}
+.draw-editor .draw-row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.draw-editor .draw-row label{display:flex;flex-direction:column;align-items:flex-start;gap:4px;white-space:normal;font-size:12px;flex:0 1 auto;width:auto;min-width:0;max-width:100%;padding:0;margin:0}
+.draw-editor .draw-row label:has(input[type=checkbox]){flex-direction:row;align-items:center;gap:6px;min-height:30px}
+.draw-editor input[type=checkbox]{appearance:auto!important;width:18px!important;height:18px!important;min-width:18px!important;min-height:18px!important;max-width:18px!important;padding:0!important;flex:none;accent-color:#333}
+.draw-editor input[type=color]{width:42px;height:34px;padding:3px;border:1px solid #ccc;border-radius:6px;background:white}
+.draw-editor input[type=number]{width:76px;max-width:100%}
+.draw-editor input[type=file]{width:100%;flex:1 1 100%;font-size:12px}
+.draw-editor small{display:block;color:#666;font-size:12px;line-height:1.5}
+.draw-editor [data-reader]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;border-top:1px solid #eee;margin-top:8px;padding-top:8px}
+.draw-editor [data-reader] label{min-width:0;max-width:100%}
+.draw-editor [data-reader] select{width:100%}
+.draw-editor .draw-pen,.draw-editor .draw-view{border-bottom:1px solid #dedbd5;padding:8px 2px}
+@media(max-width:520px){.draw-editor[open]{border-radius:0;padding:8px;gap:6px}.draw-editor .draw-window{flex-basis:35%}.draw-editor .draw-toolbar button{font-size:12px;padding:5px 7px}.draw-editor .draw-row{gap:7px}.draw-editor select,.draw-editor input[type=number]{font-size:16px}.draw-editor .draw-modes button{font-size:12px}.draw-editor header button{font-size:13px}}
