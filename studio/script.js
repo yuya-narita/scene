@@ -6721,6 +6721,46 @@ async function makeStoreZip(entries,onProgress=null){
     }
     return result;
   }
+  // Phase 3.3.0: read-only structural inventory. Explicit references are not
+  // proof of runtime coverage (carry, seeking, panorama and inheritance).
+  async function inspectVideoStructure(doc){
+    const groups=new Map();
+    walkAssetRefs(doc,ref=>{
+      if(!isPublishVideoRef(ref))return;
+      if(!groups.has(ref.src))groups.set(ref.src,[]);
+      groups.get(ref.src).push(ref);
+    });
+    const rows=[];
+    for(const [src,refs] of groups){
+      const master=assetRegistry.get(src), delivery=deliveryVideos.get(src);
+      let meta=null;
+      if(master?.blob)try{meta=await deliveryVideoMetadata(master.blob);}catch(_){}
+      const duration=Number.isFinite(meta?.duration)?meta.duration:null;
+      const uses=refs.map(ref=>{
+        const page=ref.kind!=='background', cfg=page?{}:ref.holder.video||{};
+        const start=page?0:Number(cfg.start??0), end=page||cfg.end==null||cfg.end===''?duration:Number(cfg.end);
+        return {label:ref.kind==='coverVideo'?u('表紙','Cover'):ref.kind==='endingVideo'?u('読了','Ending'):'Scene '+(ref.sceneIndex+1),start,end,continuity:page?'page':cfg.continuity||'carry'};
+      });
+      rows.push({name:master?.name||refs[0].fileName||u('外部動画','Remote video'),bytes:master?.blob?.size??null,deliveryBytes:delivery?.blob?.size??null,duration,uses});
+    }
+    return rows;
+  }
+  async function showVideoStructure(button){
+    button.disabled=true;
+    try{
+      const rows=await inspectVideoStructure(workingDocument||buildSceneDocument());
+      const mb=n=>n==null?'—':(n/1000000).toFixed(2)+' MB';
+      const sec=n=>Number.isFinite(n)?n.toFixed(2)+'s':'?';
+      const panel=document.createElement('dialog');panel.dataset.deliveryMonitor='1';panel.style.cssText='width:min(90vw,640px);max-height:80vh;overflow:auto;padding:20px;background:Canvas;color:CanvasText;border:1px solid #888;border-radius:12px';
+      const add=(tag,text,parent=panel)=>{const el=document.createElement(tag);el.textContent=text;parent.append(el);return el;};
+      add('h3',u('動画の構造分析（試験）','Video structure analysis (trial)'));
+      add('p',u('動画参照数: ','Video references: ')+rows.reduce((n,r)=>n+r.uses.length,0)+u(' / 異なる参照先: ',' / Distinct sources: ')+rows.length);
+      add('p',u('明示された設定のみを表示します。継承・継続再生・シークを考慮した実使用区間ではありません。切り詰めや再圧縮は行いません。','Explicit settings only, not actual runtime coverage. No trimming or re-encoding.'));
+      for(const r of rows){const section=add('section','');section.style.cssText='border-top:1px solid #aaa;padding:12px 0;overflow-wrap:anywhere';add('strong',r.name,section);add('p','MASTER '+mb(r.bytes)+' / DELIVERY '+mb(r.deliveryBytes)+' / '+sec(r.duration),section);for(const use of r.uses)add('div',use.label+' | '+sec(use.start)+' – '+sec(use.end)+' | '+use.continuity,section);}
+      const close=add('button',u('閉じる','Close'));close.type='button';close.onclick=()=>panel.close();panel.addEventListener('close',()=>panel.remove(),{once:true});document.body.append(panel);panel.showModal();
+    }catch(e){await appAlert(String(e));}finally{button.disabled=false;}
+  }
+
   async function showWorkAssetSizes(button){
     button.disabled=true;
     try{
@@ -6993,6 +7033,7 @@ async function makeStoreZip(entries,onProgress=null){
     const restored=new Set();for(const src of refs.keys()){if(!deliveryVideos.has(src)&&await restoreDeliveryVideo(src))restored.add(src);}
     const panel=document.createElement('dialog');panel.dataset.deliveryMonitor='1';panel.style.cssText='width:min(90vw,560px);max-height:80vh;overflow:auto;padding:20px;color:inherit;background:Canvas;border:1px solid #888;border-radius:12px';
     const heading=document.createElement('h3');heading.textContent=u('公開用動画（DELIVERY）','Delivery videos');panel.append(heading);
+    const structureButton=document.createElement('button');structureButton.type='button';structureButton.textContent=u('動画の構造分析（試験）','Video structure analysis');structureButton.onclick=()=>showVideoStructure(structureButton);panel.append(structureButton);
     const note=document.createElement('p');note.textContent=u('圧縮済みの採用動画はこのブラウザに保存され、同じ原本で再利用されます。原本は変更しません。手動指定ファイルはセッション限定です。','Accepted encodes are cached in this browser and reused for identical masters. Master stays unchanged. External overrides are session-only.');panel.append(note);
     const mb=n=>(n/1000000).toFixed(2)+' MB';
     let activeEncode=null;
