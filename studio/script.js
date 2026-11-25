@@ -6564,9 +6564,62 @@ async function makeStoreZip(entries,onProgress=null){
     return payload.url;
   }
 
+  // Phase 3.2: bounded-memory exact comparison; never change original bytes.
+  function isPublishVideoRef(ref){
+    return ref.kind==='coverVideo'||ref.kind==='endingVideo'||
+      (ref.kind==='background'&&(ref.holder.mediaType==='video'||isVideoBackground(ref.src,ref.fileName)));
+  }
+  async function sameVideoBlob(a,b){
+    if(a===b)return true;
+    if(a.size!==b.size||a.type!==b.type)return false;
+    const chunk=1024*1024;
+    for(let offset=0;offset<a.size;offset+=chunk){
+      const [x,y]=await Promise.all([a.slice(offset,offset+chunk).arrayBuffer(),b.slice(offset,offset+chunk).arrayBuffer()]);
+      if(!sameAssetBytes(new Uint8Array(x),new Uint8Array(y)))return false;
+    }
+    return true;
+  }
+  async function inspectWorkAssetSizes(doc){
+    const refs=[];walkAssetRefs(doc,ref=>refs.push(ref));
+    const seen=new Set(),videos=new Map();
+    const result={references:refs.length,localAssets:0,localBytes:0,videoAssets:0,videoBytes:0,duplicateVideoBytes:0,unknownAssets:0,sceneJsonBytes:new Blob([JSON.stringify(doc)]).size};
+    for(const ref of refs){
+      if(seen.has(ref.src))continue;seen.add(ref.src);
+      const blob=assetRegistry.get(ref.src)?.blob;
+      if(!blob){result.unknownAssets++;continue;}
+      result.localAssets++;result.localBytes+=blob.size;
+      if(!isPublishVideoRef(ref))continue;
+      result.videoAssets++;result.videoBytes+=blob.size;
+      const key=blob.size+':'+blob.type, group=videos.get(key)||[];
+      let duplicate=false;
+      for(const candidate of group){if(await sameVideoBlob(blob,candidate)){duplicate=true;break;}}
+      if(duplicate)result.duplicateVideoBytes+=blob.size;
+      else{group.push(blob);videos.set(key,group);}
+    }
+    return result;
+  }
+  async function showWorkAssetSizes(button){
+    button.disabled=true;
+    try{
+      const r=await inspectWorkAssetSizes(workingDocument||buildSceneDocument());
+      const mb=n=>(n/1000000).toFixed(2)+' MB';
+      await appAlert([
+        u('ローカル素材容量（参照中のみ）','Referenced local asset sizes'),
+        u('素材合計: ','Assets: ')+mb(r.localBytes)+' / '+r.localAssets,
+        u('動画合計: ','Videos: ')+mb(r.videoBytes)+' / '+r.videoAssets,
+        u('重複動画削減見込み: ','Duplicate video savings: ')+mb(r.duplicateVideoBytes),
+        u('重複排除後の動画: ','Unique videos: ')+mb(r.videoBytes-r.duplicateVideoBytes),
+        u('設計データ概算: ','Scene JSON estimate: ')+mb(r.sceneJsonBytes),
+        u('容量未計測の外部・未登録素材: ','Unmeasured remote/unregistered assets: ')+r.unknownAssets,
+        u('ZIP容量・通信量とは異なります。原本は変更しません。','Not ZIP size or transfer usage. Originals are unchanged.')
+      ].join('\n'));
+    }catch(e){await appAlert(String(e));}finally{button.disabled=false;}
+  }
+
   async function prepareDocumentForPublish(sceneDocument){
     const hosted=stripPrivateMasterIdentity(sceneDocument);
     const cache=new Map();
+    const videoUploads=new Map();
     const refs=[];
     walkAssetRefs(hosted,ref=>refs.push(ref));
 
@@ -6574,7 +6627,15 @@ async function makeStoreZip(entries,onProgress=null){
       if(!/^blob:/i.test(ref.src))continue;
       let hostedUrl=cache.get(ref.src);
       if(!hostedUrl){
-        hostedUrl=await uploadPublishAsset(ref.src);
+        const blob=assetRegistry.get(ref.src)?.blob;
+        if(blob&&isPublishVideoRef(ref)){
+          const key=blob.size+':'+blob.type;
+          const group=videoUploads.get(key)||[];
+          for(const candidate of group){
+            if(await sameVideoBlob(blob,candidate.blob)){hostedUrl=candidate.url;break;}
+          }
+          if(!hostedUrl){hostedUrl=await uploadPublishAsset(ref.src);group.push({blob,url:hostedUrl});videoUploads.set(key,group);}
+        }else hostedUrl=await uploadPublishAsset(ref.src);
         cache.set(ref.src,hostedUrl);
       }
       ref.holder[ref.key]=hostedUrl;
@@ -14151,6 +14212,9 @@ function openDesktopBackgroundDetail(){
       grid.append(desktopDetailSelect(u('動画音量','Volume'),Array.from({length:11},(_,i)=>[String(i/10),i*10+'%']),String(cfg.volume??1),v=>change('volume',Number(v))));
     }
 
+
+    const sizeButton=desktopAction(u('作品の素材容量を確認','Check work asset sizes'),()=>showWorkAssetSizes(sizeButton));
+    sourceSec.appendChild(sizeButton);
 
     // Framing row: position control + background size, aligned as two equal fields.
     const sourcePositionGrid=two(sourceSec);
