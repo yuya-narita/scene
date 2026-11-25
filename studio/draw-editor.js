@@ -17,7 +17,7 @@
       <div class="draw-row"><button data-action="undo">一筆戻す</button><button data-action="redo">やり直す</button>
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
-      <details><summary>SCRATCH TRACE（原画再現・試験版）</summary><div class="draw-row"><input name="scratchFile" type="file" accept="image/png,image/jpeg,image/webp"><button data-action="scratch-load">原画を読み込む</button><button data-action="scratch-off">筆跡モードに戻す</button></div><small>薄い原画をなぞると、その部分だけ現れます。太さで露出範囲を調整。白背景は透明化します。</small><div class="draw-row" data-reader><label><input name="readerEnabled" type="checkbox">読者が削る</label><label>マスク<select name="readerMask"><option value="dust">埃</option><option value="sand">砂・土</option><option value="fog">曇りガラス</option><option value="frost">霜・氷</option><option value="silver">銀箔</option><option value="black">黒塗り</option><option value="none">なし</option></select></label><label>濃度（%）<input name="readerDensity" type="number" min="0" max="100" value="90"></label><label>完了率（%）<input name="readerThreshold" type="number" min="1" max="100" value="80"></label><label><input name="readerGuide" type="checkbox">下絵を薄く表示</label><label><input name="readerSkip" type="checkbox">途中で次へ進むことを許可</label></div><small>本文Scene用。作者が削った部分を初期状態として引き継ぎます。再生確認で読者操作を試せます。</small></details>
+      <details><summary>SCRATCH TRACE（原画再現・試験版）</summary><div class="draw-row"><input name="scratchFile" type="file" accept="image/png,image/jpeg,image/webp"><button data-action="scratch-load">原画を読み込む</button><button data-action="scratch-off">筆跡モードに戻す</button></div><small>薄い原画をなぞると、その部分だけ現れます。太さで露出範囲を調整。白背景は透明化します。</small><div class="draw-row" data-reader><label><input name="readerEnabled" type="checkbox">読者が削る</label><label>範囲<select name="readerScope"><option value="image">原画のみ</option><option value="screen">画面全体（画像不要）</option></select></label><label>マスク<select name="readerMask"><option value="web">蜘蛛の巣</option><option value="dust">埃</option><option value="sand">砂・土</option><option value="fog">曇りガラス</option><option value="frost">霜・氷</option><option value="silver">銀箔</option><option value="black">黒塗り</option><option value="none">なし</option></select></label><label>濃度（%）<input name="readerDensity" type="number" min="0" max="100" value="90"></label><label>完了率（%）<input name="readerThreshold" type="number" min="1" max="100" value="80"></label><label><input name="readerGuide" type="checkbox">下絵を薄く表示</label><label><input name="readerSkip" type="checkbox">途中で次へ進むことを許可</label></div><small>表紙・本文・読了対応。作者が削った部分を初期状態として引き継ぎます。再生確認で読者操作を試せます。</small></details>
       <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>なぞった筆跡で確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線を大まかになぞります。下絵の連続経路に強制吸着し、短い筆先を補完します。ペンを離すまでが一筆です。</small></details>
       <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="precise">原画重視（Phase 3.4）</option><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
@@ -50,6 +50,7 @@
     field('seconds').value=layer.seconds||5;
     field('sceneZoom').value=[1,1.5,2,3].includes(layer.width/baseWidth)?String(layer.width/baseWidth):'custom';
     field('readerEnabled').checked=!!layer.readerScratch?.enabled;
+    field('readerScope').value=layer.readerScratch?.scope||'image';
     field('readerThreshold').value=layer.readerScratch?.threshold??80;
     field('readerGuide').checked=!!layer.readerScratch?.guide;
     field('readerMask').value=layer.readerScratch?.mask||'dust';
@@ -67,7 +68,7 @@
     }
     function redraw(){
       stopReaderPreview();cancelAnimationFrame(preview);
-      find('[data-reader]').hidden=!layer.scratchImage;
+      find('[data-reader]').hidden=false;
       redrawInk();
       if(layer.scratchImage&&scratchGuide?.complete&&scratchGuide.naturalWidth){
         const ctx=canvas.getContext('2d');ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalCompositeOperation='destination-over';ctx.globalAlpha=.22;ctx.drawImage(scratchGuide,0,0,canvas.width,canvas.height);ctx.restore();
@@ -97,7 +98,7 @@
     }
     dialog.addEventListener('change',e=>{
       const input=e.target,n=input.name;
-      if(n?.startsWith('reader')){layer.readerScratch={enabled:field('readerEnabled').checked,threshold:Number(field('readerThreshold').value)||80,guide:field('readerGuide').checked,allowSkip:field('readerSkip').checked,mask:field('readerMask').value,density:Math.max(0,Math.min(100,Number(field('readerDensity').value)))};redraw();return;}
+      if(n?.startsWith('reader')){layer.readerScratch={enabled:field('readerEnabled').checked,scope:field('readerScope').value,threshold:Number(field('readerThreshold').value)||80,guide:field('readerGuide').checked,allowSkip:field('readerSkip').checked,mask:field('readerMask').value,density:Math.max(0,Math.min(100,Number(field('readerDensity').value)))};redraw();return;}
       if(!n||n.startsWith("trace")||n==='scratchFile')return;
       if(input.type==='number'&&(!input.value||!input.validity.valid)){input.reportValidity();return;}
       if(n==='sceneZoom'){
@@ -377,7 +378,7 @@
       if(action==='trace'){traceImage();return;}
       if(action==='save'){
         for(const i of dialog.querySelectorAll('input[type=number]:enabled'))if(!i.value||!i.reportValidity())return;
-        layer.brush={...brush};commit(layer.strokes.length||(layer.scratchImage&&layer.readerScratch?.enabled)?layer:null);dialog.close();return;
+        layer.brush={...brush};commit(layer.strokes.length||((layer.scratchImage||layer.readerScratch?.scope==='screen')&&layer.readerScratch?.enabled)?layer:null);dialog.close();return;
       }
       if(action==='undo'&&layer.strokes.length)redo.push(layer.strokes.pop());
       if(action==='redo'&&redo.length)layer.strokes.push(redo.pop());
@@ -385,7 +386,7 @@
       if(action==='restyle')for(const stroke of layer.strokes)Object.assign(stroke,brush);
       redraw();
       if(action==='preview'){
-        if(layer.scratchImage&&layer.readerScratch?.enabled){readerPreview=window.AhakoReaderScratch(canvas,{...layer,brush:{...brush},angle:0,height:100},()=>{find('output').textContent='スクラッチ完了';});find('output').textContent='読者スクラッチを試してください。';return;}
+        if((layer.scratchImage||layer.readerScratch?.scope==='screen')&&layer.readerScratch?.enabled){readerPreview=window.AhakoReaderScratch(canvas,{...layer,brush:{...brush},angle:0,height:100},()=>{find('output').textContent='スクラッチ完了';});find('output').textContent='読者スクラッチを試してください。';return;}
         const paint=window.AhakoDraw.painter(canvas,layer),start=performance.now();
         const frame=t=>{if(!paint.render(t-start))preview=requestAnimationFrame(frame);};
         preview=requestAnimationFrame(frame);
