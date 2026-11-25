@@ -15446,12 +15446,12 @@ function openDesktopTextDetail(){
 
   // Decorative ending logo: one managed asset and one display-width setting.
   function buildPageVideoEditor(page){
-    const card=desktopCard(u('動画背景（無音ループ）','Video background (muted loop)'));
+    const card=desktopCard(u('動画背景（無音）','Video background (muted)'));
     const render=()=>{card.querySelector('[data-page-video-controls]')?.remove();const body=document.createElement('div');body.dataset.pageVideoControls='1';card.append(body);
       const current=workingDocument?.[page]?.backgroundVideo;
       const save=()=>{syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();scheduleDraftSave(70);syncEasyPublishButton();render();};
-      body.append(desktopAction(current?.src?u('動画を変更','Change video'):u('動画を選択','Choose video'),()=>{const input=document.createElement('input');input.type='file';input.accept='video/mp4,video/webm,.mp4,.webm';input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{const snap=await snapshotPickedFile(file);captureUndo('動画背景');const src=URL.createObjectURL(snap.blob);registerAsset(src,snap.blob,snap.name);workingDocument[page] ||= {};workingDocument[page].backgroundVideo={src,_editorFileName:snap.name,fit:'cover',position:'center center'};save();}catch(e){appAlert(String(e));}};input.click();}));
-      if(current?.src){const label=document.createElement('div');label.textContent=current._editorFileName||'Video';body.append(label,desktopAction(u('動画を外す','Remove video'),()=>{captureUndo('動画背景');delete workingDocument[page].backgroundVideo;save();}));body.append(desktopMakeSelect(u('表示','Fit'),[['cover','cover'],['contain','contain']],current.fit||'cover',v=>{workingDocument[page].backgroundVideo.fit=v;save();}));}
+      body.append(desktopAction(current?.src?u('動画を変更','Change video'):u('動画を選択','Choose video'),()=>{const input=document.createElement('input');input.type='file';input.accept='video/mp4,video/webm,.mp4,.webm';input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{const snap=await snapshotPickedFile(file);captureUndo('動画背景');const src=URL.createObjectURL(snap.blob);registerAsset(src,snap.blob,snap.name);workingDocument[page] ||= {};workingDocument[page].backgroundVideo={src,_editorFileName:snap.name,fit:'cover',position:'center center',playback:current?.playback==='once'?'once':'loop'};save();}catch(e){appAlert(String(e));}};input.click();}));
+      if(current?.src){const label=document.createElement('div');label.textContent=current._editorFileName||'Video';body.append(label,desktopAction(u('動画を外す','Remove video'),()=>{captureUndo('動画背景');delete workingDocument[page].backgroundVideo;save();}));body.append(desktopMakeSelect(u('表示','Fit'),[['cover','cover'],['contain','contain']],current.fit||'cover',v=>{workingDocument[page].backgroundVideo.fit=v;save();}));body.append(desktopMakeSelect(u('再生方式','Playback'),[['loop',u('ループ再生','Loop')],['once',u('1回再生・最後で停止','Play once and hold')]],current.playback==='once'?'once':'loop',v=>{captureUndo('動画背景');workingDocument[page].backgroundVideo.playback=v;save();}));}
     };render();return card;
   }
   function buildEndingImageEditor(){
