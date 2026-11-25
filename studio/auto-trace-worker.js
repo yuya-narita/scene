@@ -37,6 +37,8 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
  const precise=mode==='precise';
  const widths=q.map((i,j)=>{const a=q[Math.max(0,j-3)],b=q[Math.min(q.length-1,j+3)],dx=b%w-a%w,dy=Math.floor(b/w)-Math.floor(a/w),len=Math.hypot(dx,dy);if(!len)return Math.max(1,(2*dist[i]-1)*scale);const nx=-dy/len,ny=dx/len,x=i%w,y=Math.floor(i/w);function edge(sign){let r=.5;for(;r<Math.min(100,dist[i]*3+8);r+=.5){const xx=Math.round(x+nx*r*sign),yy=Math.round(y+ny*r*sign);if(xx<0||xx>=w||yy<0||yy>=h||!original[yy*w+xx])break;}return r;}return Math.max(1,Math.min((edge(1)+edge(-1)-.5)*scale,(2*dist[i]+2)*scale));});
  let local=widths.map((v,j)=>{const a=widths.slice(Math.max(0,j-3),j+4).sort((a,b)=>a-b);return Math.min(v,a[Math.floor(a.length/2)]*1.35);});
+ const centers=q.map(i=>[i%w+.5,Math.floor(i/w)+.5]);
+ const corrected=new Uint8Array(q.length);
  // Width at a junction describes the union of ink, not an individual pen.
  // Mask its influence along the original skeleton before downsampling.
  if(precise){
@@ -58,12 +60,32 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
      const l=prev[j],r=next[j];if(l<0&&r<0)return v;
      if(l<0)return Math.min(v,measured[r]);if(r<0)return Math.min(v,measured[l]);
      const t=(arc[qi[j]]-arc[qi[l]])/Math.max(.001,arc[qi[r]]-arc[qi[l]]);
-     return Math.min(v,measured[l]*(1-t)+measured[r]*t);
+     return measured[l]*(1-t)+measured[r]*t;
    });
+   // Reconstruct only bounded junction spans. Keep shared graph endpoints
+   // intact so SMART TRACE can still traverse all incident branches.
+   for(let j=1;j<q.length-1;j++){
+     if(valid[j])continue;
+     const l=prev[j],r=next[j];if(l<0||r<0||r-l<2)continue;
+     const A=centers[l],B=centers[r],L=arc[qi[r]]-arc[qi[l]];
+     const chord=Math.hypot(B[0]-A[0],B[1]-A[1]);if(chord<1||chord/L<.78)continue;
+     const u=centers[Math.max(0,l-3)],v=centers[Math.min(q.length-1,r+3)];
+     const unit=(x,y)=>{const d=Math.hypot(x,y);return d>0?[x/d,y/d]:[(B[0]-A[0])/chord,(B[1]-A[1])/chord];};
+     const d0=unit(A[0]-u[0],A[1]-u[1]),d1=unit(v[0]-B[0],v[1]-B[1]);
+     const dx=(B[0]-A[0])/chord,dy=(B[1]-A[1])/chord;
+     if(d0[0]*dx+d0[1]*dy<.65||d1[0]*dx+d1[1]*dy<.65)continue;
+     const t=(arc[qi[j]]-arc[qi[l]])/L,t2=t*t,t3=t2*t;
+     const pos=[0,1].map(k=>(2*t3-3*t2+1)*A[k]+(t3-2*t2+t)*chord*d0[k]+(-2*t3+3*t2)*B[k]+(t3-t2)*chord*d1[k]);
+     const old=centers[j],delta=Math.hypot(pos[0]-old[0],pos[1]-old[1]);
+     const limit=Math.max(1,Math.min(4,dist[q[j]]*.55));
+     if(delta>limit){pos[0]=old[0]+(pos[0]-old[0])*limit/delta;pos[1]=old[1]+(pos[1]-old[1])*limit/delta;}
+     const x=Math.floor(pos[0]),y=Math.floor(pos[1]);
+     if(x>=0&&x<w&&y>=0&&y<h&&original[y*w+x]){centers[j]=pos;corrected[j]=1;}
+   }
  }
 
  const base=Math.max(1,Math.min(80,Math.max(...local)/2.5));
- const points=q.map((i,j)=>{let x=i%w+.5,y=Math.floor(i/w)+.5;if(mode!=='legacy'&&j>0&&j<q.length-1){const u=q[j-1],v=q[j+1];x=.7*x+.15*(u%w+v%w+1);y=.7*y+.15*(Math.floor(u/w)+Math.floor(v/w)+1);}return [+((ox+x*scale)/1000).toFixed(4),+((oy+y*scale)/600).toFixed(4),time+=8,precise?+Math.max(0,Math.min(1,(local[j]/base-.5)/2)).toFixed(4):.5];});time+=12;strokes.push({pen:precise?'brush':'ball',tip:'round',color:'#181818',width:+(precise?base:width).toFixed(2),opacity:1,points,releasedAt:time});count+=q.length;}
+ const points=q.map((i,j)=>{let [x,y]=centers[j];if(!corrected[j]&&mode!=='legacy'&&j>0&&j<q.length-1){const u=q[j-1],v=q[j+1];x=.7*x+.15*(u%w+v%w+1);y=.7*y+.15*(Math.floor(u/w)+Math.floor(v/w)+1);}return [+((ox+x*scale)/1000).toFixed(4),+((oy+y*scale)/600).toFixed(4),time+=8,precise?+Math.max(0,Math.min(1,(local[j]/base-.5)/2)).toFixed(4):.5];});time+=12;strokes.push({pen:precise?'brush':'ball',tip:'round',color:'#181818',width:+(precise?base:width).toFixed(2),opacity:1,points,releasedAt:time});count+=q.length;}
  self.postMessage({strokes,total,count});
  }catch(e){self.postMessage({error:String(e.message||e)});}
 };
