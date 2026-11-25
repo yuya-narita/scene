@@ -2235,10 +2235,10 @@
   let autoDeliveryEnabled=deliveryMode!=='off';
   const deliveryIdle=()=>deliveryMode==='eco'?10000:deliveryMode==='auto'?4000:1800;
   function interruptAutoDelivery(){if(!autoDeliveryRunning)return;const {src,controller}=autoDeliveryRunning;const master=assetRegistry.get(src);if(master)queueAutoDelivery(src,master);controller.abort();}
-  function deliveryActivity(){lastDeliveryActivity=performance.now();if(!deliveryForeground&&deliveryMode==='eco')interruptAutoDelivery();scheduleAutoDelivery();}
+  function deliveryActivity(){lastDeliveryActivity=performance.now();if(!deliveryForeground&&deliveryMode==='eco'&&autoDeliveryRunning){if(deliveryWorker)deliveryWorker.postMessage({type:'slow',ms:1500});else interruptAutoDelivery();}scheduleAutoDelivery();}
   for(const event of ['pointerdown','keydown','input','wheel','touchstart'])document.addEventListener(event,deliveryActivity,{capture:true,passive:true});
   function deliveryBlocked(){return document.hidden||document.querySelector('dialog[open]')||!playerScreen.hidden||($('#publishStateWorking')&&!$('#publishStateWorking').hidden);}
-  setInterval(()=>{if(!deliveryForeground&&autoDeliveryRunning&&deliveryBlocked())interruptAutoDelivery();},500);
+  setInterval(()=>{if(!deliveryForeground&&autoDeliveryRunning&&deliveryBlocked()){if(deliveryWorker)deliveryWorker.postMessage({type:'slow',ms:1000});else interruptAutoDelivery();}},500);
   function scheduleAutoDelivery(delay=1800){
     clearTimeout(autoDeliveryTimer);
     if(!deliveryForeground && autoDeliveryEnabled && autoDeliveryQueue.size) autoDeliveryTimer=setTimeout(runAutoDelivery,Math.max(delay,deliveryIdle()-(performance.now()-lastDeliveryActivity)));
@@ -2269,7 +2269,7 @@
       if(h[0]===26&&h[1]===69&&h[2]===223&&h[3]===163){autoDeliveryStatus.set(src,'WebM / MASTER');return;}
       if(!valid())return;
       let candidate;
-      await optimizeDeliveryVideo(master,'ahako',n=>{if(valid())autoDeliveryStatus.set(src,n+'%');},controller.signal,c=>{candidate=c;},()=>{},true);
+      await optimizeDeliveryVideoIsolated(master,'ahako',n=>{if(valid())autoDeliveryStatus.set(src,n+'%');},controller.signal,c=>{candidate=c;},()=>{},true);
       if(!valid()||deliveryVideos.has(src))return;
       if(candidate?.pass!==true||!candidate.blob||candidate.blob.size>=master.blob.size)throw Error('No smaller validated candidate');
       const {choices,...selected}=candidate;
@@ -6904,6 +6904,36 @@ async function makeStoreZip(entries,onProgress=null){
     if(!best){if(last?.blob){last.history=history;diagnostic(last);}throw Error(last?.error||'No candidate passed');}
     best.history=history;if(strict){for(const c of choices)c.history=history;best.choices=choices;}diagnostic(best);return best.blob;
   }
+  // DOM metadata and Web Audio decoding remain on the main thread; heavy video work is isolated.
+  let deliveryWorker=null;
+  function optimizeDeliveryVideoIsolated(master,mode,progress,signal,diagnostic,stage=()=>{},economical=false){
+    if(signal.aborted)return Promise.reject(Error('Cancelled'));
+    if(!window.Worker||!window.OffscreenCanvas)return optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage,economical);
+    return new Promise((resolve,reject)=>{
+      let w;try{w=new Worker(new URL('./delivery-encoder-worker.js?v=325e2',location.href));}catch(e){reject(e);return;}
+      deliveryWorker=w;let finished=false;
+      const finish=(error,value)=>{if(finished)return;finished=true;signal.removeEventListener('abort',abort);w.terminate();if(deliveryWorker===w)deliveryWorker=null;error?reject(error):resolve(value);};
+      const abort=()=>finish(Error('Cancelled'));signal.addEventListener('abort',abort,{once:true});
+      w.onerror=e=>finish(Error(e.message||'Delivery worker unavailable'));
+      w.onmessageerror=()=>finish(Error('Delivery worker message error'));
+      w.onmessage=async ({data:m})=>{if(finished)return;try{
+        if(m.type==='progress')progress(m.n);
+        else if(m.type==='stage')stage(m.i,m.total,m.factor);
+        else if(m.type==='diagnostic')diagnostic(m.candidate);
+        else if(m.type==='done')finish(null,m.blob);
+        else if(m.type==='error')finish(Error(m.error));
+        else if(m.type==='rpc'){
+          try{let value,transfer=[];
+            if(m.kind==='metadata')value=await deliveryVideoMetadata(m.blob);
+            else if(m.kind==='pcm'){const ac=new AudioContext({sampleRate:48000});try{const pcm=await ac.decodeAudioData(await m.blob.arrayBuffer());const channels=Array.from({length:pcm.numberOfChannels},(_,i)=>pcm.getChannelData(i).slice());value={channels,numberOfChannels:pcm.numberOfChannels,sampleRate:pcm.sampleRate,length:pcm.length};transfer=channels.map(c=>c.buffer);}finally{await ac.close();}}
+            else throw Error('Unknown delivery RPC');
+            if(!finished)w.postMessage({type:'rpcResult',id:m.id,value},transfer);
+          }catch(e){if(!finished)w.postMessage({type:'rpcResult',id:m.id,error:String(e)});}
+        }
+      }catch(e){finish(e);}};
+      try{w.postMessage({type:'start',master,mode,economical});}catch(e){finish(e);}
+    });
+  }
   // Local diagnostics only: no publishing, payment, or mutation of the master.
   function showDeliveryComparison(master,result,accepted,onAdopt=null,choices=result.choices||[],portraitStart=false){
     const dialog=document.createElement('dialog');dialog.style.cssText='width:min(94vw,900px);max-height:85vh;overflow:auto;padding:18px;background:Canvas;color:CanvasText;border-radius:12px';
@@ -6993,7 +7023,7 @@ async function makeStoreZip(entries,onProgress=null){
         });return cacheWrites;
       }
       if(restored.has(src))status.textContent=u('キャッシュから復元済み','Restored from cache');
-      encode.onclick=async()=>{if(activeEncode||autoDeliveryRunning){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;manualDeliveryBusy=true;autoDeliveryQueue.delete(src);autoDeliveryStatus.delete(src);candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideo(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';await saveCache(deliveryVideos.get(src),quality.value);}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;manualDeliveryBusy=false;scheduleAutoDelivery();encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
+      encode.onclick=async()=>{if(activeEncode||autoDeliveryRunning){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;manualDeliveryBusy=true;autoDeliveryQueue.delete(src);autoDeliveryStatus.delete(src);candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideoIsolated(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';await saveCache(deliveryVideos.get(src),quality.value);}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;manualDeliveryBusy=false;scheduleAutoDelivery();encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
       cancel.onclick=()=>activeEncode?.abort();
       row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();refreshRows.push(()=>{if(activeEncode)return;const busy=!!autoDeliveryRunning;encode.disabled=pick.disabled=busy;update();if(busy){reset.disabled=compare.disabled=save.disabled=true;}const state=autoDeliveryStatus.get(src);if(state)status.textContent=u("自動圧縮：","Auto: ")+state;});
     }
@@ -7005,7 +7035,7 @@ async function makeStoreZip(entries,onProgress=null){
   async function optimizeBeforePublish(doc){
     deliveryForeground=true;clearTimeout(autoDeliveryTimer);
     try{
-      interruptAutoDelivery();
+      if(deliveryWorker)deliveryWorker.postMessage({type:'slow',ms:0});
       while(autoDeliveryRunning||manualDeliveryBusy)await new Promise(r=>setTimeout(r,100));
       const refs=new Set();walkAssetRefs(doc,ref=>{if(isPublishVideoRef(ref)&&assetRegistry.has(ref.src))refs.add(ref.src);});
       let i=0;for(const src of refs){i++;const master=assetRegistry.get(src);if(!master||deliveryCacheSuppressed.has(src))continue;
@@ -7013,7 +7043,7 @@ async function makeStoreZip(entries,onProgress=null){
         try{if(await restoreDeliveryVideo(src))continue;
           const h=new Uint8Array(await master.blob.slice(0,4).arrayBuffer());if(h[0]===26&&h[1]===69&&h[2]===223&&h[3]===163)continue;
           let candidate;const controller=new AbortController();show(0);
-          await optimizeDeliveryVideo(master,'ahako',show,controller.signal,c=>candidate=c,()=>{},true);
+          await optimizeDeliveryVideoIsolated(master,'ahako',show,controller.signal,c=>candidate=c,()=>{},true);
           if(assetRegistry.get(src)!==master||deliveryCacheSuppressed.has(src)||candidate?.pass!==true||!candidate.blob||candidate.blob.size>=master.blob.size)continue;
           const {choices,...selected}=candidate;deliveryVideos.set(src,selected);await persistDeliveryVideo(src,master,selected,'ahako');autoDeliveryStatus.set(src,'cached');
         }catch(e){autoDeliveryStatus.set(src,'MASTER / '+String(e));console.warn('Delivery optimization:',e);}finally{autoDeliveryQueue.delete(src);}
