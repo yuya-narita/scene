@@ -6628,6 +6628,39 @@ async function makeStoreZip(entries,onProgress=null){
       timer=setTimeout(()=>finish(new Error('Video metadata timeout')),15000);video.src=url;
     });
   }
+  // Real-time, browser-native experimental delivery encoder. No master mutation.
+  async function encodeDeliveryVideo(blob, factor, progress, signal){
+    if(!window.MediaRecorder || !HTMLMediaElement.prototype.captureStream) throw new Error(u('この圧縮機能はPC版Chrome/Edgeでお試しください。','Use desktop Chrome/Edge for this encoder.'));
+    const meta=await deliveryVideoMetadata(blob);
+    if(!Number.isFinite(meta.duration)||meta.duration<=0||!meta.width||!meta.height)throw new Error('Invalid video metadata');
+    const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus'].find(x=>MediaRecorder.isTypeSupported(x));
+    if(!mime)throw new Error('WebM encoder unavailable');
+    const video=document.createElement('video'),url=URL.createObjectURL(blob);
+    let stream,rec,timer,abortHandler;const chunks=[];
+    video.playsInline=true;video.preload='auto';video.style.cssText='position:fixed;left:-10000px;top:0;width:1px;height:1px';document.body.append(video);
+    try{
+      await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error('Video load timeout')),15000);video.onloadeddata=()=>{clearTimeout(t);resolve();};video.onerror=()=>{clearTimeout(t);reject(new Error('Video decode failed'));};video.src=url;});
+      if(signal.aborted)throw new Error('Cancelled');
+      stream=video.captureStream();
+      if(!stream.getVideoTracks().length)throw new Error('Video capture unavailable');
+      const target=Math.max(150000,Math.min(8000000,Math.round(blob.size*8/meta.duration*factor)-96000));
+      rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:target,audioBitsPerSecond:96000});
+      const result=await new Promise((resolve,reject)=>{
+        abortHandler=()=>reject(new Error(u('圧縮を中止しました。','Encoding cancelled.')));signal.addEventListener('abort',abortHandler,{once:true});
+        rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};rec.onerror=e=>reject(e.error||new Error('Encoder failed'));
+        rec.onstop=()=>resolve(new Blob(chunks,{type:'video/webm'}));
+        video.onended=()=>{if(rec.state!=='inactive')rec.stop();};
+        video.ontimeupdate=()=>progress(Math.min(99,Math.floor(video.currentTime/meta.duration*100)));
+        timer=setTimeout(()=>reject(new Error('Encoding timeout')),Math.max(30000,meta.duration*3000+15000));
+        rec.start(1000);video.play().catch(reject);
+      });
+      if(result.size>=blob.size||!result.size)throw new Error(u('容量が減らなかったため原本を維持します。','No size reduction; master retained.'));
+      // MediaRecorder WebM may lack duration metadata: reject rather than publish an unsafe asset.
+      const out=await deliveryVideoMetadata(result);
+      if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.12||out.width!==meta.width||out.height!==meta.height)throw new Error(u('出力の時間・解像度を検証できません。原本を維持します。','Output duration/resolution could not be verified. Master retained.'));
+      return result;
+    }finally{clearTimeout(timer);if(abortHandler)signal.removeEventListener('abort',abortHandler);if(rec&&rec.state!=='inactive'){try{rec.stop();}catch{}}video.pause();stream?.getTracks().forEach(t=>t.stop());video.removeAttribute('src');video.load();video.remove();URL.revokeObjectURL(url);}
+  }
   function showDeliveryVideoSettings(){
     const doc=workingDocument||buildSceneDocument(), refs=new Map();
     walkAssetRefs(doc,ref=>{if(isPublishVideoRef(ref)&&assetRegistry.get(ref.src)?.blob)refs.set(ref.src,ref);});
@@ -6635,6 +6668,7 @@ async function makeStoreZip(entries,onProgress=null){
     const heading=document.createElement('h3');heading.textContent=u('公開用動画（DELIVERY）','Delivery videos');panel.append(heading);
     const note=document.createElement('p');note.textContent=u('試験版：設定は現在の編集セッションのみ有効です。保存・再読み込み後は再指定してください。原本は変更しません。音声・映像内容が同じ軽量版を指定してください。','Experimental: session only; reselect after reopening. Master stays unchanged. Select a smaller version with matching content and audio.');panel.append(note);
     const mb=n=>(n/1000000).toFixed(2)+' MB';
+    let activeEncode=null;
     for(const [src,ref] of refs){
       const master=assetRegistry.get(src), row=document.createElement('div');row.style.cssText='border-top:1px solid #888;padding:12px 0;overflow-wrap:anywhere';
       const label=document.createElement('p'), pick=document.createElement('input'), reset=document.createElement('button');pick.type='file';pick.accept='video/mp4,video/webm,.mp4,.webm';reset.type='button';reset.textContent=u('原本に戻す','Use master');
@@ -6648,10 +6682,15 @@ async function makeStoreZip(entries,onProgress=null){
         if(assetRegistry.get(src)!==master||!panel.open)return;
         deliveryVideos.set(src,{blob,name:file.name});
       }catch(e){await appAlert(String(e));}finally{pick.value='';pick.disabled=false;update();}};
-      row.append(label,pick,reset);panel.append(row);update();
+      const encode=document.createElement('button'), cancel=document.createElement('button'), quality=document.createElement('select'), status=document.createElement('p');
+      encode.type=cancel.type='button';encode.textContent=u('試験圧縮（WebM）','Experimental encode (WebM)');cancel.textContent=u('中止','Cancel');cancel.disabled=true;
+      for(const [v,t] of [['0.75','QUALITY 75%'],['0.45','BALANCED 45%'],['0.22','ULTRA 22%']]){const o=document.createElement('option');o.value=v;o.textContent=t;quality.append(o);}quality.value='0.45';
+      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（動画の長さ程度かかります）','Encoding in real time');try{const blob=await encodeDeliveryVideo(master.blob,Number(quality.value),n=>status.textContent=n+'%',controller.signal);if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;deliveryVideos.set(src,{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('圧縮完了・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){status.textContent=String(e);}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
+      cancel.onclick=()=>activeEncode?.abort();
+      row.append(label,pick,reset,quality,encode,cancel,status);panel.append(row);update();
     }
     if(!refs.size){const empty=document.createElement('p');empty.textContent=u('ローカル動画がありません。','No local videos.');panel.append(empty);}
-    const close=document.createElement('button');close.type='button';close.textContent=u('閉じる','Close');close.onclick=()=>panel.close();panel.append(close);panel.addEventListener('close',()=>panel.remove(),{once:true});document.body.append(panel);panel.showModal();
+    const close=document.createElement('button');close.type='button';close.textContent=u('閉じる','Close');close.onclick=()=>panel.close();panel.append(close);panel.addEventListener('close',()=>{activeEncode?.abort();panel.remove();},{once:true});document.body.append(panel);panel.showModal();
   }
 
   async function prepareDocumentForPublish(sceneDocument){
