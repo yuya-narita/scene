@@ -2237,7 +2237,14 @@
   function interruptAutoDelivery(){if(!autoDeliveryRunning)return;const {src,controller}=autoDeliveryRunning;const master=assetRegistry.get(src);if(master)queueAutoDelivery(src,master);controller.abort();}
   function deliveryActivity(){lastDeliveryActivity=performance.now();if(!deliveryForeground&&deliveryMode==='eco'&&autoDeliveryRunning){if(deliveryWorker)deliveryWorker.postMessage({type:'slow',ms:1500});else interruptAutoDelivery();}scheduleAutoDelivery();}
   for(const event of ['pointerdown','keydown','input','wheel','touchstart'])document.addEventListener(event,deliveryActivity,{capture:true,passive:true});
-  function deliveryBlocked(){return document.hidden||document.querySelector('dialog[open]')||!playerScreen.hidden||($('#publishStateWorking')&&!$('#publishStateWorking').hidden);}
+  function deliveryWaitReason(){
+    if(document.hidden)return u('タブが非表示','Tab hidden');
+    if(document.querySelector('dialog[open]:not([data-delivery-monitor])'))return u('別の設定画面を表示中','Other dialog open');
+    if(!playerScreen.hidden&&!liveEditEnabled)return u('プレビュー再生中','Preview playing');
+    if($('#publishDialog')?.open&&!$('#publishStateWorking')?.hidden)return u('公開処理中','Publishing');
+    return '';
+  }
+  function deliveryBlocked(){return !!deliveryWaitReason();}
   setInterval(()=>{if(!deliveryForeground&&autoDeliveryRunning&&deliveryBlocked()){if(deliveryWorker)deliveryWorker.postMessage({type:'slow',ms:1000});else interruptAutoDelivery();}},500);
   function scheduleAutoDelivery(delay=1800){
     clearTimeout(autoDeliveryTimer);
@@ -2245,6 +2252,7 @@
   }
   function queueAutoDelivery(src,master){
     if(!/\.(mp4|webm|m4v)$/i.test(master.name)&&!/^video\//i.test(master.blob.type))return;
+    if(deliveryVideos.has(src)){autoDeliveryQueue.delete(src);autoDeliveryStatus.set(src,'cached');return;}
     autoDeliveryQueue.set(src,master);autoDeliveryStatus.set(src,'queued');scheduleAutoDelivery();
   }
   function clearAutoDelivery(){
@@ -6983,7 +6991,7 @@ async function makeStoreZip(entries,onProgress=null){
     const doc=workingDocument||buildSceneDocument(), refs=new Map();
     walkAssetRefs(doc,ref=>{if(isPublishVideoRef(ref)&&assetRegistry.get(ref.src)?.blob)refs.set(ref.src,ref);});
     const restored=new Set();for(const src of refs.keys()){if(!deliveryVideos.has(src)&&await restoreDeliveryVideo(src))restored.add(src);}
-    const panel=document.createElement('dialog');panel.style.cssText='width:min(90vw,560px);max-height:80vh;overflow:auto;padding:20px;color:inherit;background:Canvas;border:1px solid #888;border-radius:12px';
+    const panel=document.createElement('dialog');panel.dataset.deliveryMonitor='1';panel.style.cssText='width:min(90vw,560px);max-height:80vh;overflow:auto;padding:20px;color:inherit;background:Canvas;border:1px solid #888;border-radius:12px';
     const heading=document.createElement('h3');heading.textContent=u('公開用動画（DELIVERY）','Delivery videos');panel.append(heading);
     const note=document.createElement('p');note.textContent=u('圧縮済みの採用動画はこのブラウザに保存され、同じ原本で再利用されます。原本は変更しません。手動指定ファイルはセッション限定です。','Accepted encodes are cached in this browser and reused for identical masters. Master stays unchanged. External overrides are session-only.');panel.append(note);
     const mb=n=>(n/1000000).toFixed(2)+' MB';
@@ -6993,7 +7001,9 @@ async function makeStoreZip(entries,onProgress=null){
     for(const [value,ja,en] of [['eco','省負荷（推奨）','Eco'],['auto','標準','Standard'],['fast','高速','Fast'],['off','OFF（公開時のみ）','Publish only']]){const option=document.createElement('option');option.value=value;option.textContent=u(ja,en);modeSelect.append(option);}
     modeSelect.value=deliveryMode;autoToggle.append(modeSelect);panel.append(autoToggle);
     modeSelect.onchange=()=>{deliveryMode=modeSelect.value;autoDeliveryEnabled=deliveryMode!=='off';try{localStorage.setItem('ahako.delivery.mode',deliveryMode);}catch(_){}interruptAutoDelivery();lastDeliveryActivity=performance.now();scheduleAutoDelivery();};
-    const refreshRows=[];
+    const summary=document.createElement('p');panel.append(summary);
+    const refreshRows=[()=>{const done=[...refs.keys()].filter(src=>deliveryVideos.has(src)).length;const reason=deliveryWaitReason();summary.textContent=u('軽量版あり ','Ready ')+done+'/'+refs.size+' | '+(autoDeliveryRunning?(deliveryWorker?u('Worker稼働中','Worker active'):u('圧縮準備中','Preparing')):!autoDeliveryEnabled?u('公開時のみ','Publish only'):reason|| (autoDeliveryQueue.size?u('自動圧縮待機中','Queued'):u('待機素材なし','No queued assets'))); }];
+    for(const src of refs.keys()){if(deliveryVideos.has(src)){autoDeliveryQueue.delete(src);autoDeliveryStatus.set(src,'cached');}else if(!deliveryCacheSuppressed.has(src)&&!autoDeliveryStatus.has(src))queueAutoDelivery(src,assetRegistry.get(src));}
     for(const [src,ref] of refs){
       const master=assetRegistry.get(src), row=document.createElement('div');row.style.cssText='border-top:1px solid #888;padding:12px 0;overflow-wrap:anywhere';
       const label=document.createElement('p'), pick=document.createElement('input'), reset=document.createElement('button');pick.type='file';pick.accept='video/mp4,video/webm,.mp4,.webm';reset.type='button';reset.textContent=u('原本に戻す','Use master');
@@ -7025,7 +7035,7 @@ async function makeStoreZip(entries,onProgress=null){
       if(restored.has(src))status.textContent=u('キャッシュから復元済み','Restored from cache');
       encode.onclick=async()=>{if(activeEncode||autoDeliveryRunning){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;manualDeliveryBusy=true;autoDeliveryQueue.delete(src);autoDeliveryStatus.delete(src);candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideoIsolated(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';await saveCache(deliveryVideos.get(src),quality.value);}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;manualDeliveryBusy=false;scheduleAutoDelivery();encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
       cancel.onclick=()=>activeEncode?.abort();
-      row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();refreshRows.push(()=>{if(activeEncode)return;const busy=!!autoDeliveryRunning;encode.disabled=pick.disabled=busy;update();if(busy){reset.disabled=compare.disabled=save.disabled=true;}const state=autoDeliveryStatus.get(src);if(state)status.textContent=u("自動圧縮：","Auto: ")+state;});
+      row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();refreshRows.push(()=>{if(activeEncode)return;const busy=!!autoDeliveryRunning;encode.disabled=pick.disabled=busy;update();if(busy){reset.disabled=compare.disabled=save.disabled=true;}const state=autoDeliveryStatus.get(src);if(state||deliveryVideos.has(src)){const names={queued:!autoDeliveryEnabled?u('公開時のみ','Publish only'):deliveryWaitReason()|| (autoDeliveryRunning?u('順番待ち','Waiting for encoder'):u('操作休止待ち','Waiting for idle')),checking:u('キャッシュ確認中','Checking cache'),cached:u('軽量版あり','Ready'),'session only':u('軽量版あり（セッション限定）','Session only')};status.textContent=u("自動圧縮：","Auto: ")+(deliveryVideos.has(src)&&state==='queued'?names.cached:names[state]||state); }});
     }
     if(!refs.size){const empty=document.createElement('p');empty.textContent=u('ローカル動画がありません。','No local videos.');panel.append(empty);}
     const preview=document.createElement('button');preview.type='button';preview.textContent=u('DELIVERYで作品をプレビュー（無料）','Preview delivery work (local)');preview.onclick=()=>{if(!activeEncode)previewDeliveryWork();};panel.append(preview);
