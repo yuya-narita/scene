@@ -2227,9 +2227,56 @@
   }
 
 
+  // Phase 3.2.5d: single shared encoder slot, independent of MASTER.
+  const autoDeliveryQueue = new Map(), autoDeliveryStatus = new Map();
+  let autoDeliveryTimer = null, autoDeliveryRunning = null, manualDeliveryBusy = false;
+  let autoDeliveryEnabled = true;
+  function scheduleAutoDelivery(delay=1800){
+    clearTimeout(autoDeliveryTimer);
+    if(autoDeliveryEnabled && autoDeliveryQueue.size) autoDeliveryTimer=setTimeout(runAutoDelivery,delay);
+  }
+  function queueAutoDelivery(src,master){
+    if(!/\.(mp4|webm|m4v)$/i.test(master.name)&&!/^video\//i.test(master.blob.type))return;
+    autoDeliveryQueue.set(src,master);autoDeliveryStatus.set(src,'queued');scheduleAutoDelivery();
+  }
+  function clearAutoDelivery(){
+    clearTimeout(autoDeliveryTimer);autoDeliveryQueue.clear();autoDeliveryStatus.clear();autoDeliveryRunning?.controller.abort();
+  }
+  async function runAutoDelivery(){
+    if(!autoDeliveryEnabled||!autoDeliveryQueue.size)return;
+    if(autoDeliveryRunning||manualDeliveryBusy||document.hidden||document.querySelector('dialog[open]')){scheduleAutoDelivery();return;}
+    const [src,master]=autoDeliveryQueue.entries().next().value;
+    autoDeliveryQueue.delete(src);
+    if(assetRegistry.get(src)!==master||deliveryCacheSuppressed.has(src)){scheduleAutoDelivery();return;}
+    let referenced=false;
+    try{walkAssetRefs(workingDocument||buildSceneDocument(),ref=>{if(ref.src===src&&isPublishVideoRef(ref))referenced=true;});}catch(e){console.warn(e);}
+    if(!referenced){autoDeliveryStatus.delete(src);scheduleAutoDelivery();return;}
+    const controller=new AbortController();autoDeliveryRunning={src,controller};
+    const valid=()=>!controller.signal.aborted&&assetRegistry.get(src)===master&&!deliveryCacheSuppressed.has(src);
+    try{
+      autoDeliveryStatus.set(src,'checking');
+      if(await restoreDeliveryVideo(src)){autoDeliveryStatus.set(src,'cached');return;}
+      if(!valid())return;
+      const h=new Uint8Array(await master.blob.slice(0,12).arrayBuffer());
+      if(h[0]===26&&h[1]===69&&h[2]===223&&h[3]===163){autoDeliveryStatus.set(src,'WebM / MASTER');return;}
+      if(!valid())return;
+      let candidate;
+      await optimizeDeliveryVideo(master,'ahako',n=>{if(valid())autoDeliveryStatus.set(src,n+'%');},controller.signal,c=>{candidate=c;});
+      if(!valid()||deliveryVideos.has(src))return;
+      if(candidate?.pass!==true||!candidate.blob||candidate.blob.size>=master.blob.size)throw Error('No smaller validated candidate');
+      const {choices,...selected}=candidate;
+      deliveryVideos.set(src,selected);
+      const saved=await persistDeliveryVideo(src,master,selected,'ahako');
+      if(valid())autoDeliveryStatus.set(src,saved?'cached':'session only');
+    }catch(e){if(valid())autoDeliveryStatus.set(src,'MASTER / '+String(e));}
+    finally{autoDeliveryRunning=null;scheduleAutoDelivery();}
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&autoDeliveryRunning){const {src,controller}=autoDeliveryRunning;const master=assetRegistry.get(src);if(master)queueAutoDelivery(src,master);controller.abort();}else scheduleAutoDelivery();});
+
   function registerAsset(url, blob, name='asset'){
     if(!url || !blob)return;
     assetRegistry.set(url,{blob,name:String(name||'asset')});
+    queueAutoDelivery(url,assetRegistry.get(url));
   }
 
   // A file-open is a work boundary. Persist edits first, then detach the old
@@ -2257,7 +2304,7 @@
     liveEditSheetBody?.replaceChildren();desktopLivePanelBody?.replaceChildren();
     undoHistory=[];redoHistory=[];undoSnapshot=null;syncHistoryUi();
     latestDraftSummary=null;pendingUnpublishDraft=null;sceneBackgroundPositionContext=null;
-    deliveryVideos.clear();deliveryCacheSuppressed.clear();
+    clearAutoDelivery();deliveryVideos.clear();deliveryCacheSuppressed.clear();
     assetRegistry.forEach((_,url)=>{
       if(keepAssetUrls.has(url))return;
       if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}
@@ -2344,6 +2391,7 @@
     // Replacing one reference must not invalidate all the other references.
     const usesAsset=doc=>{if(!doc)return false;let used=false;walkAssetRefs(doc,ref=>{if(ref.src===url)used=true;});return used;};
     if(usesAsset(workingDocument) || [...undoHistory,...redoHistory].some(s=>usesAsset(s.workingDocument)))return item;
+    autoDeliveryQueue.delete(url);autoDeliveryStatus.delete(url);if(autoDeliveryRunning?.src===url)autoDeliveryRunning.controller.abort();
     assetRegistry.delete(url);
     if(/^blob:/i.test(url)){
       try{ URL.revokeObjectURL(url); }catch(_){}
@@ -6902,6 +6950,10 @@ async function makeStoreZip(entries,onProgress=null){
     const note=document.createElement('p');note.textContent=u('圧縮済みの採用動画はこのブラウザに保存され、同じ原本で再利用されます。原本は変更しません。手動指定ファイルはセッション限定です。','Accepted encodes are cached in this browser and reused for identical masters. Master stays unchanged. External overrides are session-only.');panel.append(note);
     const mb=n=>(n/1000000).toFixed(2)+' MB';
     let activeEncode=null;
+    const autoToggle=document.createElement('label'), autoCheck=document.createElement('input');autoCheck.type='checkbox';autoCheck.checked=autoDeliveryEnabled;
+    autoToggle.append(autoCheck,document.createTextNode(u(' 素材取り込み時に自動圧縮',' Automatically optimize imported videos')));panel.append(autoToggle);
+    autoCheck.onchange=()=>{autoDeliveryEnabled=autoCheck.checked;if(!autoDeliveryEnabled&&autoDeliveryRunning){const {src,controller}=autoDeliveryRunning;const master=assetRegistry.get(src);if(master)queueAutoDelivery(src,master);controller.abort();}scheduleAutoDelivery();};
+    const refreshRows=[];
     for(const [src,ref] of refs){
       const master=assetRegistry.get(src), row=document.createElement('div');row.style.cssText='border-top:1px solid #888;padding:12px 0;overflow-wrap:anywhere';
       const label=document.createElement('p'), pick=document.createElement('input'), reset=document.createElement('button');pick.type='file';pick.accept='video/mp4,video/webm,.mp4,.webm';reset.type='button';reset.textContent=u('原本に戻す','Use master');
@@ -6909,10 +6961,10 @@ async function makeStoreZip(entries,onProgress=null){
       const compare=document.createElement('button'), save=document.createElement('button');
       compare.type=save.type='button';compare.textContent=u('圧縮前後を比較','Compare videos');save.textContent=u('軽量版を保存','Download result');
       const update=()=>{const d=deliveryVideos.get(src);label.textContent=master.name+' | MASTER '+mb(master.blob.size)+' → DELIVERY '+mb(d?.blob.size??master.blob.size)+(d?' ('+d.name+')':'');reset.disabled=!d||!!activeEncode;compare.disabled=save.disabled=!(candidate||d)||!!activeEncode;};
-      compare.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)showDeliveryComparison(master,d,deliveryVideos.get(src)?.blob===d.blob,{isCurrent:c=>deliveryVideos.get(src)?.blob===c.blob,apply:c=>{if(activeEncode||!panel.open||assetRegistry.get(src)!==master||c.pass===false)return false;candidate=c;deliveryVideos.set(src,{...c,choices:undefined});status.textContent=u("公開用に登録済み（手動選択）","Adopted manually");saveCache(c,quality.value);update();return true;}},choices);};
+      compare.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)showDeliveryComparison(master,d,deliveryVideos.get(src)?.blob===d.blob,{isCurrent:c=>deliveryVideos.get(src)?.blob===c.blob,apply:c=>{if(activeEncode||autoDeliveryRunning||!panel.open||assetRegistry.get(src)!==master||c.pass===false)return false;candidate=c;deliveryVideos.set(src,{...c,choices:undefined});status.textContent=u("公開用に登録済み（手動選択）","Adopted manually");saveCache(c,quality.value);update();return true;}},choices);};
       save.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)downloadBlobFile(d.name,d.blob);};
-      reset.onclick=async()=>{if(activeEncode)return;deliveryVideos.delete(src);deliveryCacheSuppressed.add(src);candidate=null;choices=[];await saveCache(null,quality.value);update();};
-      pick.onchange=async()=>{const file=pick.files?.[0];if(!file)return;pick.disabled=true;reset.disabled=true;try{
+      reset.onclick=async()=>{if(activeEncode||autoDeliveryRunning)return;autoDeliveryQueue.delete(src);autoDeliveryStatus.delete(src);deliveryVideos.delete(src);deliveryCacheSuppressed.add(src);candidate=null;choices=[];await saveCache(null,quality.value);update();};
+      pick.onchange=async()=>{const file=pick.files?.[0];if(!file||autoDeliveryRunning)return;pick.disabled=true;reset.disabled=true;try{
         const mime=/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':'';
         if(!mime||file.size>=master.blob.size)throw new Error(u('原本より小さいMP4/WebMを指定してください。','Choose a smaller MP4/WebM.'));
         const blob=file.slice(0,file.size,mime), [a,b]=await Promise.all([deliveryVideoMetadata(master.blob),deliveryVideoMetadata(blob)]);
@@ -6931,13 +6983,13 @@ async function makeStoreZip(entries,onProgress=null){
         });return cacheWrites;
       }
       if(restored.has(src))status.textContent=u('キャッシュから復元済み','Restored from cache');
-      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideo(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';await saveCache(deliveryVideos.get(src),quality.value);}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
+      encode.onclick=async()=>{if(activeEncode||autoDeliveryRunning){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;manualDeliveryBusy=true;autoDeliveryQueue.delete(src);autoDeliveryStatus.delete(src);candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideo(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';await saveCache(deliveryVideos.get(src),quality.value);}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;manualDeliveryBusy=false;scheduleAutoDelivery();encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
       cancel.onclick=()=>activeEncode?.abort();
-      row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();
+      row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();refreshRows.push(()=>{if(activeEncode)return;const busy=!!autoDeliveryRunning;encode.disabled=pick.disabled=busy;update();if(busy){reset.disabled=compare.disabled=save.disabled=true;}const state=autoDeliveryStatus.get(src);if(state)status.textContent=u("自動圧縮：","Auto: ")+state;});
     }
     if(!refs.size){const empty=document.createElement('p');empty.textContent=u('ローカル動画がありません。','No local videos.');panel.append(empty);}
     const preview=document.createElement('button');preview.type='button';preview.textContent=u('DELIVERYで作品をプレビュー（無料）','Preview delivery work (local)');preview.onclick=()=>{if(!activeEncode)previewDeliveryWork();};panel.append(preview);
-    const close=document.createElement('button');close.type='button';close.textContent=u('閉じる','Close');close.onclick=()=>panel.close();panel.append(close);panel.addEventListener('close',()=>{activeEncode?.abort();panel.remove();},{once:true});document.body.append(panel);panel.showModal();
+    const close=document.createElement('button');close.type='button';close.textContent=u('閉じる','Close');close.onclick=()=>panel.close();panel.append(close);const refreshTimer=setInterval(()=>refreshRows.forEach(fn=>fn()),500);panel.addEventListener('close',()=>{clearInterval(refreshTimer);activeEncode?.abort();panel.remove();scheduleAutoDelivery();},{once:true});document.body.append(panel);panel.showModal();
   }
 
   async function prepareDocumentForPublish(sceneDocument){
