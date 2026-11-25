@@ -32,7 +32,7 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
  }
  // Preserve aspect ratio in the existing 1000 x 600 logical canvas.
  const scale=Math.min(960/w,560/h), ox=(1000-w*scale)/2,oy=(600-h*scale)/2;
- paths.sort((a,b)=>a.length-b.length); paths.reverse(); const total=paths.length;let time=0,count=0;const strokes=[];
+ paths.sort((a,b)=>a.length-b.length); paths.reverse(); const total=paths.length;let time=0,count=0;const strokes=[], routingStrokes=[];
  for(const p of paths){if(strokes.length>=1000||count>=20000)break;const step=Math.max(1,Math.ceil(2/scale));const q=p.filter((_,i)=>i%step===0||i===p.length-1);if(count+q.length>20000)continue;const radii=p.map(i=>dist[i]).sort((a,b)=>a-b);const width=mode==='legacy'?2.5:Math.max(1,Math.min(12,(2*radii[Math.floor(radii.length/2)]-1)*scale));
  const precise=mode==='precise';
  const widths=q.map((i,j)=>{const a=q[Math.max(0,j-3)],b=q[Math.min(q.length-1,j+3)],dx=b%w-a%w,dy=Math.floor(b/w)-Math.floor(a/w),len=Math.hypot(dx,dy);if(!len)return Math.max(1,(2*dist[i]-1)*scale);const nx=-dy/len,ny=dx/len,x=i%w,y=Math.floor(i/w);function edge(sign){let r=.5;for(;r<Math.min(100,dist[i]*3+8);r+=.5){const xx=Math.round(x+nx*r*sign),yy=Math.round(y+ny*r*sign);if(xx<0||xx>=w||yy<0||yy>=h||!original[yy*w+xx])break;}return r;}return Math.max(1,Math.min((edge(1)+edge(-1)-.5)*scale,(2*dist[i]+2)*scale));});
@@ -60,7 +60,7 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
      const l=prev[j],r=next[j];if(l<0&&r<0)return v;
      if(l<0)return Math.min(v,measured[r]);if(r<0)return Math.min(v,measured[l]);
      const t=(arc[qi[j]]-arc[qi[l]])/Math.max(.001,arc[qi[r]]-arc[qi[l]]);
-     return measured[l]*(1-t)+measured[r]*t;
+     return Math.min(v,measured[l]*(1-t)+measured[r]*t);
    });
    // Reconstruct only bounded junction spans. Keep shared graph endpoints
    // intact so SMART TRACE can still traverse all incident branches.
@@ -85,7 +85,7 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
  }
 
  const base=Math.max(1,Math.min(80,Math.max(...local)/2.5));
- const points=q.map((i,j)=>{let [x,y]=centers[j];if(!corrected[j]&&mode!=='legacy'&&j>0&&j<q.length-1){const u=q[j-1],v=q[j+1];x=.7*x+.15*(u%w+v%w+1);y=.7*y+.15*(Math.floor(u/w)+Math.floor(v/w)+1);}return [+((ox+x*scale)/1000).toFixed(4),+((oy+y*scale)/600).toFixed(4),time+=8,precise?+Math.max(0,Math.min(1,(local[j]/base-.5)/2)).toFixed(4):.5];});time+=12;strokes.push({pen:precise?'brush':'ball',tip:'round',color:'#181818',width:+(precise?base:width).toFixed(2),opacity:1,points,releasedAt:time});count+=q.length;}
- self.postMessage({strokes,total,count});
+ const rawPoints=[]; const points=q.map((i,j)=>{let rx=i%w+.5,ry=Math.floor(i/w)+.5;if(mode!=='legacy'&&j>0&&j<q.length-1){const u=q[j-1],v=q[j+1];rx=.7*rx+.15*(u%w+v%w+1);ry=.7*ry+.15*(Math.floor(u/w)+Math.floor(v/w)+1);}rawPoints.push([+((ox+rx*scale)/1000).toFixed(4),+((oy+ry*scale)/600).toFixed(4)]);let [x,y]=centers[j];if(!corrected[j]&&mode!=='legacy'&&j>0&&j<q.length-1){const u=q[j-1],v=q[j+1];x=.7*x+.15*(u%w+v%w+1);y=.7*y+.15*(Math.floor(u/w)+Math.floor(v/w)+1);}return [+((ox+x*scale)/1000).toFixed(4),+((oy+y*scale)/600).toFixed(4),time+=8,precise?+Math.max(0,Math.min(1,(local[j]/base-.5)/2)).toFixed(4):.5];});time+=12;strokes.push({pen:precise?'brush':'ball',tip:'round',color:'#181818',width:+(precise?base:width).toFixed(2),opacity:1,points,releasedAt:time});routingStrokes.push({...strokes.at(-1),points:points.map((pt,j)=>[...rawPoints[j],pt[2],pt[3]])});count+=q.length;}
+ self.postMessage({strokes,routingStrokes,total,count});
  }catch(e){self.postMessage({error:String(e.message||e)});}
 };

@@ -48,6 +48,7 @@
     field('timing').value=[0,3,5,10].includes(layer.seconds)?layer.seconds:'custom';
     field('seconds').value=layer.seconds||5;
     field('sceneZoom').value=[1,1.5,2,3].includes(layer.width/baseWidth)?String(layer.width/baseWidth):'custom';
+    const routingByStroke=new WeakMap();
     let traceWorker=null, traceBusy=false, smart=null, gesture=null;
     let active=null,wallEnd=null,preview=0,panX=0,panY=0,pan=null,redo=[], count=0;
     const endTime=()=>layer.strokes.at(-1)?.points.at(-1)?.[2]||0;
@@ -123,7 +124,7 @@
       const key=(x,y)=>x+','+y;
       function near(p,rad){const out=[];for(let x=Math.floor((p[0]-rad)/cell);x<=Math.floor((p[0]+rad)/cell);x++)for(let y=Math.floor((p[1]-rad)/cell);y<=Math.floor((p[1]+rad)/cell);y++)for(const i of grid.get(key(x,y))||[])if(dist(nodes[i].p,p)<=rad)out.push(i);return out;}
       function link(a,b){if(a===b||nodes[a].adj.includes(b))return;nodes[a].adj.push(b);nodes[b].adj.push(a);}
-      for(const st of smart.pool){if(!st.points.length)continue;let prev=-1;for(const p of resample(st.points.map(p=>[...xy(p),st.width*(st.pen==='brush'? .5+2*(p[3]??.5):st.pen==='fountain'? .45+(p[3]??.5):st.pen==='marker'?2:st.pen==='crayon'?1.4:1)]))){const i=nodes.length;nodes.push({p,st,adj:[]});if(prev>=0)link(prev,i);const k=key(Math.floor(p[0]/cell),Math.floor(p[1]/cell));if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);prev=i;}}
+      for(const st of smart.routing){if(!st.points.length)continue;let prev=-1;for(const p of resample(st.points.map(p=>[...xy(p),st.width*(st.pen==='brush'? .5+2*(p[3]??.5):st.pen==='fountain'? .45+(p[3]??.5):st.pen==='marker'?2:st.pen==='crayon'?1.4:1)]))){const i=nodes.length;nodes.push({p,st,adj:[]});if(prev>=0)link(prev,i);const k=key(Math.floor(p[0]/cell),Math.floor(p[1]/cell));if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);prev=i;}}
       // Join only almost coincident guide points, not nearby parallel lines.
       const junction=Math.max(.65,Math.min(2,sx*.003));
       for(let i=0;i<nodes.length;i++)for(const j of near(nodes[i].p,junction))if(j<i&&nodes[i].st!==nodes[j].st)link(i,j);
@@ -295,10 +296,12 @@
         const scale=Math.min(1,800/Math.max(img.naturalWidth,img.naturalHeight));
         const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));
         const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);const rgba=ctx.getImageData(0,0,c.width,c.height).data;
-        traceWorker=new Worker('./auto-trace-worker.js?v=34');
+        traceWorker=new Worker('./auto-trace-worker.js?v=39');
         const result=await new Promise((resolve,reject)=>{traceWorker.onmessage=e=>resolve(e.data);traceWorker.onerror=e=>reject(new Error(e.message));traceWorker.postMessage({rgba,w:c.width,h:c.height,threshold,mode:field('traceMode').value},[rgba.buffer]);});
         if(!dialog.open)return;if(result.error)throw new Error(result.error);if(!result.strokes.length)throw new Error('線が見つかりません。検出感度を調整してください。');
-        layer.strokes=result.strokes;redo=[];wallEnd=null;layer.smooth='off';field('smooth').value='off';panX=panY=0;field('zoom').value='1';view();redraw();
+        layer.strokes=result.strokes;
+        if(Array.isArray(result.routingStrokes))result.strokes.forEach((st,i)=>{if(result.routingStrokes[i])routingByStroke.set(st,result.routingStrokes[i]);});
+        redo=[];wallEnd=null;layer.smooth='off';field('smooth').value='off';panX=panY=0;field('zoom').value='1';view();redraw();
         out.textContent=`生成完了：${result.strokes.length}筆・${result.count}点`+(result.total>result.strokes.length?'（上限により一部省略）':'');
       }catch(e){out.textContent='変換できませんでした：'+e.message;}
       finally{if(url)URL.revokeObjectURL(url);traceWorker?.terminate();traceWorker=null;traceBusy=false;find('[data-action="trace"]').disabled=false;}
@@ -310,7 +313,7 @@
       if(traceBusy)return;
       if(action==='smart-start'){
         if(!layer.strokes.length){find('output').textContent='先に筆跡を生成してください。';return;}
-        smart={pool:layer.strokes,order:[],used:new Set(),redo:[]};field('tool').value='draw';smartControls(true);smartRefresh();return;
+        smart={pool:layer.strokes,routing:layer.strokes.map(st=>{const raw=routingByStroke.get(st);return raw?{...st,points:raw.points.map((p,i)=>[p[0],p[1],st.points[i][2],st.points[i][3]])}:st;}),order:[],used:new Set(),redo:[]};field('tool').value='draw';smartControls(true);smartRefresh();return;
       }
       if(smart){
         if(action==='smart-finish'){smartEnd(true);return;}
