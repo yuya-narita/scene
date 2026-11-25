@@ -1665,6 +1665,8 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // Flush now so HTMLMediaElement.play() itself is still called from the
       // user's gesture. _safePlay handles delayed graph attachment.
       this._flushPendingAudio();
+      const bgVideo=this._currentBackgroundLayer()?.querySelector('video.sp-background-video');
+      if(bgVideo && bgVideo._ahVideoConfig?.muted===false && this.audioPlaybackArmed){bgVideo.muted=false;if(!bgVideo._ahHeld && bgVideo._ahVideoConfig.mode!=='freeze')bgVideo.play()?.catch(()=>{});}
 
       emit(this.host, 'sceneplayer:audiounlock', {
         webAudio: !!ctx,
@@ -4326,7 +4328,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       for (let i = start; i <= target; i += 1) {
         const bg = this._simultaneousBounds(i).start===i?scenes[i]?.presentation?.background:null;
         if (bg && typeof bg === 'object') {
-          if (Object.prototype.hasOwnProperty.call(bg, "src") && bg.src !== state.src) state.mediaType = bg.mediaType || "image";
+          if (Object.prototype.hasOwnProperty.call(bg, "src") && bg.src !== state.src) { state.mediaType = bg.mediaType || "image"; state.video = {}; }
           Object.keys(bg).forEach((key) => {
             const value = bg[key];
             if (value !== undefined) state[key] = (value && typeof value === 'object' && !Array.isArray(value))
@@ -4585,7 +4587,26 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       }
       layer.style.backgroundImage='none';
       this._positionBackgroundVideo(layer,state,state.projection==='panorama'?'50% 50%':state.position);
-      if(!this.ended && video.paused)video.play()?.catch(()=>{});
+      const cfg=state.video||{};
+      const mode=['loop','hold','freeze','next'].includes(cfg.mode)?cfg.mode:'loop';
+      const start=Math.max(0,Number(cfg.start)||0), end=cfg.end==null?null:Math.max(start+0.1,Number(cfg.end)||0);
+      const key=JSON.stringify([mode,start,end]);
+      const changed=video._ahVideoKey!==key;
+      video._ahVideoKey=key;
+      video._ahVideoConfig=cfg;
+      video.muted=cfg.muted!==false || !this.audioPlaybackArmed;
+      video.volume=Math.max(0,Math.min(1,Number(cfg.volume??1)||0));
+      video.playbackRate=Math.max(.25,Math.min(2,Number(cfg.speed)||1));
+      video.loop=mode==='loop' && start===0 && end===null;
+      const bounds=()=>{const d=Number.isFinite(video.duration)?video.duration:Infinity;const a=Math.min(start,Math.max(0,d-.05));return [a,Math.min(end??d,d)];};
+      const play=()=>{if(!this.ended && video.isConnected && mode!=='freeze' && !video._ahHeld)video.play()?.catch(()=>{});};
+      const init=()=>{const [a]=bounds();if(changed){video._ahHeld=false;try{video.currentTime=a;}catch(_){}}if(mode==='freeze')video.pause();else play();};
+      const finish=()=>{if(video._ahHeld)return;const [a,b]=bounds();if(mode==='loop'){try{video.currentTime=a;}catch(_){}play();return;}video._ahHeld=true;video.pause();if(Number.isFinite(b)&&video.currentTime>b)try{video.currentTime=b;}catch(_){}if(mode==='next' && this._currentBackgroundLayer()===layer && this.backgroundState?.src===state.src && !this.ended){const idx=this.index;queueMicrotask(()=>{if(this.index===idx && video.isConnected && this._currentBackgroundLayer()===layer)this.next();});}};
+      video.onloadedmetadata=init;
+      video.ontimeupdate=()=>{if(mode==='freeze')return;const [,b]=bounds();if(!video.loop && video.currentTime>=b)finish();};
+      video.onended=finish;
+      if(video.readyState>=1)init();else if(mode!=='freeze')play();
+
     }
 
     _prepareBackgroundLayer(layer, state, motionPhase = 0) {
