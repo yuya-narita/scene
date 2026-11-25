@@ -184,7 +184,7 @@
       for(let k=1;k<ids.length-1;k++){
         const n=nodes[ids[k]];
         if(n.adj.length<3 && !n.adj.some(j=>nodes[j].st!==n.st))continue;
-        const rad=Math.max(4,Math.min(24,n.p[2]*.85));
+        const rad=Math.max(6,Math.min(38,n.p[2]*1.35));
         let a=k,b=k;
         while(a>0&&arc[k]-arc[a]<rad)a--;
         while(b<ids.length-1&&arc[b]-arc[k]<rad)b++;
@@ -193,19 +193,19 @@
         if(last&&a<=last[1])last[1]=Math.max(last[1],b);else zones.push([a,b]);
       }
       for(const [a,b] of zones){
-        const span=arc[b]-arc[a];if(span<1||span>48)continue;
+        const span=arc[b]-arc[a];if(span<1||span>88)continue;
         const A=route[a],B=route[b],chord=logical(A,B);
-        if(chord<span*.75)continue; // preserve corners and loops
+        if(chord<span*.70)continue; // preserve corners and loops
         let l=a-1,r=b+1;
-        while(l>0&&arc[a]-arc[l]<6)l--;
-        while(r<route.length-1&&arc[r]-arc[b]<6)r++;
+        while(l>0&&arc[a]-arc[l]<Math.max(8,A[2]*.65))l--;
+        while(r<route.length-1&&arc[r]-arc[b]<Math.max(8,B[2]*.65))r++;
         const L=route[l],R=route[r],dl=arc[a]-arc[l],dr=arc[r]-arc[b];
         if(dl<.1||dr<.1)continue;
         for(let k=a+1;k<b;k++){
           const t=(arc[k]-arc[a])/span,t2=t*t,t3=t2*t;
           const q=[0,1].map(d=>(2*t3-3*t2+1)*A[d]+(t3-2*t2+t)*(A[d]-L[d])*span/dl+(-2*t3+3*t2)*B[d]+(t3-t2)*(R[d]-B[d])*span/dr);
           const shift=logical(q,route[k]);
-          const cap=Math.min(5,Math.max(1,route[k][2]*.22));
+          const cap=Math.min(14,Math.max(2,route[k][2]*.65));
           const mix=shift>cap?cap/shift:1;
           route[k][0]+=(q[0]-route[k][0])*mix;route[k][1]+=(q[1]-route[k][1])*mix;
           route[k][2]=A[2]+(B[2]-A[2])*t;
@@ -296,7 +296,7 @@
         const scale=Math.min(1,800/Math.max(img.naturalWidth,img.naturalHeight));
         const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));
         const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);const rgba=ctx.getImageData(0,0,c.width,c.height).data;
-        traceWorker=new Worker('./auto-trace-worker.js?v=39');
+        traceWorker=new Worker('./auto-trace-worker.js?v=310');
         const result=await new Promise((resolve,reject)=>{traceWorker.onmessage=e=>resolve(e.data);traceWorker.onerror=e=>reject(new Error(e.message));traceWorker.postMessage({rgba,w:c.width,h:c.height,threshold,mode:field('traceMode').value},[rgba.buffer]);});
         if(!dialog.open)return;if(result.error)throw new Error(result.error);if(!result.strokes.length)throw new Error('線が見つかりません。検出感度を調整してください。');
         layer.strokes=result.strokes;

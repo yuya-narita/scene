@@ -62,8 +62,24 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
      const t=(arc[qi[j]]-arc[qi[l]])/Math.max(.001,arc[qi[r]]-arc[qi[l]]);
      return Math.min(v,measured[l]*(1-t)+measured[r]*t);
    });
-   // Reconstruct only bounded junction spans. Keep shared graph endpoints
-   // intact so SMART TRACE can still traverse all incident branches.
+   // Display-only continuation at a split endpoint. The routing skeleton
+   // remains untouched. Extend the clean tangent towards the junction,
+   // but only within the ink and a bounded displacement.
+   for(let j=0;j<q.length;j++){
+     if(valid[j])continue;
+     const l=prev[j],r=next[j];if((l<0)===(r<0))continue;
+     const k=l<0?r:l, sign=l<0?1:-1;
+     let m=k;while(m+sign>=0&&m+sign<q.length&&valid[m+sign]&&Math.abs(arc[qi[m]]-arc[qi[k]])<Math.max(4,dist[q[k]]))m+=sign;
+     if(m===k)continue;
+     const A=centers[k],B=centers[m],d=Math.hypot(A[0]-B[0],A[1]-B[1]);if(d<2)continue;
+     const len=Math.abs(arc[qi[j]]-arc[qi[k]]);if(len>Math.max(4,dist[q[k]]*2.5))continue;
+     const old=centers[j],pos=[A[0]+(A[0]-B[0])*len/d,A[1]+(A[1]-B[1])*len/d];
+     const delta=Math.hypot(pos[0]-old[0],pos[1]-old[1]),cap=Math.max(1,Math.min(6,dist[q[j]]*.65));
+     if(delta>cap){pos[0]=old[0]+(pos[0]-old[0])*cap/delta;pos[1]=old[1]+(pos[1]-old[1])*cap/delta;}
+     const x=Math.floor(pos[0]),y=Math.floor(pos[1]);
+     if(x>=0&&x<w&&y>=0&&y<h&&original[y*w+x]){centers[j]=pos;corrected[j]=1;}
+   }
+   // Reconstruct only bounded junction spans. Routing coordinates are emitted separately.
    for(let j=1;j<q.length-1;j++){
      if(valid[j])continue;
      const l=prev[j],r=next[j];if(l<0||r<0||r-l<2)continue;
@@ -77,7 +93,7 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
      const t=(arc[qi[j]]-arc[qi[l]])/L,t2=t*t,t3=t2*t;
      const pos=[0,1].map(k=>(2*t3-3*t2+1)*A[k]+(t3-2*t2+t)*chord*d0[k]+(-2*t3+3*t2)*B[k]+(t3-t2)*chord*d1[k]);
      const old=centers[j],delta=Math.hypot(pos[0]-old[0],pos[1]-old[1]);
-     const limit=Math.max(1,Math.min(4,dist[q[j]]*.55));
+     const limit=Math.max(1,Math.min(8,dist[q[j]]*.9));
      if(delta>limit){pos[0]=old[0]+(pos[0]-old[0])*limit/delta;pos[1]=old[1]+(pos[1]-old[1])*limit/delta;}
      const x=Math.floor(pos[0]),y=Math.floor(pos[1]);
      if(x>=0&&x<w&&y>=0&&y<h&&original[y*w+x]){centers[j]=pos;corrected[j]=1;}
