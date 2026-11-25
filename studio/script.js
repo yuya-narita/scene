@@ -2230,10 +2230,18 @@
   // Phase 3.2.5d: single shared encoder slot, independent of MASTER.
   const autoDeliveryQueue = new Map(), autoDeliveryStatus = new Map();
   let autoDeliveryTimer = null, autoDeliveryRunning = null, manualDeliveryBusy = false;
-  let autoDeliveryEnabled = true;
+  let deliveryMode='eco', lastDeliveryActivity=performance.now(), deliveryForeground=false;
+  try{const m=localStorage.getItem('ahako.delivery.mode');if(['eco','auto','fast','off'].includes(m))deliveryMode=m;}catch(_){}
+  let autoDeliveryEnabled=deliveryMode!=='off';
+  const deliveryIdle=()=>deliveryMode==='eco'?10000:deliveryMode==='auto'?4000:1800;
+  function interruptAutoDelivery(){if(!autoDeliveryRunning)return;const {src,controller}=autoDeliveryRunning;const master=assetRegistry.get(src);if(master)queueAutoDelivery(src,master);controller.abort();}
+  function deliveryActivity(){lastDeliveryActivity=performance.now();if(!deliveryForeground&&deliveryMode==='eco')interruptAutoDelivery();scheduleAutoDelivery();}
+  for(const event of ['pointerdown','keydown','input','wheel','touchstart'])document.addEventListener(event,deliveryActivity,{capture:true,passive:true});
+  function deliveryBlocked(){return document.hidden||document.querySelector('dialog[open]')||!playerScreen.hidden||($('#publishStateWorking')&&!$('#publishStateWorking').hidden);}
+  setInterval(()=>{if(!deliveryForeground&&autoDeliveryRunning&&deliveryBlocked())interruptAutoDelivery();},500);
   function scheduleAutoDelivery(delay=1800){
     clearTimeout(autoDeliveryTimer);
-    if(autoDeliveryEnabled && autoDeliveryQueue.size) autoDeliveryTimer=setTimeout(runAutoDelivery,delay);
+    if(!deliveryForeground && autoDeliveryEnabled && autoDeliveryQueue.size) autoDeliveryTimer=setTimeout(runAutoDelivery,Math.max(delay,deliveryIdle()-(performance.now()-lastDeliveryActivity)));
   }
   function queueAutoDelivery(src,master){
     if(!/\.(mp4|webm|m4v)$/i.test(master.name)&&!/^video\//i.test(master.blob.type))return;
@@ -2243,8 +2251,8 @@
     clearTimeout(autoDeliveryTimer);autoDeliveryQueue.clear();autoDeliveryStatus.clear();autoDeliveryRunning?.controller.abort();
   }
   async function runAutoDelivery(){
-    if(!autoDeliveryEnabled||!autoDeliveryQueue.size)return;
-    if(autoDeliveryRunning||manualDeliveryBusy||document.hidden||document.querySelector('dialog[open]')){scheduleAutoDelivery();return;}
+    if(deliveryForeground||!autoDeliveryEnabled||!autoDeliveryQueue.size)return;
+    if(autoDeliveryRunning||manualDeliveryBusy||deliveryBlocked()||performance.now()-lastDeliveryActivity<deliveryIdle()){scheduleAutoDelivery();return;}
     const [src,master]=autoDeliveryQueue.entries().next().value;
     autoDeliveryQueue.delete(src);
     if(assetRegistry.get(src)!==master||deliveryCacheSuppressed.has(src)){scheduleAutoDelivery();return;}
@@ -2261,7 +2269,7 @@
       if(h[0]===26&&h[1]===69&&h[2]===223&&h[3]===163){autoDeliveryStatus.set(src,'WebM / MASTER');return;}
       if(!valid())return;
       let candidate;
-      await optimizeDeliveryVideo(master,'ahako',n=>{if(valid())autoDeliveryStatus.set(src,n+'%');},controller.signal,c=>{candidate=c;});
+      await optimizeDeliveryVideo(master,'ahako',n=>{if(valid())autoDeliveryStatus.set(src,n+'%');},controller.signal,c=>{candidate=c;},()=>{},true);
       if(!valid()||deliveryVideos.has(src))return;
       if(candidate?.pass!==true||!candidate.blob||candidate.blob.size>=master.blob.size)throw Error('No smaller validated candidate');
       const {choices,...selected}=candidate;
@@ -6866,7 +6874,7 @@ async function makeStoreZip(entries,onProgress=null){
     progress(99);check();
     const out=await deliveryVideoMetadata(result);check();if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.06||out.width!==meta.width||out.height!==meta.height)throw Error('Output metadata mismatch');if(result.size>=blob.size)throw Error('No size reduction; master retained');return result;
   }
-  async function optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage=()=>{}){
+  async function optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage=()=>{},economical=false){
     const header=new Uint8Array(await master.blob.slice(0,12).arrayBuffer());
     if(header[0]===0x1a&&header[1]===0x45&&header[2]===0xdf&&header[3]===0xa3){
       throw Error(u('WebM素材は再圧縮せず保持します。MP4原本がある場合は差し替えてください。','WebM source retained without recompression. Replace with original MP4 if available.'));
@@ -6883,10 +6891,10 @@ async function makeStoreZip(entries,onProgress=null){
         candidate.metrics=metrics;candidate.factor=factor;
         const pass=strict?(metrics.ssim>=.985&&metrics.worst>=.965&&metrics.psnr>=40&&metrics.nativePsnr>=36&&metrics.tileWorst>=26&&metrics.coverPsnr>=37&&metrics.coverWorst>=34&&metrics.edgePsnr>=36):!auto||(metrics.ssim>=.96&&metrics.worst>=.92&&metrics.psnr>=32&&(!deep||(metrics.detailPsnr>=30&&metrics.detailWorst>=24)));
         history.push({factor,size:blob.size,pass,metrics});
-        if(strict && choiceBytes+blob.size<=32*1024*1024){choices.push({...candidate,pass});choiceBytes+=blob.size;}
+        if(strict && !economical && choiceBytes+blob.size<=32*1024*1024){choices.push({...candidate,pass});choiceBytes+=blob.size;}
         candidate.pass=pass;if(!pass){candidate.error='Sampled quality below threshold';last=candidate;continue;}
         if(!best||blob.size<best.blob.size)best=candidate;
-        if(!strict&&(!deep||factor>=.45))break;
+        if(economical||(!strict&&(!deep||factor>=.45)))break;
         // Higher bitrate fallback is unnecessary once a low-rate candidate passes.
         if(i===6&&best)break;
       }catch(e){if(signal.aborted)throw e;history.push({factor,pass:false,error:String(e)});if(candidate){candidate.pass=false;candidate.metrics=metrics;candidate.error=String(e);last=candidate;}else if(!last)last={error:String(e)};if(!auto){if(candidate)diagnostic(candidate);throw e;}}
@@ -6950,9 +6958,11 @@ async function makeStoreZip(entries,onProgress=null){
     const note=document.createElement('p');note.textContent=u('圧縮済みの採用動画はこのブラウザに保存され、同じ原本で再利用されます。原本は変更しません。手動指定ファイルはセッション限定です。','Accepted encodes are cached in this browser and reused for identical masters. Master stays unchanged. External overrides are session-only.');panel.append(note);
     const mb=n=>(n/1000000).toFixed(2)+' MB';
     let activeEncode=null;
-    const autoToggle=document.createElement('label'), autoCheck=document.createElement('input');autoCheck.type='checkbox';autoCheck.checked=autoDeliveryEnabled;
-    autoToggle.append(autoCheck,document.createTextNode(u(' 素材取り込み時に自動圧縮',' Automatically optimize imported videos')));panel.append(autoToggle);
-    autoCheck.onchange=()=>{autoDeliveryEnabled=autoCheck.checked;if(!autoDeliveryEnabled&&autoDeliveryRunning){const {src,controller}=autoDeliveryRunning;const master=assetRegistry.get(src);if(master)queueAutoDelivery(src,master);controller.abort();}scheduleAutoDelivery();};
+    const autoToggle=document.createElement('label'), modeSelect=document.createElement('select');
+    autoToggle.textContent=u('バックグラウンド最適化：','Background optimization: ');
+    for(const [value,ja,en] of [['eco','省負荷（推奨）','Eco'],['auto','標準','Standard'],['fast','高速','Fast'],['off','OFF（公開時のみ）','Publish only']]){const option=document.createElement('option');option.value=value;option.textContent=u(ja,en);modeSelect.append(option);}
+    modeSelect.value=deliveryMode;autoToggle.append(modeSelect);panel.append(autoToggle);
+    modeSelect.onchange=()=>{deliveryMode=modeSelect.value;autoDeliveryEnabled=deliveryMode!=='off';try{localStorage.setItem('ahako.delivery.mode',deliveryMode);}catch(_){}interruptAutoDelivery();lastDeliveryActivity=performance.now();scheduleAutoDelivery();};
     const refreshRows=[];
     for(const [src,ref] of refs){
       const master=assetRegistry.get(src), row=document.createElement('div');row.style.cssText='border-top:1px solid #888;padding:12px 0;overflow-wrap:anywhere';
@@ -6992,6 +7002,24 @@ async function makeStoreZip(entries,onProgress=null){
     const close=document.createElement('button');close.type='button';close.textContent=u('閉じる','Close');close.onclick=()=>panel.close();panel.append(close);const refreshTimer=setInterval(()=>refreshRows.forEach(fn=>fn()),500);panel.addEventListener('close',()=>{clearInterval(refreshTimer);activeEncode?.abort();panel.remove();scheduleAutoDelivery();},{once:true});document.body.append(panel);panel.showModal();
   }
 
+  async function optimizeBeforePublish(doc){
+    deliveryForeground=true;clearTimeout(autoDeliveryTimer);
+    try{
+      interruptAutoDelivery();
+      while(autoDeliveryRunning||manualDeliveryBusy)await new Promise(r=>setTimeout(r,100));
+      const refs=new Set();walkAssetRefs(doc,ref=>{if(isPublishVideoRef(ref)&&assetRegistry.has(ref.src))refs.add(ref.src);});
+      let i=0;for(const src of refs){i++;const master=assetRegistry.get(src);if(!master||deliveryCacheSuppressed.has(src))continue;
+        const status=$('#publishStateWorking p');const show=n=>{if(status)status.textContent=u('動画最適化 ','Optimizing video ')+i+'/'+refs.size+' · '+n+'%';};
+        try{if(await restoreDeliveryVideo(src))continue;
+          const h=new Uint8Array(await master.blob.slice(0,4).arrayBuffer());if(h[0]===26&&h[1]===69&&h[2]===223&&h[3]===163)continue;
+          let candidate;const controller=new AbortController();show(0);
+          await optimizeDeliveryVideo(master,'ahako',show,controller.signal,c=>candidate=c,()=>{},true);
+          if(assetRegistry.get(src)!==master||deliveryCacheSuppressed.has(src)||candidate?.pass!==true||!candidate.blob||candidate.blob.size>=master.blob.size)continue;
+          const {choices,...selected}=candidate;deliveryVideos.set(src,selected);await persistDeliveryVideo(src,master,selected,'ahako');autoDeliveryStatus.set(src,'cached');
+        }catch(e){autoDeliveryStatus.set(src,'MASTER / '+String(e));console.warn('Delivery optimization:',e);}finally{autoDeliveryQueue.delete(src);}
+      }
+    }finally{deliveryForeground=false;scheduleAutoDelivery();}
+  }
   async function prepareDocumentForPublish(sceneDocument){
     const hosted=stripPrivateMasterIdentity(sceneDocument);
     const cache=new Map();
@@ -7073,6 +7101,7 @@ async function makeStoreZip(entries,onProgress=null){
 
       // Hosting v3 master identity: local assets become permanent Worker URLs,
       // while ownerKey stays only inside the author's .scene.
+      await optimizeBeforePublish(sourceDocument);
       const hostedDocument=await prepareDocumentForPublish(sourceDocument);
       const baseEndpoint=id?`${SCENE_STUDIO_API_BASE}/publish?id=${encodeURIComponent(id)}`:`${SCENE_STUDIO_API_BASE}/publish`;
       const request={
