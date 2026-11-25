@@ -2168,7 +2168,60 @@
   // value: Blob/File + original filename. This lets Package Export carry the
   // actual binary data instead of only the blob: reference.
   const assetRegistry = new Map();
-  const deliveryVideos = new Map(); // Session-only, never serialized into Master.
+  const deliveryVideos = new Map(); // Runtime selections; never serialized into Master.
+  const deliveryCacheVersion = '325b2-validated-v1';
+  const deliveryCacheKeys = new WeakMap();
+  const deliveryCacheSuppressed = new Set();
+  let deliveryCacheDB;
+  function openDeliveryCache(){
+    if(!deliveryCacheDB)deliveryCacheDB=new Promise((resolve,reject)=>{
+      const r=indexedDB.open('ahako-delivery-video-cache',1);
+      r.onupgradeneeded=()=>r.result.createObjectStore('videos');
+      r.onsuccess=()=>{const db=r.result;db.onversionchange=()=>{db.close();deliveryCacheDB=null;};resolve(db);};
+      r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('Delivery cache blocked'));
+    }).catch(e=>{deliveryCacheDB=null;throw e;});
+    return deliveryCacheDB;
+  }
+  async function deliveryCacheKey(blob){
+    if(!deliveryCacheKeys.has(blob))deliveryCacheKeys.set(blob,(async()=>{
+      // Hash bounded chunks, then hash their ordered digests (no full-video buffer).
+      const step=1024*1024, parts=new Uint8Array(Math.ceil(blob.size/step)*32);
+      for(let i=0;i<blob.size;i+=step)parts.set(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.slice(i,i+step).arrayBuffer())),i/step*32);
+      const hash=new Uint8Array(await crypto.subtle.digest('SHA-256',parts));
+      return deliveryCacheVersion+':'+blob.size+':'+Array.from(hash,b=>b.toString(16).padStart(2,'0')).join('');
+    })());
+    return deliveryCacheKeys.get(blob);
+  }
+  async function deliveryCacheOp(key,mode,value){
+    const db=await openDeliveryCache();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction('videos',mode==='get'?'readonly':'readwrite'), store=tx.objectStore('videos');
+      const r=mode==='get'?store.get(key):mode==='delete'?store.delete(key):store.put(value,key);
+      tx.oncomplete=()=>resolve(r.result);tx.onabort=tx.onerror=()=>reject(tx.error||Error('Delivery cache transaction failed'));
+    });
+  }
+  async function restoreDeliveryVideo(src){
+    const master=assetRegistry.get(src);if(!master?.blob)return null;
+    if(deliveryVideos.has(src))return deliveryVideos.get(src);
+    if(deliveryCacheSuppressed.has(src))return null;
+    try{
+      const key=await deliveryCacheKey(master.blob), entry=await deliveryCacheOp(key,'get');
+      if(assetRegistry.get(src)!==master||deliveryCacheSuppressed.has(src))return null;
+      if(deliveryVideos.has(src))return deliveryVideos.get(src);
+      const d=entry?.result;
+      if(d?.blob instanceof Blob && d.blob.size>0 && d.blob.size<master.blob.size && /^video\/(webm|mp4)/i.test(d.blob.type) && d.pass===true){deliveryVideos.set(src,d);return d;}
+    }catch(e){console.warn('Delivery cache restore failed',e);}
+    return null;
+  }
+  async function persistDeliveryVideo(src,master,result,mode){
+    try{
+      const key=await deliveryCacheKey(master.blob);
+      if(result){const {choices,...selected}=result;await deliveryCacheOp(key,'put',{result:selected,mode,savedAt:Date.now()});}
+      else await deliveryCacheOp(key,'delete');
+      return true;
+    }catch(e){console.warn('Delivery cache write failed',e);return false;}
+  }
+
 
   function registerAsset(url, blob, name='asset'){
     if(!url || !blob)return;
@@ -2200,7 +2253,7 @@
     liveEditSheetBody?.replaceChildren();desktopLivePanelBody?.replaceChildren();
     undoHistory=[];redoHistory=[];undoSnapshot=null;syncHistoryUi();
     latestDraftSummary=null;pendingUnpublishDraft=null;sceneBackgroundPositionContext=null;
-    deliveryVideos.clear();
+    deliveryVideos.clear();deliveryCacheSuppressed.clear();
     assetRegistry.forEach((_,url)=>{
       if(keepAssetUrls.has(url))return;
       if(/^blob:/i.test(url)){try{URL.revokeObjectURL(url);}catch(_){}}
@@ -6820,8 +6873,10 @@ async function makeStoreZip(entries,onProgress=null){
     button(u('閉じる','Close'),()=>dialog.close());
     dialog.addEventListener('close',()=>{closed=true;for(const v of videos){v.pause();v.removeAttribute('src');v.load();}urls.forEach(url=>URL.revokeObjectURL(url));dialog.remove();},{once:true});document.body.append(dialog);dialog.showModal();
   }
-  function previewDeliveryWork(){
+  async function previewDeliveryWork(){
     const doc=clone(workingDocument||buildSceneDocument()), urls=new Map();
+    const refs=[];walkAssetRefs(doc,ref=>{if(isPublishVideoRef(ref))refs.push(ref.src);});
+    for(const src of new Set(refs))await restoreDeliveryVideo(src);
     walkAssetRefs(doc,ref=>{const d=isPublishVideoRef(ref)&&deliveryVideos.get(ref.src);if(!d)return;if(!urls.has(ref.src))urls.set(ref.src,URL.createObjectURL(d.blob));ref.holder[ref.key]=urls.get(ref.src);});
     if(!urls.size){appAlert(u('検証済みの公開用動画がありません。','No accepted delivery videos.'));return;}
     const dialog=document.createElement('dialog');dialog.style.cssText='width:min(92vw,460px);max-height:94vh;padding:10px;background:Canvas;color:CanvasText';
@@ -6830,12 +6885,13 @@ async function makeStoreZip(entries,onProgress=null){
     const cleanup=()=>{try{instance?.destroy();}finally{urls.forEach(url=>URL.revokeObjectURL(url));dialog.remove();}};
     dialog.addEventListener('close',cleanup,{once:true});dialog.showModal();try{instance=new ScenePlayerCore(host,{allowPrevious:true,keyboard:false,swipe:true,endOnNextAction:true,uiLanguage});instance.load(doc,{startAt:0});}catch(e){dialog.close();appAlert(String(e));}
   }
-  function showDeliveryVideoSettings(){
+  async function showDeliveryVideoSettings(){
     const doc=workingDocument||buildSceneDocument(), refs=new Map();
     walkAssetRefs(doc,ref=>{if(isPublishVideoRef(ref)&&assetRegistry.get(ref.src)?.blob)refs.set(ref.src,ref);});
+    const restored=new Set();for(const src of refs.keys()){if(!deliveryVideos.has(src)&&await restoreDeliveryVideo(src))restored.add(src);}
     const panel=document.createElement('dialog');panel.style.cssText='width:min(90vw,560px);max-height:80vh;overflow:auto;padding:20px;color:inherit;background:Canvas;border:1px solid #888;border-radius:12px';
     const heading=document.createElement('h3');heading.textContent=u('公開用動画（DELIVERY）','Delivery videos');panel.append(heading);
-    const note=document.createElement('p');note.textContent=u('試験版：設定は現在の編集セッションのみ有効です。保存・再読み込み後は再指定してください。原本は変更しません。音声・映像内容が同じ軽量版を指定してください。','Experimental: session only; reselect after reopening. Master stays unchanged. Select a smaller version with matching content and audio.');panel.append(note);
+    const note=document.createElement('p');note.textContent=u('圧縮済みの採用動画はこのブラウザに保存され、同じ原本で再利用されます。原本は変更しません。手動指定ファイルはセッション限定です。','Accepted encodes are cached in this browser and reused for identical masters. Master stays unchanged. External overrides are session-only.');panel.append(note);
     const mb=n=>(n/1000000).toFixed(2)+' MB';
     let activeEncode=null;
     for(const [src,ref] of refs){
@@ -6845,21 +6901,29 @@ async function makeStoreZip(entries,onProgress=null){
       const compare=document.createElement('button'), save=document.createElement('button');
       compare.type=save.type='button';compare.textContent=u('圧縮前後を比較','Compare videos');save.textContent=u('軽量版を保存','Download result');
       const update=()=>{const d=deliveryVideos.get(src);label.textContent=master.name+' | MASTER '+mb(master.blob.size)+' → DELIVERY '+mb(d?.blob.size??master.blob.size)+(d?' ('+d.name+')':'');reset.disabled=!d||!!activeEncode;compare.disabled=save.disabled=!(candidate||d)||!!activeEncode;};
-      compare.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)showDeliveryComparison(master,d,deliveryVideos.get(src)?.blob===d.blob,{isCurrent:c=>deliveryVideos.get(src)?.blob===c.blob,apply:c=>{if(activeEncode||!panel.open||assetRegistry.get(src)!==master||c.pass===false)return false;candidate=c;deliveryVideos.set(src,{...c,choices:undefined});status.textContent=u("公開用に登録済み（手動選択）","Adopted manually");update();return true;}},choices);};
+      compare.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)showDeliveryComparison(master,d,deliveryVideos.get(src)?.blob===d.blob,{isCurrent:c=>deliveryVideos.get(src)?.blob===c.blob,apply:c=>{if(activeEncode||!panel.open||assetRegistry.get(src)!==master||c.pass===false)return false;candidate=c;deliveryVideos.set(src,{...c,choices:undefined});status.textContent=u("公開用に登録済み（手動選択）","Adopted manually");saveCache(c,quality.value);update();return true;}},choices);};
       save.onclick=()=>{const d=candidate||deliveryVideos.get(src);if(d)downloadBlobFile(d.name,d.blob);};
-      reset.onclick=()=>{deliveryVideos.delete(src);candidate=null;choices=[];update();};
+      reset.onclick=async()=>{if(activeEncode)return;deliveryVideos.delete(src);deliveryCacheSuppressed.add(src);candidate=null;choices=[];await saveCache(null,quality.value);update();};
       pick.onchange=async()=>{const file=pick.files?.[0];if(!file)return;pick.disabled=true;reset.disabled=true;try{
         const mime=/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':'';
         if(!mime||file.size>=master.blob.size)throw new Error(u('原本より小さいMP4/WebMを指定してください。','Choose a smaller MP4/WebM.'));
         const blob=file.slice(0,file.size,mime), [a,b]=await Promise.all([deliveryVideoMetadata(master.blob),deliveryVideoMetadata(blob)]);
         if(!Number.isFinite(a.duration)||!Number.isFinite(b.duration)||!a.width||!b.width||Math.abs(a.duration-b.duration)>.12||Math.abs(a.width/a.height-b.width/b.height)>.01)throw new Error(u('動画の長さまたは縦横比が原本と異なります。','Duration or aspect ratio differs from master.'));
         if(assetRegistry.get(src)!==master||!panel.open)return;
-        candidate=null;choices=[];deliveryVideos.set(src,{blob,name:file.name});
+        candidate=null;choices=[];deliveryVideos.set(src,{blob,name:file.name});await saveCache(null,quality.value);
       }catch(e){await appAlert(String(e));}finally{pick.value='';pick.disabled=false;update();}};
       const encode=document.createElement('button'), cancel=document.createElement('button'), quality=document.createElement('select'), status=document.createElement('p');
       encode.type=cancel.type='button';encode.textContent=u('試験圧縮（WebM）','Experimental encode (WebM)');cancel.textContent=u('中止','Cancel');cancel.disabled=true;
       for(const [v,t] of [['ahako','AHAKO — 実機画質優先・候補比較'],['auto','AUTO — 画質優先'],['deep','DEEP — 圧縮限界探索（低速）'],['0.75','QUALITY 75%'],['0.45','BALANCED 45%'],['0.22','ULTRA 22%']]){const o=document.createElement('option');o.value=v;o.textContent=t;quality.append(o);}quality.value='ahako';
-      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideo(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
+      let cacheWrites=Promise.resolve();
+      function saveCache(result,mode){
+        cacheWrites=cacheWrites.then(async()=>{
+          const ok=await persistDeliveryVideo(src,master,result,mode);
+          if(panel.open)status.textContent+=(ok?u(result?' / キャッシュ保存済み':' / キャッシュ解除済み',result?' / Cached':' / Cache cleared'):u(' / キャッシュ保存・解除失敗（ブラウザ容量等）',' / Cache write failed'));
+        });return cacheWrites;
+      }
+      if(restored.has(src))status.textContent=u('キャッシュから復元済み','Restored from cache');
+      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;choices=[];compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{let phase='';const blob=await optimizeDeliveryVideo(master,quality.value,n=>status.textContent=phase+' '+u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,c=>{candidate=c;},(i,total,factor)=>{phase=i+'/'+total+' | '+Math.round(factor*100)+'%';status.textContent=phase;});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;choices=candidate?.choices||[];if(candidate)delete candidate.choices;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';await saveCache(deliveryVideos.get(src),quality.value);}catch(e){if(candidate){candidate.pass=false;candidate.error=String(e);}status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
       cancel.onclick=()=>activeEncode?.abort();
       row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();
     }
@@ -6879,7 +6943,7 @@ async function makeStoreZip(entries,onProgress=null){
       if(!/^blob:/i.test(ref.src))continue;
       let hostedUrl=cache.get(ref.src);
       if(!hostedUrl){
-        const delivery=isPublishVideoRef(ref)?deliveryVideos.get(ref.src):null;
+        const delivery=isPublishVideoRef(ref)?await restoreDeliveryVideo(ref.src):null;
         const blob=delivery?.blob||assetRegistry.get(ref.src)?.blob;
         if(blob&&isPublishVideoRef(ref)){
           const key=blob.size+':'+blob.type;
