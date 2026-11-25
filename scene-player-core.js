@@ -4719,7 +4719,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
 
     _disposeBackgroundVideo(layer) {
       const video=layer?.querySelector('video.sp-background-video');
-      if(video){video.pause();video.removeAttribute('src');video.load();video.remove();}
+      if(video){clearInterval(video._ahLoopWatch);video._ahLoopWatch=null;video.onseeked=null;video.pause();video.removeAttribute('src');video.load();video.remove();}
     }
 
     _positionBackgroundVideo(layer,state,position) {
@@ -4775,6 +4775,10 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       video.volume=Math.max(0,Math.min(1,Number(cfg.volume??1)||0));
       video.playbackRate=Math.max(.25,Math.min(2,Number(cfg.speed)||1));
       video.loop=mode==='loop' && start===0 && end===null && (!cfg.autoSync || cfg.autoSync==='scene');
+      // iOS panorama: use explicit loop boundaries rather than native WebM looping.
+      const iosPanoramaLoop=mode==='loop' && state.projection==='panorama' && (/iPad|iPhone|iPod/.test(navigator.userAgent)|| (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1));
+      clearInterval(video._ahLoopWatch);video._ahLoopWatch=null;video.onseeked=null;
+      if(iosPanoramaLoop)video.loop=false;
       video.onerror=()=>{video._ahVideoFailed=true;};
       const bounds=()=>{const d=Number.isFinite(video.duration)?video.duration:Infinity;const a=Math.min(start,Math.max(0,d-.05));return [a,Math.min(end??d,d)];};
       const play=()=>{if(!this.ended && video.isConnected && mode!=='freeze' && !video._ahHeld && !video._ahScenePaused)video.play()?.catch(()=>{if(!video.isConnected)return;video.muted=true;video.play()?.catch(()=>{video._ahVideoFailed=true;});});};
@@ -4783,6 +4787,21 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       video.onloadedmetadata=init;
       video.ontimeupdate=()=>{if(mode==='freeze'||video._ahScenePaused)return;const [,b]=bounds();if(video.loop && video._ahLastTime!=null && video.currentTime+0.05<video._ahLastTime && !video.seeking)video._ahCycleDone=true;video._ahLastTime=video.currentTime;if(!video.loop && video.currentTime>=b)finish();};
       video.onended=finish;
+      if(iosPanoramaLoop){
+        const active=()=>video.isConnected && !this.ended && !document.hidden && this._currentBackgroundLayer()===layer && !video._ahScenePaused && !video._ahHeld && !video.error;
+        video.onseeked=()=>{if(active() && video.paused)play();};
+        let last=-1, still=0, attempts=0;
+        video._ahLoopWatch=setInterval(()=>{
+          if(!video.isConnected || this.ended){clearInterval(video._ahLoopWatch);video._ahLoopWatch=null;return;}
+          if(!active() || video.seeking){still=0;return;}
+          const t=video.currentTime, [,b]=bounds();
+          if(Math.abs(t-last)>.02){still=0;attempts=0;}else still++;
+          last=t;
+          if(attempts>=3 || still<3 || !Number.isFinite(b))return;
+          if(video.ended || t>=b-.15){attempts++;still=0;finish();}
+          else if(video.paused && video.readyState>=2){attempts++;still=0;play();}
+        },250);
+      }
       if(video.readyState>=1)init();else if(mode!=='freeze')play();
 
     }
