@@ -36,7 +36,32 @@ self.onmessage=({data:{rgba,w,h,threshold,mode="natural"}})=>{
  for(const p of paths){if(strokes.length>=1000||count>=20000)break;const step=Math.max(1,Math.ceil(2/scale));const q=p.filter((_,i)=>i%step===0||i===p.length-1);if(count+q.length>20000)continue;const radii=p.map(i=>dist[i]).sort((a,b)=>a-b);const width=mode==='legacy'?2.5:Math.max(1,Math.min(12,(2*radii[Math.floor(radii.length/2)]-1)*scale));
  const precise=mode==='precise';
  const widths=q.map((i,j)=>{const a=q[Math.max(0,j-3)],b=q[Math.min(q.length-1,j+3)],dx=b%w-a%w,dy=Math.floor(b/w)-Math.floor(a/w),len=Math.hypot(dx,dy);if(!len)return Math.max(1,(2*dist[i]-1)*scale);const nx=-dy/len,ny=dx/len,x=i%w,y=Math.floor(i/w);function edge(sign){let r=.5;for(;r<Math.min(100,dist[i]*3+8);r+=.5){const xx=Math.round(x+nx*r*sign),yy=Math.round(y+ny*r*sign);if(xx<0||xx>=w||yy<0||yy>=h||!original[yy*w+xx])break;}return r;}return Math.max(1,Math.min((edge(1)+edge(-1)-.5)*scale,(2*dist[i]+2)*scale));});
- const local=widths.map((v,j)=>{const a=widths.slice(Math.max(0,j-3),j+4).sort((a,b)=>a-b);return Math.min(v,a[Math.floor(a.length/2)]*1.35);});
+ let local=widths.map((v,j)=>{const a=widths.slice(Math.max(0,j-3),j+4).sort((a,b)=>a-b);return Math.min(v,a[Math.floor(a.length/2)]*1.35);});
+ // Width at a junction describes the union of ink, not an individual pen.
+ // Mask its influence along the original skeleton before downsampling.
+ if(precise){
+   const arc=[0], bad=new Uint8Array(p.length);
+   for(let k=1;k<p.length;k++)arc.push(arc[k-1]+Math.hypot(p[k]%w-p[k-1]%w,Math.floor(p[k]/w)-Math.floor(p[k-1]/w)));
+   for(let k=0;k<p.length;k++)if(adj(p[k]).length>=3){
+     const radius=Math.max(2,dist[p[k]]*1.7);
+     for(let j=k;j>=0&&arc[k]-arc[j]<=radius;j--)bad[j]=1;
+     for(let j=k+1;j<p.length&&arc[j]-arc[k]<=radius;j++)bad[j]=1;
+   }
+   const qi=[];for(let k=0;k<p.length;k++)if(k%step===0||k===p.length-1)qi.push(k);
+   const valid=qi.map(k=>!bad[k]);
+   const prev=[],next=[];let anchor=-1;
+   for(let j=0;j<q.length;j++){if(valid[j])anchor=j;prev[j]=anchor;}
+   anchor=-1;for(let j=q.length-1;j>=0;j--){if(valid[j])anchor=j;next[j]=anchor;}
+   const measured=local.slice();
+   local=local.map((v,j)=>{
+     if(valid[j])return v;
+     const l=prev[j],r=next[j];if(l<0&&r<0)return v;
+     if(l<0)return Math.min(v,measured[r]);if(r<0)return Math.min(v,measured[l]);
+     const t=(arc[qi[j]]-arc[qi[l]])/Math.max(.001,arc[qi[r]]-arc[qi[l]]);
+     return Math.min(v,measured[l]*(1-t)+measured[r]*t);
+   });
+ }
+
  const base=Math.max(1,Math.min(80,Math.max(...local)/2.5));
  const points=q.map((i,j)=>{let x=i%w+.5,y=Math.floor(i/w)+.5;if(mode!=='legacy'&&j>0&&j<q.length-1){const u=q[j-1],v=q[j+1];x=.7*x+.15*(u%w+v%w+1);y=.7*y+.15*(Math.floor(u/w)+Math.floor(v/w)+1);}return [+((ox+x*scale)/1000).toFixed(4),+((oy+y*scale)/600).toFixed(4),time+=8,precise?+Math.max(0,Math.min(1,(local[j]/base-.5)/2)).toFixed(4):.5];});time+=12;strokes.push({pen:precise?'brush':'ball',tip:'round',color:'#181818',width:+(precise?base:width).toFixed(2),opacity:1,points,releasedAt:time});count+=q.length;}
  self.postMessage({strokes,total,count});
