@@ -18,7 +18,7 @@
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
       <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>なぞった筆跡で確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線を大まかになぞります。下絵の連続経路に強制吸着します。ペンを離すまでが一筆です。</small></details>
-      <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
+      <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="precise">原画重視（Phase 3.4）</option><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
       <label data-nib>筆先<select name="tip"><option value="pointed">穂先（細入り）</option><option value="flat">平筆（斜め）</option><option value="round">丸筆</option></select></label>
       <label>色<input name="color" type="color"></label><label>太さ<input name="width" type="number" min="1" max="80"></label>
@@ -117,13 +117,13 @@
       const r=canvas.getBoundingClientRect(),sx=r.width,sy=r.height;
       const xy=p=>[p[0]*sx,p[1]*sy],dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
       const radius=Math.max(12,Math.min(42,sx*.085)),step=3;
-      function resample(ps){const out=[ps[0]];for(let i=1;i<ps.length;i++){const a=ps[i-1],b=ps[i],n=Math.ceil(dist(a,b)/step);for(let j=1;j<=n;j++)out.push([a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n]);}return out;}
+      function resample(ps){const out=[ps[0]];for(let i=1;i<ps.length;i++){const a=ps[i-1],b=ps[i],n=Math.ceil(dist(a,b)/step);for(let j=1;j<=n;j++)out.push([a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n,(a[2]??0)+( (b[2]??0)-(a[2]??0))*j/n]);}return out;}
       if(!samples.length)return null;
       const g=resample(samples.map(xy)),nodes=[],grid=new Map(),cell=4;
       const key=(x,y)=>x+','+y;
       function near(p,rad){const out=[];for(let x=Math.floor((p[0]-rad)/cell);x<=Math.floor((p[0]+rad)/cell);x++)for(let y=Math.floor((p[1]-rad)/cell);y<=Math.floor((p[1]+rad)/cell);y++)for(const i of grid.get(key(x,y))||[])if(dist(nodes[i].p,p)<=rad)out.push(i);return out;}
       function link(a,b){if(a===b||nodes[a].adj.includes(b))return;nodes[a].adj.push(b);nodes[b].adj.push(a);}
-      for(const st of smart.pool){if(!st.points.length)continue;let prev=-1;for(const p of resample(st.points.map(xy))){const i=nodes.length;nodes.push({p,st,adj:[]});if(prev>=0)link(prev,i);const k=key(Math.floor(p[0]/cell),Math.floor(p[1]/cell));if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);prev=i;}}
+      for(const st of smart.pool){if(!st.points.length)continue;let prev=-1;for(const p of resample(st.points.map(p=>[...xy(p),st.width*(st.pen==='brush'? .5+2*(p[3]??.5):st.pen==='fountain'? .45+(p[3]??.5):st.pen==='marker'?2:st.pen==='crayon'?1.4:1)]))){const i=nodes.length;nodes.push({p,st,adj:[]});if(prev>=0)link(prev,i);const k=key(Math.floor(p[0]/cell),Math.floor(p[1]/cell));if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);prev=i;}}
       // Join only almost coincident guide points, not nearby parallel lines.
       const junction=Math.max(.65,Math.min(2,sx*.003));
       for(let i=0;i<nodes.length;i++)for(const j of near(nodes[i].p,junction))if(j<i&&nodes[i].st!==nodes[j].st)link(i,j);
@@ -148,9 +148,10 @@
       if(dist(nodes[best.i].p,g.at(-1))>radius*.7)return null;
       const chunks=[];while(best){chunks.push(best.path);best=best.prev;}const ids=chunks.reverse().flat();
       const unit=v=>Math.round(Math.max(0,Math.min(1,v))*10000)/10000,points=[],widths=[];
-      for(const i of ids){const n=nodes[i],p=[unit(n.p[0]/sx),unit(n.p[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(n.st.width);}}
+      for(const i of ids){const n=nodes[i],p=[unit(n.p[0]/sx),unit(n.p[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(n.p[2]||n.st.width);}}
       if(!points.length||g.length>3&&points.length<2)return null;
-      return {...brush,width:widths.sort((a,b)=>a-b)[Math.floor(widths.length/2)]||brush.width,points};
+      const base=Math.max(1,Math.min(80,Math.max(...widths)/2.5));
+      return {...brush,pen:"brush",tip:"round",width:base,points:points.map((p,i)=>[...p,Math.max(0,Math.min(1,(widths[i]/base-.5)/2))])};
     }
     function smartPick(samples){
       const stroke=smartRoute(samples);
@@ -231,7 +232,7 @@
         const scale=Math.min(1,800/Math.max(img.naturalWidth,img.naturalHeight));
         const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));
         const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);const rgba=ctx.getImageData(0,0,c.width,c.height).data;
-        traceWorker=new Worker('./auto-trace-worker.js?v=2');
+        traceWorker=new Worker('./auto-trace-worker.js?v=34');
         const result=await new Promise((resolve,reject)=>{traceWorker.onmessage=e=>resolve(e.data);traceWorker.onerror=e=>reject(new Error(e.message));traceWorker.postMessage({rgba,w:c.width,h:c.height,threshold,mode:field('traceMode').value},[rgba.buffer]);});
         if(!dialog.open)return;if(result.error)throw new Error(result.error);if(!result.strokes.length)throw new Error('線が見つかりません。検出感度を調整してください。');
         layer.strokes=result.strokes;redo=[];wallEnd=null;layer.smooth='off';field('smooth').value='off';panX=panY=0;field('zoom').value='1';view();redraw();
