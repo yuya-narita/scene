@@ -393,6 +393,30 @@
 
   // Phase 3.1 public shell: cover and ending are outside Player Core.
   const pageVideoStates=new Map();
+  const iosPageLoop=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  function guardPublicPageVideo(page,root,state){
+    if(!iosPageLoop)return;
+    const v=state.video;
+    v.loop=false;
+    const active=()=>pageVideoStates.get(page)===state&&v.isConnected&&!root.hidden&&!document.hidden&&!root.classList.contains('is-shop-entry')&&!root.classList.contains('is-preview-lock');
+    const play=()=>{if(active()&&!v.error)v.play()?.catch(()=>{});};
+    const finish=()=>{if(!active()||v.seeking)return;try{v.currentTime=0;}catch(_){}play();};
+    const time=()=>{if(Number.isFinite(v.duration)&&v.currentTime>=v.duration)finish();};
+    const resume=()=>{if(active()&&v.paused)play();};
+    v.addEventListener('ended',finish);v.addEventListener('timeupdate',time);v.addEventListener('seeked',resume);
+    document.addEventListener('visibilitychange',resume);
+    let last=-1,still=0,attempts=0;
+    const timer=setInterval(()=>{
+      if(!active()||v.seeking){still=0;return;}
+      const t=v.currentTime,d=v.duration;
+      if(Math.abs(t-last)>.02){still=0;attempts=0;}else still++;
+      last=t;
+      if(attempts>=3||still<3||!Number.isFinite(d))return;
+      if(v.ended||t>=d-.15){attempts++;still=0;finish();}
+      else if(v.paused&&v.readyState>=2){attempts++;still=0;play();}
+    },250);
+    state.dispose=()=>{clearInterval(timer);v.removeEventListener('ended',finish);v.removeEventListener('timeupdate',time);v.removeEventListener('seeked',resume);document.removeEventListener('visibilitychange',resume);};
+  }
   function syncPublicPageVideos(){
     for(const [page,root,target] of [['cover',intro,introCover],['ending',ending,ending]]){
       if(!root||!target)continue;
@@ -401,13 +425,13 @@
       let state=pageVideoStates.get(page);
       const active=!!src&&!root.hidden&&!root.classList.contains('is-shop-entry')&&!root.classList.contains('is-preview-lock');
       if(!active){
-        if(state){state.video.pause();state.video.removeAttribute('src');state.video.load();state.layer.remove();pageVideoStates.delete(page);}
+        if(state){state.dispose?.();state.video.pause();state.video.removeAttribute('src');state.video.load();state.layer.remove();pageVideoStates.delete(page);}
         if(root.classList.contains('has-page-video'))root.classList.remove('has-page-video');continue;
       }
       if(!state){
         const layer=document.createElement('div');layer.className='public-page-video-layer';
         const video=document.createElement('video');video.muted=true;video.defaultMuted=true;video.playsInline=true;video.loop=true;video.autoplay=true;video.preload='metadata';video.setAttribute('playsinline','');video.setAttribute('muted','');video.setAttribute('aria-hidden','true');
-        layer.append(video);target.prepend(layer);state={layer,video};pageVideoStates.set(page,state);
+        layer.append(video);target.prepend(layer);state={layer,video};pageVideoStates.set(page,state);guardPublicPageVideo(page,root,state);
       }
       const v=state.video;
       v.style.objectFit=cfg.fit==='contain'?'contain':'cover';v.style.objectPosition=cfg.position||'center center';
