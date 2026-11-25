@@ -6628,90 +6628,57 @@ async function makeStoreZip(entries,onProgress=null){
       timer=setTimeout(()=>finish(new Error('Video metadata timeout')),15000);video.src=url;
     });
   }
-  // Repair streaming WebM metadata without touching encoded audio/video packets.
-  async function normalizeDeliveryWebM(blob, expected){
-    const bytes=new Uint8Array(await blob.arrayBuffer());
-    function vint(p,id=false){
-      if(p>=bytes.length||!bytes[p])throw new Error('Invalid EBML header');
-      let n=1,mask=128;while(!(bytes[p]&mask)){n++;mask>>=1;}
-      if(n>8||p+n>bytes.length)throw new Error('Invalid EBML length');
-      let v=BigInt(id?bytes[p]:bytes[p]& (mask-1));
-      for(let i=1;i<n;i++)v=(v<<8n)|BigInt(bytes[p+i]);
-      return {n,v,unknown:!id&&v===(1n<<BigInt(7*n))-1n};
-    }
-    function element(p,end){const id=vint(p,true),z=vint(p+id.n),start=p+id.n+z.n;
-      const stop=z.unknown?end:start+Number(z.v);if(stop>end||stop<start)throw new Error('Truncated WebM');
-      return {id:Number(id.v),p,start,stop,z,idn:id.n};}
-    function size(v){for(let n=1;n<=8;n++){if(BigInt(v)<(1n<<BigInt(7*n))-1n){let x=BigInt(v)|(1n<<BigInt(7*n));const a=new Uint8Array(n);for(let i=n-1;i>=0;i--){a[i]=Number(x&255n);x>>=8n;}return a;}}throw new Error('EBML size overflow');}
-    function uint(e){let v=0;for(let i=e.start;i<e.stop;i++)v=v*256+bytes[i];return v;}
-    let seg;for(let p=0;p<bytes.length;){const e=element(p,bytes.length);if(e.id===0x18538067){seg=e;break;}p=e.stop;}
-    if(!seg)throw new Error('WebM Segment missing');
-    let info,scale=1000000,last=-1,previous=-1; const top=[];
-    for(let p=seg.start;p<seg.stop;){const e=element(p,seg.stop);
-      // Streaming clusters may have unknown size; stop at the next segment-level element.
-      if(e.id===0x1f43b675&&e.z.unknown){for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if([0x1f43b675,0x1c53bb6b,0x114d9b74,0x1549a966,0x1654ae6b,0x1254c367,0x1043a770,0x1941a469].includes(f.id)){e.stop=q;break;}if(f.z.unknown)throw new Error('Unsupported unknown-size cluster child');q=f.stop;}}
-      top.push(e);
-      if(e.id===0x1549a966){info=e;for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if(f.id===0x2ad7b1)scale=uint(f);if(f.id===0x4489)return blob;q=f.stop;}}
-      if(e.id===0x1f43b675){let base=0;for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if(f.id===0xe7)base=uint(f);if(f.id===0xa3){const t=vint(f.start);const k=f.start+t.n;if(k+2>=f.stop)throw new Error('Invalid WebM block');let rel=(bytes[k]<<8)|bytes[k+1];if(rel>=32768)rel-=65536;const stamp=base+rel;if(stamp>last){previous=last;last=stamp;}}q=f.stop;}}
-      p=e.stop;
-    }
-    if(!info||!scale||last<0)throw new Error('WebM metadata repair unsupported for this layout');
-    const tail=last*scale/1e9, step=Math.max(0,Math.min(.1,(last-previous)*scale/1e9));
-    const duration=tail+step;
-    if(Math.abs(duration-expected)>.12)throw new Error('Recorded timestamps differ from master: '+duration.toFixed(3)+' s');
-    const field=new Uint8Array(11);field.set([0x44,0x89,0x88]);new DataView(field.buffer).setFloat64(3,duration*1e9/scale,false);
-    const infoSize=size(info.stop-info.start+field.length);
-    const parts=[];
-    for(const e of top){
-      // Old byte-offset indexes are invalid after inserting Duration.
-      if(e.id===0x114d9b74||e.id===0x1c53bb6b)continue;
-      if(e===info)parts.push(bytes.subarray(e.p,e.p+e.idn),infoSize,bytes.subarray(e.start,e.stop),field);
-      else if(e.id===0x1f43b675&&e.z.unknown)parts.push(bytes.subarray(e.p,e.p+e.idn),size(e.stop-e.start),bytes.subarray(e.start,e.stop));
-      else parts.push(bytes.subarray(e.p,e.stop));
-    }
-    const segmentSize=size(parts.reduce((n,a)=>n+a.length,0));
-    return new Blob([bytes.subarray(0,seg.p+seg.idn),segmentSize,...parts],{type:'video/webm'});
-  }
-  // Real-time, browser-native experimental delivery encoder. No master mutation.
-  async function encodeDeliveryVideo(blob, factor, progress, signal, diagnostic){
-    if(!window.MediaRecorder || !HTMLMediaElement.prototype.captureStream) throw new Error(u('この圧縮機能はPC版Chrome/Edgeでお試しください。','Use desktop Chrome/Edge for this encoder.'));
-    const meta=await deliveryVideoMetadata(blob);
-    if(!Number.isFinite(meta.duration)||meta.duration<=0||!meta.width||!meta.height)throw new Error('Invalid video metadata');
-    const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus'].find(x=>MediaRecorder.isTypeSupported(x));
-    if(!mime)throw new Error('WebM encoder unavailable');
-    const video=document.createElement('video'),url=URL.createObjectURL(blob);
-    let stream,rec,timer,abortHandler;const chunks=[];
-    video.playsInline=true;video.preload='auto';video.style.cssText='position:fixed;left:-10000px;top:0;width:1px;height:1px';document.body.append(video);
-    try{
-      await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(new Error('Video load timeout')),15000);video.onloadeddata=()=>{clearTimeout(t);resolve();};video.onerror=()=>{clearTimeout(t);reject(new Error('Video decode failed'));};video.src=url;});
-      if(signal.aborted)throw new Error('Cancelled');
-      stream=video.captureStream();
-      if(!stream.getVideoTracks().length)throw new Error('Video capture unavailable');
-      const target=Math.max(150000,Math.min(8000000,Math.round(blob.size*8/meta.duration*factor)-96000));
-      rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:target,audioBitsPerSecond:96000});
-      let result=await new Promise((resolve,reject)=>{
-        abortHandler=()=>reject(new Error(u('圧縮を中止しました。','Encoding cancelled.')));signal.addEventListener('abort',abortHandler,{once:true});
-        rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};rec.onerror=e=>reject(e.error||new Error('Encoder failed'));
-        rec.onstop=()=>resolve(new Blob(chunks,{type:'video/webm'}));
-        video.onended=()=>{if(rec.state!=='inactive')rec.stop();};
-        video.ontimeupdate=()=>{if(rec.state!=='inactive')progress(Math.min(99,Math.floor(video.currentTime/meta.duration*100)));};
-        timer=setTimeout(()=>reject(new Error('Encoding timeout')),Math.max(30000,meta.duration*3000+15000));
-        rec.start(1000);video.play().catch(reject);
-      });
-      if(result.size)diagnostic?.(result,mime,meta);
-      if(result.size>=blob.size||!result.size)throw new Error(u('容量が減らなかったため原本を維持します。','No size reduction; master retained.'));
-      // MediaRecorder WebM may lack duration metadata: reject rather than publish an unsafe asset.
-      progress(99);
-      let out=await deliveryVideoMetadata(result);
-      if(!Number.isFinite(out.duration)){
-        result=await normalizeDeliveryWebM(result,meta.duration);
-        diagnostic?.(result,mime,meta);
-        out=await deliveryVideoMetadata(result);
-      }
-      if(signal.aborted)throw new Error("Cancelled");
-      if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.12||out.width!==meta.width||out.height!==meta.height)throw new Error(u('出力の時間・解像度を検証できません。原本を維持します。','Output duration/resolution could not be verified. Master retained.'));
-      return result;
-    }finally{video.ontimeupdate=null;video.onended=null;clearTimeout(timer);if(abortHandler)signal.removeEventListener('abort',abortHandler);if(rec&&rec.state!=='inactive'){try{rec.stop();}catch{}}video.pause();stream?.getTracks().forEach(t=>t.stop());video.removeAttribute('src');video.load();video.remove();URL.revokeObjectURL(url);}
+  // Offline MP4 AVC -> VP9. No wall-clock capture. Unsupported tracks fail closed.
+  async function encodeDeliveryVideo(blob,factor,progress,signal,diagnostic){
+    if(!window.VideoDecoder||!window.VideoEncoder)throw new Error('WebCodecs requires current desktop Chrome/Edge (HTTPS).');
+    const check=()=>{if(signal.aborted)throw new Error('Cancelled');};
+    const meta=await deliveryVideoMetadata(blob);check();
+    if(blob.size>150*1024*1024)throw new Error('Trial encoder limit: 150 MiB');
+    const a=new Uint8Array(await blob.arrayBuffer()), d=new DataView(a.buffer);
+    const U=p=>d.getUint32(p), S=p=>d.getInt32(p), H=p=>d.getUint16(p), str=p=>String.fromCharCode(...a.subarray(p,p+4));
+    function boxes(s,e){const out=[];while(s+8<=e){let n=U(s),h=8;if(n===1){n=Number(d.getBigUint64(s+8));h=16;}if(!n)n=e-s;if(n<h||s+n>e)throw Error('Invalid MP4 box');out.push({t:str(s+4),p:s+h,e:s+n});s+=n;}return out;}
+    const children=b=>boxes(b.p,b.e), get=(b,t)=>{const x=children(b).find(x=>x.t===t);if(!x)throw Error('Missing MP4 '+t);return x;};
+    const root={p:0,e:a.length}, moov=get(root,'moov');if(children(root).some(b=>b.t==='moof'))throw Error('Fragmented MP4 not supported');
+    const tracks=children(moov).filter(b=>b.t==='trak');
+    const kind=t=>str(get(get(t,'mdia'),'hdlr').p+8);
+    if(tracks.some(t=>kind(t)==='soun'))throw Error('Audio tracks are not supported by this trial encoder; master retained.');
+    const tr=tracks.find(t=>kind(t)==='vide');if(!tr)throw Error('No video track');
+    const md=get(tr,'mdia'), mh=get(md,'mdhd'), scale=U(mh.p+(a[mh.p]===1?20:12)), st=get(get(md,'minf'),'stbl');
+    const sd=get(st,'stsd'), entry=boxes(sd.p+8,sd.e)[0];if(!entry||!['avc1','avc3'].includes(entry.t))throw Error('Only AVC/H.264 MP4 supported in this trial');
+    const avc=get({p:entry.p+78,e:entry.e},'avcC'), desc=a.slice(avc.p,avc.e), codec='avc1.'+Array.from(desc.slice(1,4),x=>x.toString(16).padStart(2,'0')).join('');
+    const sz=get(st,'stsz'), fixed=U(sz.p+4), count=U(sz.p+8);if(!count||count>18000||!scale)throw Error('Unsupported sample count');
+    const sizes=Array.from({length:count},(_,i)=>fixed||U(sz.p+12+i*4));
+    function runs(t,signed=false){const b=children(st).find(b=>b.t===t);if(!b)return null;const r=[];for(let i=0;i<U(b.p+4);i++){const p=b.p+8+i*8,n=U(p),v=signed&&a[b.p]===1?S(p+4):U(p+4);if(r.length+n>count)throw Error('Invalid timing table');for(let j=0;j<n;j++)r.push(v);}if(r.length!==count)throw Error('Incomplete timing table');return r;}
+    const durations=runs('stts'), offsets=runs('ctts',true)||Array(count).fill(0), sc=get(st,'stsc'), co=children(st).find(b=>['stco','co64'].includes(b.t));if(!co)throw Error('Missing chunk offsets');
+    const map=Array.from({length:U(sc.p+4)},(_,i)=>[U(sc.p+8+i*12),U(sc.p+12+i*12),U(sc.p+16+i*12)]), pos=[];let mi=0;
+    for(let i=0;i<U(co.p+4);i++){while(mi+1<map.length&&map[mi+1][0]<=i+1)mi++;if(map[mi][2]!==1)throw Error('Multiple sample descriptions unsupported');let p=co.t==='co64'?Number(d.getBigUint64(co.p+8+i*8)):U(co.p+8+i*4);for(let j=0;j<map[mi][1];j++){pos.push(p);p+=sizes[pos.length-1];if(p>a.length)throw Error('Invalid sample offset');}}
+    if(pos.length!==count)throw Error('Sample count mismatch');
+    const ss=children(st).find(b=>b.t==='stss'), keys=ss?new Set(Array.from({length:U(ss.p+4)},(_,i)=>U(ss.p+8+i*4))):null;
+    let clock=0;const pts=durations.map((n,i)=>{const t=clock+offsets[i];clock+=n;return t;});const origin=Math.min(...pts), times=pts.map(t=>Math.round((t-origin)*1e6/scale)), lens=durations.map(t=>Math.round(t*1e6/scale));
+    const end=Math.max(...times.map((t,i)=>t+lens[i]));if(Math.abs(end/1e6-meta.duration)>.06)throw Error('MP4 edit/timing unsupported; master retained');
+    const dc={codec,description:desc}, ec={codec:'vp09.00.10.08',width:meta.width,height:meta.height,bitrate:Math.max(100000,Math.min(12000000,Math.round(blob.size*8/meta.duration*factor))),framerate:count/meta.duration,latencyMode:'quality'};
+    if(!(await VideoDecoder.isConfigSupported(dc)).supported||!(await VideoEncoder.isConfigSupported(ec)).supported)throw Error('AVC decoder or VP9 encoder unavailable');
+    const frames=[], packets=[];let failure, decoded=0;const decoder=new VideoDecoder({output:f=>frames.push(f),error:e=>failure=e}), encoder=new VideoEncoder({output:c=>{const b=new Uint8Array(c.byteLength);c.copyTo(b);packets.push({t:c.timestamp,d:c.duration,key:c.type==='key',b});},error:e=>failure=e});
+    const tick=()=>new Promise(r=>setTimeout(r,5));const guard=()=>{check();if(failure)throw failure;};
+    async function drain(){while(frames.length){guard();while(encoder.encodeQueueSize>3){await tick();guard();}const f=frames.shift();try{encoder.encode(f,{keyFrame:decoded===0||decoded%Math.max(1,Math.round(ec.framerate*2))===0});decoded++;}finally{f.close();}}}
+    try{decoder.configure(dc);encoder.configure(ec);for(let i=0;i<count;i++){guard();while(decoder.decodeQueueSize>3){await drain();await tick();guard();}decoder.decode(new EncodedVideoChunk({type:!keys||keys.has(i+1)?'key':'delta',timestamp:times[i],duration:lens[i],data:a.subarray(pos[i],pos[i]+sizes[i])}));await drain();if(i%4===0){progress(Math.floor(i/count*90));await tick();}}await decoder.flush();await drain();await encoder.flush();guard();}finally{decoder.close();encoder.close();frames.forEach(f=>f.close());}
+    if(decoded!==count||packets.length!==count)throw Error('Frame count mismatch: '+decoded+'/'+packets.length+'/'+count);
+    const expected=[...times].sort((x,y)=>x-y);if(packets.some((p,i)=>p.t!==expected[i]))throw Error('Output timestamps differ');
+    // Finite WebM with millisecond timecodes, duration and keyframe cues.
+    const bytes=(...v)=>new Uint8Array(v), cat=(...parts)=>{const r=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let k=0;for(const p of parts){r.set(p,k);k+=p.length;}return r;};
+    function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
+    function vint(n){for(let k=1;k<=8;k++){if(BigInt(n)<(1n<<BigInt(7*k))-1n){let x=BigInt(n)|(1n<<BigInt(7*k)),r=new Uint8Array(k);for(let i=k-1;i>=0;i--){r[i]=Number(x&255n);x>>=8n;}return r;}}throw Error('EBML overflow');}
+    const el=(id,...p)=>{const b=cat(...p);return cat(num(id),vint(b.length),b);}, ui=(id,n)=>el(id,num(n)), txt=(id,s)=>el(id,new TextEncoder().encode(s));
+    const fl=new Uint8Array(8);new DataView(fl.buffer).setFloat64(0,end/1000);
+    const header=el(0x1a45dfa3,ui(0x4286,1),ui(0x42f7,1),ui(0x42f2,4),ui(0x42f3,8),txt(0x4282,'webm'),ui(0x4287,4),ui(0x4285,2));
+    const info=el(0x1549a966,ui(0x2ad7b1,1000000),el(0x4489,fl),txt(0x4d80,'Ahako'),txt(0x5741,'Ahako'));
+    const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),el(0xe0,ui(0xb0,meta.width),ui(0xba,meta.height))));
+    const clusters=[], cues=[];let base=0, blocks=[], offset=info.length+track.length;
+    function finish(){if(!blocks.length)return;const c=el(0x1f43b675,ui(0xe7,base),...blocks);clusters.push(c);offset+=c.length;blocks=[];}
+    for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;if(p.key)cues.push(el(0xbb,ui(0xb3,t),el(0xb7,ui(0xf7,1),ui(0xf1,offset))));}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
+    const parts=[info,track,...clusters,el(0x1c53bb6b,...cues)];const result=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
+    diagnostic?.(result,'video/webm;codecs=vp9',meta);progress(99);check();
+    const out=await deliveryVideoMetadata(result);check();if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.06||out.width!==meta.width||out.height!==meta.height)throw Error('Output metadata mismatch');if(result.size>=blob.size)throw Error('No size reduction; master retained');return result;
   }
   // Local diagnostics only: no publishing, payment, or mutation of the master.
   function showDeliveryComparison(master,result,accepted){
@@ -6775,7 +6742,7 @@ async function makeStoreZip(entries,onProgress=null){
       const encode=document.createElement('button'), cancel=document.createElement('button'), quality=document.createElement('select'), status=document.createElement('p');
       encode.type=cancel.type='button';encode.textContent=u('試験圧縮（WebM）','Experimental encode (WebM)');cancel.textContent=u('中止','Cancel');cancel.disabled=true;
       for(const [v,t] of [['0.75','QUALITY 75%'],['0.45','BALANCED 45%'],['0.22','ULTRA 22%']]){const o=document.createElement('option');o.value=v;o.textContent=t;quality.append(o);}quality.value='0.45';
-      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（動画の長さ程度かかります）','Encoding in real time');try{const blob=await encodeDeliveryVideo(master.blob,Number(quality.value),n=>status.textContent=u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,(blob,mime)=>{candidate={blob,mime,name:master.name.replace(/\.[^.]+$/,'')+'.webm'};});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){if(candidate)candidate.error=String(e);status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
+      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（フレーム単位・時間がかかる場合があります）','Offline frame encoding');try{const blob=await encodeDeliveryVideo(master.blob,Number(quality.value),n=>status.textContent=u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,(blob,mime)=>{candidate={blob,mime,name:master.name.replace(/\.[^.]+$/,'')+'.webm'};});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){if(candidate)candidate.error=String(e);status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
       cancel.onclick=()=>activeEncode?.abort();
       row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();
     }
