@@ -17,7 +17,7 @@
       <div class="draw-row"><button data-action="undo">一筆戻す</button><button data-action="redo">やり直す</button>
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
-      <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
+      <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
       <label data-nib>筆先<select name="tip"><option value="pointed">穂先（細入り）</option><option value="flat">平筆（斜め）</option><option value="round">丸筆</option></select></label>
       <label>色<input name="color" type="color"></label><label>太さ<input name="width" type="number" min="1" max="80"></label>
@@ -164,8 +164,8 @@
         const scale=Math.min(1,800/Math.max(img.naturalWidth,img.naturalHeight));
         const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));
         const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);const rgba=ctx.getImageData(0,0,c.width,c.height).data;
-        traceWorker=new Worker('./auto-trace-worker.js?v=1');
-        const result=await new Promise((resolve,reject)=>{traceWorker.onmessage=e=>resolve(e.data);traceWorker.onerror=e=>reject(new Error(e.message));traceWorker.postMessage({rgba,w:c.width,h:c.height,threshold},[rgba.buffer]);});
+        traceWorker=new Worker('./auto-trace-worker.js?v=2');
+        const result=await new Promise((resolve,reject)=>{traceWorker.onmessage=e=>resolve(e.data);traceWorker.onerror=e=>reject(new Error(e.message));traceWorker.postMessage({rgba,w:c.width,h:c.height,threshold,mode:field('traceMode').value},[rgba.buffer]);});
         if(!dialog.open)return;if(result.error)throw new Error(result.error);if(!result.strokes.length)throw new Error('線が見つかりません。検出感度を調整してください。');
         layer.strokes=result.strokes;redo=[];wallEnd=null;layer.smooth='off';field('smooth').value='off';panX=panY=0;field('zoom').value='1';view();redraw();
         out.textContent=`生成完了：${result.strokes.length}筆・${result.count}点`+(result.total>result.strokes.length?'（上限により一部省略）':'');
