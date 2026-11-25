@@ -6641,7 +6641,7 @@ async function makeStoreZip(entries,onProgress=null){
     const root={p:0,e:a.length}, moov=get(root,'moov');if(children(root).some(b=>b.t==='moof'))throw Error('Fragmented MP4 not supported');
     const tracks=children(moov).filter(b=>b.t==='trak');
     const kind=t=>str(get(get(t,'mdia'),'hdlr').p+8);
-    if(tracks.some(t=>kind(t)==='soun'))throw Error('Audio tracks are not supported by this trial encoder; master retained.');
+    const audioTracks=tracks.filter(t=>kind(t)==='soun');if(audioTracks.length>1)throw Error('Multiple audio tracks unsupported; master retained');
     const tr=tracks.find(t=>kind(t)==='vide');if(!tr)throw Error('No video track');
     const md=get(tr,'mdia'), mh=get(md,'mdhd'), scale=U(mh.p+(a[mh.p]===1?20:12)), st=get(get(md,'minf'),'stbl');
     const sd=get(st,'stsd'), entry=boxes(sd.p+8,sd.e)[0];if(!entry||!['avc1','avc3'].includes(entry.t))throw Error('Only AVC/H.264 MP4 supported in this trial');
@@ -6681,6 +6681,25 @@ async function makeStoreZip(entries,onProgress=null){
     if(decoded!==count||packets.length!==count)throw Error('Frame count mismatch: '+decoded+'/'+packets.length+'/'+count);
     const expected=[...times].sort((x,y)=>x-y);if(packets.some((p,i)=>p.t!==expected[i]))throw Error('Output timestamps differ');
     if(report){let err, outputCount=0;const vd=new VideoDecoder({output:f=>{try{outputCount++;if(samples.has(f.timestamp))scores.push({...score(samples.get(f.timestamp).luma,luma(f)),...detailError(samples.get(f.timestamp).detail,detail(f)),...(strict?nativeScore(samples.get(f.timestamp).native,native(f)):{})});}catch(e){err=e;}finally{f.close();}},error:e=>err=e});try{vd.configure({codec:ec.codec,codedWidth:meta.width,codedHeight:meta.height});for(const p of packets){guard();if(err)throw err;while(vd.decodeQueueSize>3){await tick();guard();if(err)throw err;}vd.decode(new EncodedVideoChunk({type:p.key?'key':'delta',timestamp:p.t,duration:p.d??0,data:p.b}));}await vd.flush();if(err)throw err;guard();}finally{if(vd.state!=='closed')vd.close();}if(outputCount!==count||scores.length!==sampleTimes.size)throw Error('Quality verification frame mismatch');const mse=scores.reduce((n,v)=>n+v.mse,0)/scores.length;const db=v=>10*Math.log10(65025/v);const avg=k=>scores.reduce((n,v)=>n+v[k],0)/scores.length;const max=k=>Math.max(...scores.map(v=>v[k]));report({strict,evalWidth:canvas.width,...(strict?{nativePsnr:db(avg("nativeMse")),tileWorst:db(max("tileMse")),coverPsnr:db(avg("coverMse")),coverWorst:db(max("coverMse")),edgePsnr:db(avg("edgeMse"))}:{}),frames:count,samples:scores.length,ssim:scores.reduce((n,v)=>n+v.ssim,0)/scores.length,worst:Math.min(...scores.map(v=>v.ssim)),psnr:mse===0?Infinity:10*Math.log10(65025/mse),detailPsnr:10*Math.log10(65025/(scores.reduce((n,v)=>n+v.rgbMse,0)/scores.length)),detailWorst:10*Math.log10(65025/Math.max(...scores.map(v=>v.worstRgbMse)))});}
+    // Decode the complete audio timeline, then encode Opus offline in bounded blocks.
+    let audio=null;
+    if(audioTracks.length){
+      if(!window.AudioEncoder||!window.AudioData||!window.AudioContext)throw Error('Audio WebCodecs unavailable; master retained');
+      const ac=new AudioContext({sampleRate:48000});let pcm;
+      try{pcm=await ac.decodeAudioData(a.buffer.slice(0));}finally{await ac.close();}check();
+      const channels=pcm.numberOfChannels, rate=48000, length=pcm.length;
+      if(channels<1||channels>2||pcm.sampleRate!==rate||length*channels*4>64*1024*1024||Math.abs(length/rate-meta.duration)>.06)throw Error('Unsupported audio layout or duration; master retained');
+      const config={codec:'opus',sampleRate:rate,numberOfChannels:channels,bitrate:channels===1?64000:96000,opus:{frameDuration:20000}};
+      if(!(await AudioEncoder.isConfigSupported(config)).supported)throw Error('Opus encoder unavailable');
+      let head,err;const ap=[];const ae=new AudioEncoder({output:(c,m)=>{if(m?.decoderConfig?.description){const v=m.decoderConfig.description;head=new Uint8Array(v.buffer||v,v.byteOffset||0,v.byteLength).slice();}const b=new Uint8Array(c.byteLength);c.copyTo(b);ap.push({t:c.timestamp,d:c.duration,b,key:true,audio:true});},error:e=>err=e});
+      try{ae.configure(config);for(let i=0;i<length;i+=960){check();if(err)throw err;while(ae.encodeQueueSize>4){await tick();check();if(err)throw err;}const n=Math.min(960,length-i), data=new Float32Array(n*channels);for(let c=0;c<channels;c++)data.set(pcm.getChannelData(c).subarray(i,i+n),c*n);const f=new AudioData({format:'f32-planar',sampleRate:rate,numberOfFrames:n,numberOfChannels:channels,timestamp:Math.round(i*1e6/rate),data});try{ae.encode(f);}finally{f.close();}}await ae.flush();if(err)throw err;}finally{ae.close();}
+      if(!head||head.length<19||String.fromCharCode(...head.slice(0,8))!=='OpusHead'||!ap.length)throw Error('Opus metadata unavailable');
+      const skip=new DataView(head.buffer,head.byteOffset,head.byteLength).getUint16(10,true), delay=Math.round(skip*1e9/rate);
+      // WebCodecs Opus packets use 20 ms frames; normalize packet clock, preserve codec delay.
+      const padding=ap.length*960-skip-length;if(padding<0||padding>=960)throw Error('Opus padding mismatch; master retained');
+      for(let i=0;i<ap.length;i++){ap[i].t=i*20000;ap[i].padding=i===ap.length-1?Math.round(padding*1e9/rate):0;}
+      audio={head,delay,channels,packets:ap,length,pcm};
+    }
     // Finite WebM with millisecond timecodes, duration and keyframe cues.
     const bytes=(...v)=>new Uint8Array(v), cat=(...parts)=>{const r=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let k=0;for(const p of parts){r.set(p,k);k+=p.length;}return r;};
     function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
@@ -6689,12 +6708,15 @@ async function makeStoreZip(entries,onProgress=null){
     const fl=new Uint8Array(8);new DataView(fl.buffer).setFloat64(0,end/1000);
     const header=el(0x1a45dfa3,ui(0x4286,1),ui(0x42f7,1),ui(0x42f2,4),ui(0x42f3,8),txt(0x4282,'webm'),ui(0x4287,4),ui(0x4285,2));
     const info=el(0x1549a966,ui(0x2ad7b1,1000000),el(0x4489,fl),txt(0x4d80,'Ahako'),txt(0x5741,'Ahako'));
-    const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),el(0xe0,ui(0xb0,meta.width),ui(0xba,meta.height))));
+    const hz=new Uint8Array(8);new DataView(hz.buffer).setFloat64(0,48000);
+    const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),el(0xe0,ui(0xb0,meta.width),ui(0xba,meta.height))),...(audio?[el(0xae,ui(0xd7,2),ui(0x73c5,2),ui(0x83,2),txt(0x86,'A_OPUS'),el(0x63a2,audio.head),ui(0x56aa,audio.delay),ui(0x56bb,80000000),el(0xe1,el(0xb5,hz),ui(0x9f,audio.channels)))]:[]));
     const clusters=[], cues=[];let base=0, blocks=[], offset=info.length+track.length;
     function finish(){if(!blocks.length)return;const c=el(0x1f43b675,ui(0xe7,base),...blocks);clusters.push(c);offset+=c.length;blocks=[];}
-    for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;if(p.key)cues.push(el(0xbb,ui(0xb3,t),el(0xb7,ui(0xf7,1),ui(0xf1,offset))));}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
+    const muxPackets=audio?[...packets,...audio.packets].sort((a,b)=>a.t-b.t||Number(!!a.audio)-Number(!!b.audio)):packets;
+    for(const p of muxPackets){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;if(!p.audio&&p.key)cues.push(el(0xbb,ui(0xb3,t),el(0xb7,ui(0xf7,1),ui(0xf1,offset))));}const rel=t-base;const block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();
     const parts=[info,track,...clusters,el(0x1c53bb6b,...cues)];const result=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
-    diagnostic?.(result,'video/webm;codecs=vp9',meta);progress(99);check();
+    if(audio){const ac=new AudioContext({sampleRate:48000});let decodedAudio;try{decodedAudio=await ac.decodeAudioData(await result.arrayBuffer());}finally{await ac.close();}check();if(decodedAudio.numberOfChannels!==audio.channels||Math.abs(decodedAudio.length-audio.length)>960)throw Error('Output audio duration/channel mismatch');let power=0,error=0;for(let c=0;c<audio.channels;c++){const x=audio.pcm.getChannelData(c),y=decodedAudio.getChannelData(c);for(let i=0;i<Math.min(x.length,y.length);i+=4){power+=x[i]*x[i];error+=(x[i]-y[i])**2;}}if(error>Math.max(1e-6,power*.35))throw Error('Audio alignment/quality verification failed; master retained');}
+    diagnostic?.(result,audio?'video/webm;codecs=vp9,opus':'video/webm;codecs=vp9',meta);progress(99);check();
     const out=await deliveryVideoMetadata(result);check();if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.06||out.width!==meta.width||out.height!==meta.height)throw Error('Output metadata mismatch');if(result.size>=blob.size)throw Error('No size reduction; master retained');return result;
   }
   async function optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage=()=>{}){
@@ -6740,6 +6762,7 @@ async function makeStoreZip(entries,onProgress=null){
     const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;controls.append(b);return b;};
     const msg=document.createElement('p');dialog.append(msg);
     button(u('同時再生（無音）','Play both (muted)'),async()=>{try{const t=videos[0].currentTime;for(const v of videos){v.muted=true;v.currentTime=t;}await Promise.all(videos.map(v=>v.play()));}catch(e){videos.forEach(v=>v.pause());if(!closed)msg.textContent=String(e);}});
+    for(const [i,label] of [[0,'MASTER'],[1,'DELIVERY']])button(label+u(' 音声確認',' audio check'),async()=>{try{const t=videos[0].currentTime;videos.forEach(v=>{v.pause();v.muted=true;});videos[i].currentTime=t>=videos[i].duration?0:t;videos[i].muted=false;await videos[i].play();}catch(e){msg.textContent=String(e);}});
     button(u('両方停止','Pause both'),()=>videos.forEach(v=>v.pause()));
     button(u('原本の位置に合わせる','Match master position'),()=>{videos.forEach(v=>v.pause());try{videos[1].currentTime=videos[0].currentTime;}catch(e){msg.textContent=String(e);}});
     let portrait=false;const portraitButton=button(u('縦画面比較 9:16','Compare portrait 9:16'),()=>{portrait=!portrait;for(const v of videos){v.style.aspectRatio=portrait?'9 / 16':'16 / 9';v.style.objectFit=portrait?'cover':'contain';v.style.height=portrait?'min(55vh,520px)':'auto';v.style.width=portrait?'auto':'100%';v.style.maxWidth='100%';}});
