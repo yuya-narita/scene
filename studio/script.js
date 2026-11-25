@@ -14001,6 +14001,7 @@ function openDesktopBackgroundDetail(){
       if(!p.background || typeof p.background!=='object'){
         const inherited=clone(previousFraming()||{});
         delete inherited.src;
+        if(inherited.video)delete inherited.video.continuity;
         p.background={
           ...inherited,
           transition:inherited.transition||'fade',
@@ -14136,8 +14137,9 @@ function openDesktopBackgroundDetail(){
     if(inheritedBackground?.src && (inheritedBackground.mediaType==='video'||isVideoBackground(inheritedBackground.src,inheritedBackground._editorFileName))){
       const sec=section(u('動画設定','Video settings')), grid=two(sec);
       const cfg={...(previousFraming()?.src===inheritedBackground.src?previousFraming()?.video:{}),...inheritedBackground.video};
-      const change=(key,value)=>{captureUndo(u('動画設定の変更を元に戻せます','Undo video settings'));const bg=ensureImageState();bg.video={...cfg,...bg.video,[key]:value};cfg[key]=value;apply();};
+      const change=(key,value)=>{captureUndo(u('動画設定の変更を元に戻せます','Undo video settings'));const bg=ensureImageState();const own=bg.video?.continuity;bg.video={...cfg,...bg.video,[key]:value};if(key!=='continuity'){if(own===undefined)delete bg.video.continuity;else bg.video.continuity=own;}cfg[key]=value;apply();};
       grid.append(desktopDetailSelect(u('再生方式','Playback'),[['loop',u('ループ','Loop')],['hold',u('最後で停止','Hold last frame')],['freeze',u('指定位置で静止','Freeze')],['next',u('終了で次Scene','Next on end')]],cfg.mode||'loop',v=>change('mode',v)));
+      grid.append(desktopDetailSelect(u('Scene間の再生','Scene continuity'),[['carry',u('継続（現在の状態）','Continue')],['restart',u('開始位置から再生','Restart')],['pause',u('現在位置で一時停止','Pause')],['resume',u('停止位置から再開','Resume')]],explicit()?.video?.continuity||'carry',v=>change('continuity',v)));
       grid.append(desktopDetailSelect(u('再生速度','Speed'),['0.25','0.5','0.75','1','1.25','1.5','2'].map(v=>[v,v+'×']),String(cfg.speed??1),v=>change('speed',Number(v))));
       const number=(label,key,value,min,max,step,nullable=false)=>{const wrap=document.createElement('label');wrap.className='desktop-text-detail-field';const cap=document.createElement('span');cap.textContent=label;const input=document.createElement('input');input.type='number';input.min=min;input.max=max;input.step=step;input.value=value??'';input.addEventListener('change',()=>{let v=nullable&&input.value===''?null:Math.max(min,Math.min(max,Number(input.value)||0));if(key==='end'&&v!==null)v=Math.max((Number(cfg.start)||0)+.1,v);if(key==='start'&&cfg.end!=null)v=Math.min(v,Math.max(0,cfg.end-.1));input.value=v??'';change(key,v);});wrap.append(cap,input);return wrap;};
       grid.append(number(u('開始位置（秒）','Start (s)'),'start',cfg.start??0,0,86400,.1),number(u('終了位置（秒・空欄＝末尾）','End (s, blank = end)'),'end',cfg.end,0,86400,.1,true));

@@ -1609,7 +1609,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       // user's gesture. _safePlay handles delayed graph attachment.
       this._flushPendingAudio();
       const bgVideo=this._currentBackgroundLayer()?.querySelector('video.sp-background-video');
-      if(bgVideo && bgVideo._ahVideoConfig?.muted===false && this.audioPlaybackArmed){bgVideo.muted=false;if(!bgVideo._ahHeld && bgVideo._ahVideoConfig.mode!=='freeze')bgVideo.play()?.catch(()=>{});}
+      if(bgVideo && bgVideo._ahVideoConfig?.muted===false && this.audioPlaybackArmed){bgVideo.muted=false;if(!bgVideo._ahHeld && !bgVideo._ahScenePaused && bgVideo._ahVideoConfig.mode!=='freeze')bgVideo.play()?.catch(()=>{});}
 
       emit(this.host, 'sceneplayer:audiounlock', {
         webAudio: !!ctx,
@@ -4744,22 +4744,33 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       layer.style.backgroundImage='none';
       this._positionBackgroundVideo(layer,state,state.projection==='panorama'?'50% 50%':state.position);
       const cfg=state.video||{};
+      // A continuity command belongs to the entering Scene, not inherited style.
+      const sceneIndex=this.index;
+      const command=this.document?.scenes?.[sceneIndex]?.presentation?.background?.video?.continuity||'carry';
+      const entered=video._ahVideoScene!==sceneIndex;
+      video._ahVideoScene=sceneIndex;
+      if(entered){
+        if(command==='restart'||command==='resume')video._ahScenePaused=false;
+        if(command==='pause')video._ahScenePaused=true;
+      }
+      const restart=entered&&command==='restart';
       const mode=['loop','hold','freeze','next'].includes(cfg.mode)?cfg.mode:'loop';
       const start=Math.max(0,Number(cfg.start)||0), end=cfg.end==null?null:Math.max(start+0.1,Number(cfg.end)||0);
       const key=JSON.stringify([mode,start,end]);
-      const changed=video._ahVideoKey!==key;
+      const changed=video._ahVideoKey!==key || restart;
       video._ahVideoKey=key;
+      if(changed)video._ahPendingSeek=true;
       video._ahVideoConfig=cfg;
       video.muted=cfg.muted!==false || !this.audioPlaybackArmed;
       video.volume=Math.max(0,Math.min(1,Number(cfg.volume??1)||0));
       video.playbackRate=Math.max(.25,Math.min(2,Number(cfg.speed)||1));
       video.loop=mode==='loop' && start===0 && end===null;
       const bounds=()=>{const d=Number.isFinite(video.duration)?video.duration:Infinity;const a=Math.min(start,Math.max(0,d-.05));return [a,Math.min(end??d,d)];};
-      const play=()=>{if(!this.ended && video.isConnected && mode!=='freeze' && !video._ahHeld)video.play()?.catch(()=>{});};
-      const init=()=>{const [a]=bounds();if(changed){video._ahHeld=false;try{video.currentTime=a;}catch(_){}}if(mode==='freeze')video.pause();else play();};
-      const finish=()=>{if(video._ahHeld)return;const [a,b]=bounds();if(mode==='loop'){try{video.currentTime=a;}catch(_){}play();return;}video._ahHeld=true;video.pause();if(Number.isFinite(b)&&video.currentTime>b)try{video.currentTime=b;}catch(_){}if(mode==='next' && this._currentBackgroundLayer()===layer && this.backgroundState?.src===state.src && !this.ended){const idx=this.index;queueMicrotask(()=>{if(this.index===idx && video.isConnected && this._currentBackgroundLayer()===layer)this.next();});}};
+      const play=()=>{if(!this.ended && video.isConnected && mode!=='freeze' && !video._ahHeld && !video._ahScenePaused)video.play()?.catch(()=>{});};
+      const init=()=>{const [a]=bounds();if(video._ahPendingSeek){video._ahPendingSeek=false;video._ahHeld=false;try{video.currentTime=a;}catch(_){}}if(mode==='freeze'||video._ahScenePaused)video.pause();else play();};
+      const finish=()=>{if(video._ahHeld||video._ahScenePaused)return;const [a,b]=bounds();if(mode==='loop'){try{video.currentTime=a;}catch(_){}play();return;}video._ahHeld=true;video.pause();if(Number.isFinite(b)&&video.currentTime>b)try{video.currentTime=b;}catch(_){}if(mode==='next' && this._currentBackgroundLayer()===layer && this.backgroundState?.src===state.src && !this.ended){const idx=this.index;queueMicrotask(()=>{if(this.index===idx && video.isConnected && this._currentBackgroundLayer()===layer)this.next();});}};
       video.onloadedmetadata=init;
-      video.ontimeupdate=()=>{if(mode==='freeze')return;const [,b]=bounds();if(!video.loop && video.currentTime>=b)finish();};
+      video.ontimeupdate=()=>{if(mode==='freeze'||video._ahScenePaused)return;const [,b]=bounds();if(!video.loop && video.currentTime>=b)finish();};
       video.onended=finish;
       if(video.readyState>=1)init();else if(mode!=='freeze')play();
 
