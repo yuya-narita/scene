@@ -6721,42 +6721,74 @@ async function makeStoreZip(entries,onProgress=null){
     }
     return result;
   }
-  // Phase 3.3.0: read-only structural inventory. Explicit references are not
-  // proof of runtime coverage (carry, seeking, panorama and inheritance).
-  async function inspectVideoStructure(doc){
-    const groups=new Map();
-    walkAssetRefs(doc,ref=>{
-      if(!isPublishVideoRef(ref))return;
-      if(!groups.has(ref.src))groups.set(ref.src,[]);
-      groups.get(ref.src).push(ref);
-    });
-    const rows=[];
-    for(const [src,refs] of groups){
-      const master=assetRegistry.get(src), delivery=deliveryVideos.get(src);
-      let meta=null;
-      if(master?.blob)try{meta=await deliveryVideoMetadata(master.blob);}catch(_){}
-      const duration=Number.isFinite(meta?.duration)?meta.duration:null;
-      const uses=refs.map(ref=>{
-        const page=ref.kind!=='background', cfg=page?{}:ref.holder.video||{};
-        const start=page?0:Number(cfg.start??0), end=page||cfg.end==null||cfg.end===''?duration:Number(cfg.end);
-        return {label:ref.kind==='coverVideo'?u('表紙','Cover'):ref.kind==='endingVideo'?u('読了','Ending'):'Scene '+(ref.sceneIndex+1),start,end,continuity:page?'page':cfg.continuity||'carry'};
-      });
-      rows.push({name:master?.name||refs[0].fileName||u('外部動画','Remote video'),bytes:master?.blob?.size??null,deliveryBytes:delivery?.blob?.size??null,duration,uses});
+  // Phase 3.3.0a: mirror Player background inheritance, read-only.
+  // Nominal coverage is not a proof of frame-accurate trimming: timeupdate can
+  // overshoot the configured end and a decoder may need preroll.
+  function analyzeVideoCoverage(doc, groups, durations){
+    const result=new Map([...groups.keys()].map(src=>[src,{uses:[],uncertain:false}]));
+    const add=(src,use)=>{const r=result.get(src);if(r)r.uses.push(use);};
+    for(const page of ['cover','ending']){
+      const src=doc?.[page]?.backgroundVideo?.src;
+      if(src)add(src,{label:page==='cover'?u('表紙','Cover'):u('読了','Ending'),start:0,end:durations.get(src),mode:'page',continuity:'page',full:true});
     }
-    return rows;
+    let state={src:'',mediaType:'image',video:{}};
+    const scenes=doc.scenes||[];
+    for(let i=0;i<scenes.length;i++){
+      const group=scenes[i]?.presentation?.simultaneousGroup;
+      const member=typeof group==='string'&&group&&i>0&&scenes[i-1]?.presentation?.simultaneousGroup===group;
+      const bg=member?null:scenes[i]?.presentation?.background;
+      if(bg&&typeof bg==='object'){
+        if(Object.prototype.hasOwnProperty.call(bg,'src')&&bg.src!==state.src){state.mediaType=bg.mediaType||'image';state.video={};}
+        for(const [key,value] of Object.entries(bg))if(value!==undefined)state[key]=value&&typeof value==='object'&&!Array.isArray(value)?{...(state[key]&&typeof state[key]==='object'?state[key]:{}),...value}:value;
+      }
+      const r=result.get(state.src);if(!r)continue;
+      if(state.mediaType!=='video'){r.uncertain=true;continue;}
+      const cfg=state.video||{},d=durations.get(state.src),mode=cfg.mode||'loop',command=scenes[i]?.presentation?.background?.video?.continuity||'carry';
+      const rawStart=Number(cfg.start??0),rawEnd=cfg.end==null?null:Number(cfg.end);
+      const valid=Number.isFinite(d)&&d>0&&Number.isFinite(rawStart)&&rawStart>=0&&(rawEnd===null||Number.isFinite(rawEnd))&&['loop','hold','freeze','next'].includes(mode)&&['carry','restart','pause','resume'].includes(command);
+      const start=valid?Math.min(rawStart,Math.max(0,d-.05)):0;
+      const end=valid?Math.min(rawEnd===null?d:Math.max(rawStart+.1,rawEnd),d):d;
+      if(!valid||end<=start||mode==='freeze'||command==='pause'||command==='resume'||member)r.uncertain=true;
+      add(state.src,{label:'Scene '+(i+1),start,end,mode,continuity:command,inherited:!bg?.src,projection:state.projection||'normal'});
+    }
+    for(const [src,r] of result){
+      const d=durations.get(src);
+      if(!Number.isFinite(d)||d<=0||!r.uses.length)r.uncertain=true;
+      // Keep a source used in any non-background asset role, too.
+      walkAssetRefs(doc,ref=>{if(ref.src===src&&!isPublishVideoRef(ref))r.uncertain=true;});
+      const intervals=r.uses.filter(x=>Number.isFinite(x.start)&&Number.isFinite(x.end)&&x.end>x.start).map(x=>[x.start,x.end]).sort((a,b)=>a[0]-b[0]);
+      const merged=[];for(const x of intervals){const last=merged[merged.length-1];if(last&&x[0]<=last[1]+.000001)last[1]=Math.max(last[1],x[1]);else merged.push(x.slice());}
+      r.intervals=merged;r.used=merged.reduce((n,x)=>n+x[1]-x[0],0);
+      r.status=r.uses.some(x=>x.full)||(!r.uncertain&&d-r.used<.05)?'full':r.uncertain?'unknown':'candidate';
+      r.savings=r.status==='candidate'?Math.max(0,d-r.used):0;
+    }
+    return result;
+  }
+  async function inspectVideoStructure(doc){
+    const groups=new Map();walkAssetRefs(doc,ref=>{if(!isPublishVideoRef(ref))return;if(!groups.has(ref.src))groups.set(ref.src,[]);groups.get(ref.src).push(ref);});
+    const durations=new Map();
+    for(const src of groups.keys()){let meta=null;const blob=assetRegistry.get(src)?.blob;if(blob)try{meta=await deliveryVideoMetadata(blob);}catch(_){}durations.set(src,Number.isFinite(meta?.duration)?meta.duration:null);}
+    const coverage=analyzeVideoCoverage(doc,groups,durations);
+    return [...groups].map(([src,refs])=>({name:assetRegistry.get(src)?.name||refs[0].fileName||u('外部動画','Remote video'),bytes:assetRegistry.get(src)?.blob?.size??null,deliveryBytes:deliveryVideos.get(src)?.blob?.size??null,duration:durations.get(src),explicit:refs.length,...coverage.get(src)}));
   }
   async function showVideoStructure(button){
     button.disabled=true;
     try{
-      const rows=await inspectVideoStructure(workingDocument||buildSceneDocument());
+      const doc=JSON.parse(JSON.stringify(workingDocument||buildSceneDocument()));
+      const rows=await inspectVideoStructure(doc);
       const mb=n=>n==null?'—':(n/1000000).toFixed(2)+' MB';
       const sec=n=>Number.isFinite(n)?n.toFixed(2)+'s':'?';
       const panel=document.createElement('dialog');panel.dataset.deliveryMonitor='1';panel.style.cssText='width:min(90vw,640px);max-height:80vh;overflow:auto;padding:20px;background:Canvas;color:CanvasText;border:1px solid #888;border-radius:12px';
       const add=(tag,text,parent=panel)=>{const el=document.createElement(tag);el.textContent=text;parent.append(el);return el;};
-      add('h3',u('動画の構造分析（試験）','Video structure analysis (trial)'));
-      add('p',u('動画参照数: ','Video references: ')+rows.reduce((n,r)=>n+r.uses.length,0)+u(' / 異なる参照先: ',' / Distinct sources: ')+rows.length);
-      add('p',u('明示された設定のみを表示します。継承・継続再生・シークを考慮した実使用区間ではありません。切り詰めや再圧縮は行いません。','Explicit settings only, not actual runtime coverage. No trimming or re-encoding.'));
-      for(const r of rows){const section=add('section','');section.style.cssText='border-top:1px solid #aaa;padding:12px 0;overflow-wrap:anywhere';add('strong',r.name,section);add('p','MASTER '+mb(r.bytes)+' / DELIVERY '+mb(r.deliveryBytes)+' / '+sec(r.duration),section);for(const use of r.uses)add('div',use.label+' | '+sec(use.start)+' – '+sec(use.end)+' | '+use.continuity,section);}
+      add('h3',u('動画の実使用区間分析（試験）','Video usage coverage (trial)'));
+      add('p',u('明示参照: ','Explicit references: ')+rows.reduce((n,r)=>n+r.explicit,0)+u(' / 使用箇所（継承含む）: ',' / Effective uses: ')+rows.reduce((n,r)=>n+r.uses.length,0));
+      add('p',u('設定上の使用区間を集約します。終端の超過・デコード余裕・シークの実機検証は未実施。削減候補は確定ではなく、原本・公開素材は変更しません。','Nominal coverage only. Boundary overshoot, decoder preroll and seeking require runtime validation. No assets modified.'));
+      for(const r of rows){const section=add('section','');section.style.cssText='border-top:1px solid #aaa;padding:12px 0;overflow-wrap:anywhere';add('strong',r.name,section);add('p','MASTER '+mb(r.bytes)+' / DELIVERY '+mb(r.deliveryBytes)+' / '+sec(r.duration),section);
+        add('strong',r.status==='full'?u('全区間保持','Keep full'):r.status==='unknown'?u('安全性未確定 — 全区間保持','Uncertain — keep full'):u('部分削減候補（未確定）','Potential trim (unverified)'),section);
+        add('p',u('設定上の区間: ','Nominal intervals: ')+(r.intervals.map(x=>sec(x[0])+' – '+sec(x[1])).join(' / ')||'—'),section);
+        if(r.status==='candidate')add('p',u('未使用時間候補: ','Potential unused time: ')+sec(r.savings),section);
+        for(const use of r.uses)add('div',use.label+(use.inherited?u('（継承）',' (inherited)'):'')+' | '+sec(use.start)+' – '+sec(use.end)+' | '+use.mode+' / '+use.continuity+(use.projection==='panorama'?' / panorama':''),section);
+      }
       const close=add('button',u('閉じる','Close'));close.type='button';close.onclick=()=>panel.close();panel.addEventListener('close',()=>panel.remove(),{once:true});document.body.append(panel);panel.showModal();
     }catch(e){await appAlert(String(e));}finally{button.disabled=false;}
   }
