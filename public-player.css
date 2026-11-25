@@ -1356,3 +1356,12 @@ body:has(.public-player.sp-immersive:not(.sp-immersive-controls):not(.sp-cover-o
   visibility:hidden!important;
   pointer-events:none!important;
 }
+
+/* Phase 3.1 public shell video backgrounds */
+.public-page-video-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.public-page-video-layer video{display:block;width:100%;height:100%;pointer-events:none}
+.public-ending.has-page-video .public-ending-inner{position:relative;z-index:1}
+.public-ending.has-page-video>.public-page-video-layer{position:fixed}
+.public-ending.has-page-video>.public-page-video-layer::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.35)}
+.public-ending.has-page-video,.public-intro.has-page-video{--public-text:#fff;--public-sub:rgba(255,255,255,.8);--public-line:rgba(255,255,255,.4)}
+.public-intro.has-page-video .public-intro-cover-dim{opacity:1!important}
