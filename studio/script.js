@@ -6769,7 +6769,7 @@ async function makeStoreZip(entries,onProgress=null){
     const durations=new Map();
     for(const src of groups.keys()){let meta=null;const blob=assetRegistry.get(src)?.blob;if(blob)try{meta=await deliveryVideoMetadata(blob);}catch(_){}durations.set(src,Number.isFinite(meta?.duration)?meta.duration:null);}
     const coverage=analyzeVideoCoverage(doc,groups,durations);
-    return [...groups].map(([src,refs])=>({name:assetRegistry.get(src)?.name||refs[0].fileName||u('外部動画','Remote video'),bytes:assetRegistry.get(src)?.blob?.size??null,deliveryBytes:deliveryVideos.get(src)?.blob?.size??null,duration:durations.get(src),explicit:refs.length,...coverage.get(src)}));
+    return [...groups].map(([src,refs])=>({src,name:assetRegistry.get(src)?.name||refs[0].fileName||u('外部動画','Remote video'),bytes:assetRegistry.get(src)?.blob?.size??null,deliveryBytes:deliveryVideos.get(src)?.blob?.size??null,duration:durations.get(src),explicit:refs.length,...coverage.get(src)}));
   }
   async function showVideoStructure(button){
     button.disabled=true;
@@ -6787,6 +6787,7 @@ async function makeStoreZip(entries,onProgress=null){
         add('strong',r.status==='full'?u('全区間保持','Keep full'):r.status==='unknown'?u('安全性未確定 — 全区間保持','Uncertain — keep full'):u('部分削減候補（未確定）','Potential trim (unverified)'),section);
         add('p',u('設定上の区間: ','Nominal intervals: ')+(r.intervals.map(x=>sec(x[0])+' – '+sec(x[1])).join(' / ')||'—'),section);
         if(r.status==='candidate')add('p',u('未使用時間候補: ','Potential unused time: ')+sec(r.savings),section);
+        if(r.status==='candidate'){const b=add('button',u('区間削減を試す（無料プレビュー）','Try trim (free preview)'),section);b.type='button';b.onclick=()=>trialStructuralTrim(doc,r,b,section);}
         for(const use of r.uses)add('div',use.label+(use.inherited?u('（継承）',' (inherited)'):'')+' | '+sec(use.start)+' – '+sec(use.end)+' | '+use.mode+' / '+use.continuity+(use.projection==='panorama'?' / panorama':''),section);
       }
       const close=add('button',u('閉じる','Close'));close.type='button';close.onclick=()=>panel.close();panel.addEventListener('close',()=>panel.remove(),{once:true});document.body.append(panel);panel.showModal();
@@ -6986,11 +6987,12 @@ async function makeStoreZip(entries,onProgress=null){
   }
   // DOM metadata and Web Audio decoding remain on the main thread; heavy video work is isolated.
   let deliveryWorker=null;
-  function optimizeDeliveryVideoIsolated(master,mode,progress,signal,diagnostic,stage=()=>{},economical=false){
+  function optimizeDeliveryVideoIsolated(master,mode,progress,signal,diagnostic,stage=()=>{},economical=false,trim=null){
     if(signal.aborted)return Promise.reject(Error('Cancelled'));
+    if(trim&&(!window.Worker||!window.OffscreenCanvas))return Promise.reject(Error('Worker required'));
     if(!window.Worker||!window.OffscreenCanvas)return optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage,economical);
     return new Promise((resolve,reject)=>{
-      let w;try{w=new Worker(new URL('./delivery-encoder-worker.js?v=325e2',location.href));}catch(e){reject(e);return;}
+      let w;try{w=new Worker(new URL(trim?'./structural-trim-worker.js?v=330b':'./delivery-encoder-worker.js?v=325e2',location.href));}catch(e){reject(e);return;}
       deliveryWorker=w;let finished=false;
       const finish=(error,value)=>{if(finished)return;finished=true;signal.removeEventListener('abort',abort);w.terminate();if(deliveryWorker===w)deliveryWorker=null;error?reject(error):resolve(value);};
       const abort=()=>finish(Error('Cancelled'));signal.addEventListener('abort',abort,{once:true});
@@ -7000,7 +7002,7 @@ async function makeStoreZip(entries,onProgress=null){
         if(m.type==='progress')progress(m.n);
         else if(m.type==='stage')stage(m.i,m.total,m.factor);
         else if(m.type==='diagnostic')diagnostic(m.candidate);
-        else if(m.type==='done')finish(null,m.blob);
+        else if(m.type==='done')finish(null,trim?{blob:m.blob,trim:m.trim}:m.blob);
         else if(m.type==='error')finish(Error(m.error));
         else if(m.type==='rpc'){
           try{let value,transfer=[];
@@ -7011,7 +7013,7 @@ async function makeStoreZip(entries,onProgress=null){
           }catch(e){if(!finished)w.postMessage({type:'rpcResult',id:m.id,error:String(e)});}
         }
       }catch(e){finish(e);}};
-      try{w.postMessage({type:'start',master,mode,economical});}catch(e){finish(e);}
+      try{w.postMessage({type:'start',master,mode,economical,trim});}catch(e){finish(e);}
     });
   }
   // Local diagnostics only: no publishing, payment, or mutation of the master.
@@ -7046,6 +7048,27 @@ async function makeStoreZip(entries,onProgress=null){
     button(u('軽量版を保存','Download result'),()=>downloadBlobFile(result.name,result.blob));
     button(u('閉じる','Close'),()=>dialog.close());
     dialog.addEventListener('close',()=>{closed=true;for(const v of videos){v.pause();v.removeAttribute('src');v.load();}urls.forEach(url=>URL.revokeObjectURL(url));dialog.remove();},{once:true});document.body.append(dialog);dialog.showModal();
+  }
+  async function trialStructuralTrim(doc,r,button,section){
+    const status=document.createElement('p');section.append(status);
+    const master=assetRegistry.get(r.src), interval=r.intervals[0];
+    if(!master||r.intervals.length!==1||!interval||r.uses.some(x=>x.full||x.mode!=='loop'||!['carry','restart'].includes(x.continuity)||Math.abs(x.start-interval[0])>.00001||Math.abs(x.end-interval[1])>.00001)){status.textContent='安全条件外：従来版を保持';return;}
+    if(autoDeliveryRunning||manualDeliveryBusy||deliveryForeground){status.textContent='別の圧縮処理中です。完了後に再試行してください。';return;}
+    const controller=new AbortController(), panel=section.closest('dialog');const cancel=()=>controller.abort();panel.addEventListener('close',cancel,{once:true});
+    button.disabled=true;manualDeliveryBusy=true;
+    try{
+      let candidate;const out=await optimizeDeliveryVideoIsolated(master,'ahako',n=>status.textContent='区間削減・画質検証 '+n+'%',controller.signal,c=>candidate=c,()=>{},true,{start:interval[0],end:interval[1]});
+      if(controller.signal.aborted||!panel.open)return;
+      if(!candidate?.pass||!out.trim||!Number.isFinite(out.trim.offset)||!Number.isFinite(out.trim.duration))throw Error('Verification failed');
+      const baseline=deliveryVideos.get(r.src)?.blob||master.blob;if(out.blob.size>=baseline.size)throw Error('従来版より小さくならないため不採用');
+      const copy=clone(doc), url=URL.createObjectURL(out.blob);let opened=false;
+      try{
+        for(const use of r.uses){const i=Number(use.label.slice(6))-1;if(!Number.isInteger(i)||!copy.scenes[i])throw Error('Scene mapping failed');const bg=copy.scenes[i]?.presentation?.background;if(!bg)continue;if(bg.src===r.src||bg.video?.start!=null||bg.video?.end!=null){bg.video={...bg.video,start:interval[0]-out.trim.offset,end:interval[1]-out.trim.offset};}}
+        walkAssetRefs(copy,ref=>{if(ref.src===r.src)ref.holder[ref.key]=url;});
+        status.textContent='試験成功（公開未採用） '+(baseline.size/1e6).toFixed(2)+' → '+(out.blob.size/1e6).toFixed(2)+' MB / 保持 '+out.trim.duration.toFixed(3)+'秒 / 再生 '+(interval[0]-out.trim.offset).toFixed(3)+'–'+(interval[1]-out.trim.offset).toFixed(3)+'秒';
+        const dialog=document.createElement('dialog');dialog.style.cssText='width:min(92vw,460px);max-height:94vh;padding:10px';const close=document.createElement('button');close.textContent='プレビューを閉じる';close.onclick=()=>dialog.close();const host=document.createElement('div');host.style.cssText='position:relative;width:100%;height:min(76vh,720px);overflow:hidden';dialog.append(close,host);document.body.append(dialog);let player;dialog.addEventListener('close',()=>{try{player?.destroy();}finally{URL.revokeObjectURL(url);dialog.remove();}},{once:true});dialog.showModal();opened=true;try{player=new ScenePlayerCore(host,{allowPrevious:true,keyboard:false,swipe:true,endOnNextAction:true,uiLanguage});player.load(copy,{startAt:0});}catch(e){dialog.close();throw e;}
+      }finally{if(!opened)URL.revokeObjectURL(url);}
+    }catch(e){status.textContent='未採用・従来版保持：'+String(e);}finally{panel.removeEventListener('close',cancel);manualDeliveryBusy=false;button.disabled=false;scheduleAutoDelivery();}
   }
   async function previewDeliveryWork(){
     const doc=clone(workingDocument||buildSceneDocument()), urls=new Map();

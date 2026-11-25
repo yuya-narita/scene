@@ -8,9 +8,9 @@ self.onmessage=async ({data:m})=>{
  if(m.type==='slow'){slowUntil=Date.now()+m.ms;return;}
  if(m.type==='rpcResult'){const p=pending.get(m.id);if(p){pending.delete(m.id);m.error?p.reject(Error(m.error)):p.resolve(m.value);}return;}
  if(m.type!=='start')return;
- try{let candidate;const blob=await optimizeDeliveryVideo(m.master,m.mode,n=>postMessage({type:'progress',n}),{aborted:false},c=>{candidate=c;postMessage({type:'diagnostic',candidate:c});},(i,total,factor)=>postMessage({type:'stage',i,total,factor}),m.economical);postMessage({type:'done',blob});}catch(e){postMessage({type:'error',error:String(e)});}
+ try{let candidate;const blob=await optimizeDeliveryVideo(m.master,m.mode,n=>postMessage({type:'progress',n}),{aborted:false},c=>{candidate=c;postMessage({type:'diagnostic',candidate:c});},(i,total,factor)=>postMessage({type:'stage',i,total,factor}),m.economical,m.trim);postMessage({type:'done',blob});}catch(e){postMessage({type:'error',error:String(e)});}
 };
-  async function encodeDeliveryVideo(blob,factor,progress,signal,diagnostic,report,strict=false){
+  async function encodeDeliveryVideo(blob,factor,progress,signal,diagnostic,report,strict=false,trim=null){
     if(!self.VideoDecoder||!self.VideoEncoder)throw new Error('WebCodecs requires current desktop Chrome/Edge (HTTPS).');
     const check=()=>{if(signal.aborted)throw new Error('Cancelled');};
     const meta=await deliveryVideoMetadata(blob);check();
@@ -59,7 +59,19 @@ self.onmessage=async ({data:m})=>{
     const dc={codec,description:desc}, ec={codec:'vp09.00.10.08',width:meta.width,height:meta.height,bitrate:Math.max(100000,Math.min(12000000,Math.round(blob.size*8/meta.duration*factor))),framerate:count/(videoEnd/1e6),latencyMode:'quality'};
     if(!(await VideoDecoder.isConfigSupported(dc)).supported||!(await VideoEncoder.isConfigSupported(ec)).supported)throw Error('AVC decoder or VP9 encoder unavailable');
     // Bounded sampled luma quality check, aligned by original presentation timestamp.
-    const sampleTimes=new Set([...times].sort((a,b)=>a-b).filter((_,i)=>i%Math.max(1,Math.floor(count/(strict?24:12)))===0||i===count-1));
+    const ordered=[...times].sort((a,b)=>a-b);
+    let trimOffset=0, selected=ordered;
+    if(trim){
+      if(audioTracks.length)throw Error('Structural trim: audio track retained in full');
+      const lo=Math.max(0,(trim.start-.25)*1e6), hi=Math.min(videoEnd,(trim.end+.25)*1e6);
+      trimOffset=ordered.filter(t=>t<=lo).pop()??0;
+      selected=ordered.filter(t=>t>=trimOffset&&t<hi);
+      if(!selected.length||selected.length===count)throw Error('No safe trim range');
+      const last=selected[selected.length-1];end=last+lens[times.indexOf(last)]-trimOffset;
+      if(end/1e6<trim.end-trimOffset/1e6+.1 && trim.end<meta.duration-.3)throw Error('Insufficient end guard');
+    }
+    const selectedSet=new Set(selected), expectedCount=selected.length;
+    const sampleTimes=new Set(selected.filter((_,i)=>i%Math.max(1,Math.floor(expectedCount/(strict?24:12)))===0||i===expectedCount-1));
     const samples=new Map(), scores=[];
     const canvas=new OffscreenCanvas(1,1);canvas.width=strict?Math.min(640,meta.width):320;canvas.height=Math.max(8,Math.round(canvas.width*meta.height/meta.width));
     const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -76,11 +88,11 @@ self.onmessage=async ({data:m})=>{
     function score(a,b){let err=0,sum=0,n=0;const w=canvas.width,h=canvas.height;for(let y=0;y<h;y+=8)for(let x=0;x<w;x+=8){let A=0,B=0,AA=0,BB=0,AB=0,k=0;for(let j=y;j<Math.min(y+8,h);j++)for(let i=x;i<Math.min(x+8,w);i++){const p=j*w+i,v=a[p],z=b[p];A+=v;B+=z;AA+=v*v;BB+=z*z;AB+=v*z;err+=(v-z)**2;k++;}A/=k;B/=k;sum+=((2*A*B+6.5025)*(2*(AB/k-A*B)+58.5225))/((A*A+B*B+6.5025)*(AA/k-A*A+BB/k-B*B+58.5225));n++;}return {ssim:sum/n,mse:err/a.length};}
     const frames=[], packets=[];let failure, decoded=0;const decoder=new VideoDecoder({output:f=>frames.push(f),error:e=>failure=e}), encoder=new VideoEncoder({output:c=>{const b=new Uint8Array(c.byteLength);c.copyTo(b);packets.push({t:c.timestamp,d:c.duration,key:c.type==='key',b});},error:e=>failure=e});
     const tick=()=>new Promise(r=>setTimeout(r,Date.now()<slowUntil?35:5));const guard=()=>{check();if(failure)throw failure;};
-    async function drain(){while(frames.length){guard();while(encoder.encodeQueueSize>3){await tick();guard();}const f=frames.shift();try{if(report&&sampleTimes.has(f.timestamp))samples.set(f.timestamp,{luma:luma(f),detail:detail(f),native:strict?native(f):null});encoder.encode(f,{keyFrame:decoded===0||decoded%Math.max(1,Math.round(ec.framerate*2))===0});decoded++;}finally{f.close();}}}
+    async function drain(){while(frames.length){guard();while(encoder.encodeQueueSize>3){await tick();guard();}const f=frames.shift();try{if(!selectedSet.has(f.timestamp))continue;if(report&&sampleTimes.has(f.timestamp))samples.set(f.timestamp,{luma:luma(f),detail:detail(f),native:strict?native(f):null});encoder.encode(f,{keyFrame:decoded===0||decoded%Math.max(1,Math.round(ec.framerate*2))===0});decoded++;}finally{f.close();}}}
     try{decoder.configure(dc);encoder.configure(ec);for(let i=0;i<count;i++){guard();while(decoder.decodeQueueSize>3){await drain();await tick();guard();}decoder.decode(new EncodedVideoChunk({type:!keys||keys.has(i+1)?'key':'delta',timestamp:times[i],duration:lens[i],data:a.subarray(pos[i],pos[i]+sizes[i])}));await drain();if(i%4===0){progress(Math.floor(i/count*90));await tick();}}await decoder.flush();await drain();await encoder.flush();guard();}finally{decoder.close();encoder.close();frames.forEach(f=>f.close());}
-    if(decoded!==count||packets.length!==count)throw Error('Frame count mismatch: '+decoded+'/'+packets.length+'/'+count);
-    const expected=[...times].sort((x,y)=>x-y);if(packets.some((p,i)=>p.t!==expected[i]))throw Error('Output timestamps differ');
-    if(report){let err, outputCount=0;const vd=new VideoDecoder({output:f=>{try{outputCount++;if(samples.has(f.timestamp))scores.push({...score(samples.get(f.timestamp).luma,luma(f)),...detailError(samples.get(f.timestamp).detail,detail(f)),...(strict?nativeScore(samples.get(f.timestamp).native,native(f)):{})});}catch(e){err=e;}finally{f.close();}},error:e=>err=e});try{vd.configure({codec:ec.codec,codedWidth:meta.width,codedHeight:meta.height});for(const p of packets){guard();if(err)throw err;while(vd.decodeQueueSize>3){await tick();guard();if(err)throw err;}vd.decode(new EncodedVideoChunk({type:p.key?'key':'delta',timestamp:p.t,duration:p.d??0,data:p.b}));}await vd.flush();if(err)throw err;guard();}finally{if(vd.state!=='closed')vd.close();}samples.clear();if(outputCount!==count||scores.length!==sampleTimes.size)throw Error('Quality verification frame mismatch');const mse=scores.reduce((n,v)=>n+v.mse,0)/scores.length;const db=v=>10*Math.log10(65025/v);const avg=k=>scores.reduce((n,v)=>n+v[k],0)/scores.length;const max=k=>Math.max(...scores.map(v=>v[k]));report({strict,evalWidth:canvas.width,...(strict?{nativePsnr:db(avg("nativeMse")),tileWorst:db(max("tileMse")),coverPsnr:db(avg("coverMse")),coverWorst:db(max("coverMse")),edgePsnr:db(avg("edgeMse"))}:{}),frames:count,samples:scores.length,ssim:scores.reduce((n,v)=>n+v.ssim,0)/scores.length,worst:Math.min(...scores.map(v=>v.ssim)),psnr:mse===0?Infinity:10*Math.log10(65025/mse),detailPsnr:10*Math.log10(65025/(scores.reduce((n,v)=>n+v.rgbMse,0)/scores.length)),detailWorst:10*Math.log10(65025/Math.max(...scores.map(v=>v.worstRgbMse)))});}
+    if(decoded!==expectedCount||packets.length!==expectedCount)throw Error('Frame count mismatch: '+decoded+'/'+packets.length+'/'+count);
+    const expected=selected;if(packets.some((p,i)=>p.t!==expected[i]))throw Error('Output timestamps differ');
+    if(report){let err, outputCount=0;const vd=new VideoDecoder({output:f=>{try{outputCount++;if(samples.has(f.timestamp))scores.push({...score(samples.get(f.timestamp).luma,luma(f)),...detailError(samples.get(f.timestamp).detail,detail(f)),...(strict?nativeScore(samples.get(f.timestamp).native,native(f)):{})});}catch(e){err=e;}finally{f.close();}},error:e=>err=e});try{vd.configure({codec:ec.codec,codedWidth:meta.width,codedHeight:meta.height});for(const p of packets){guard();if(err)throw err;while(vd.decodeQueueSize>3){await tick();guard();if(err)throw err;}vd.decode(new EncodedVideoChunk({type:p.key?'key':'delta',timestamp:p.t,duration:p.d??0,data:p.b}));}await vd.flush();if(err)throw err;guard();}finally{if(vd.state!=='closed')vd.close();}samples.clear();if(outputCount!==expectedCount||scores.length!==sampleTimes.size)throw Error('Quality verification frame mismatch');const mse=scores.reduce((n,v)=>n+v.mse,0)/scores.length;const db=v=>10*Math.log10(65025/v);const avg=k=>scores.reduce((n,v)=>n+v[k],0)/scores.length;const max=k=>Math.max(...scores.map(v=>v[k]));report({strict,evalWidth:canvas.width,...(strict?{nativePsnr:db(avg("nativeMse")),tileWorst:db(max("tileMse")),coverPsnr:db(avg("coverMse")),coverWorst:db(max("coverMse")),edgePsnr:db(avg("edgeMse"))}:{}),frames:expectedCount,samples:scores.length,ssim:scores.reduce((n,v)=>n+v.ssim,0)/scores.length,worst:Math.min(...scores.map(v=>v.ssim)),psnr:mse===0?Infinity:10*Math.log10(65025/mse),detailPsnr:10*Math.log10(65025/(scores.reduce((n,v)=>n+v.rgbMse,0)/scores.length)),detailWorst:10*Math.log10(65025/Math.max(...scores.map(v=>v.worstRgbMse)))});}
     // Decode the complete audio timeline, then encode Opus offline in bounded blocks.
     let audio=null;
     if(audioTracks.length){
@@ -111,12 +123,13 @@ self.onmessage=async ({data:m})=>{
     const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),el(0xe0,ui(0xb0,meta.width),ui(0xba,meta.height))),...(audio?[el(0xae,ui(0xd7,2),ui(0x73c5,2),ui(0x83,2),txt(0x86,'A_OPUS'),el(0x63a2,audio.head),ui(0x56aa,audio.delay),ui(0x56bb,80000000),el(0xe1,el(0xb5,hz),ui(0x9f,audio.channels)))]:[]));
     const clusters=[], cues=[];let base=0, blocks=[], offset=info.length+track.length;
     function finish(){if(!blocks.length)return;const c=el(0x1f43b675,ui(0xe7,base),...blocks);clusters.push(c);offset+=c.length;blocks=[];}
-    const lastVideoTime=Math.max(...times);
+    if(trim)for(const p of packets)p.t-=trimOffset;
+    const lastVideoTime=selected[selected.length-1]-trimOffset;
     const muxPackets=audio?[...packets,...audio.packets].sort((a,b)=>a.t-b.t||Number(!!a.audio)-Number(!!b.audio)):packets;
     for(const p of muxPackets){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;if(!p.audio&&p.key)cues.push(el(0xbb,ui(0xb3,t),el(0xb7,ui(0xf7,1),ui(0xf1,offset))));}const rel=t-base;const block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(!p.audio&&p.t===lastVideoTime&&end>videoEnd){block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),ui(0x9b,Math.round((end-p.t)/1000)),...(p.key?[]:[el(0xfb,bytes(0xff))])));}else if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();
     const parts=[info,track,...clusters,el(0x1c53bb6b,...cues)];const result=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
     const outputMime=audio?'video/webm;codecs=vp9,opus':'video/webm;codecs=vp9';
-    diagnostic?.(result,outputMime,meta);
+    diagnostic?.(result,outputMime,{...meta,trimOffset:trimOffset/1e6,trimDuration:end/1e6});
     if(audio){
       const decodedAudio=await decodePCM(result);check();
       const rate=48000, delta=decodedAudio.length-audio.length;
@@ -138,9 +151,9 @@ self.onmessage=async ({data:m})=>{
       if(failures.length)throw Error('Audio FAIL ['+failures.join(', ')+']; '+summary+'; master retained');
     }
     progress(99);check();
-    const out=await deliveryVideoMetadata(result);check();if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.06||out.width!==meta.width||out.height!==meta.height)throw Error('Output metadata mismatch');if(result.size>=blob.size)throw Error('No size reduction; master retained');return result;
+    const out=await deliveryVideoMetadata(result);check();if(!Number.isFinite(out.duration)||Math.abs(out.duration-(trim?end/1e6:meta.duration))>.06||out.width!==meta.width||out.height!==meta.height)throw Error('Output metadata mismatch');if(result.size>=blob.size)throw Error('No size reduction; master retained');return result;
   }
-  async function optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage=()=>{},economical=false){
+  async function optimizeDeliveryVideo(master,mode,progress,signal,diagnostic,stage=()=>{},economical=false,trim=null){
     const header=new Uint8Array(await master.blob.slice(0,12).arrayBuffer());
     if(header[0]===0x1a&&header[1]===0x45&&header[2]===0xdf&&header[3]===0xa3){
       throw Error(u('WebM素材は再圧縮せず保持します。MP4原本がある場合は差し替えてください。','WebM source retained without recompression. Replace with original MP4 if available.'));
@@ -153,7 +166,7 @@ self.onmessage=async ({data:m})=>{
       const factor=factors[i];let metrics,candidate;
       stage(i+1,factors.length,factor);
       try{
-        const blob=await encodeDeliveryVideo(master.blob,factor,n=>progress(Math.floor((i+n/100)*100/factors.length)),signal,(blob,mime,meta,audioSummary)=>{candidate={blob,mime,audioSummary,name:master.name.replace(/\.[^.]+$/,'')+'.webm'};},m=>metrics=m,strict);
+        const blob=await encodeDeliveryVideo(master.blob,factor,n=>progress(Math.floor((i+n/100)*100/factors.length)),signal,(blob,mime,meta,audioSummary)=>{candidate={blob,mime,audioSummary,trimOffset:meta.trimOffset,trimDuration:meta.trimDuration,name:master.name.replace(/\.[^.]+$/,'')+'.webm'};},m=>metrics=m,strict,trim);
         candidate.metrics=metrics;candidate.factor=factor;
         const pass=strict?(metrics.ssim>=.985&&metrics.worst>=.965&&metrics.psnr>=40&&metrics.nativePsnr>=36&&metrics.tileWorst>=26&&metrics.coverPsnr>=37&&metrics.coverWorst>=34&&metrics.edgePsnr>=36):!auto||(metrics.ssim>=.96&&metrics.worst>=.92&&metrics.psnr>=32&&(!deep||(metrics.detailPsnr>=30&&metrics.detailWorst>=24)));
         history.push({factor,size:blob.size,pass,metrics});
