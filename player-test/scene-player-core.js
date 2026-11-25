@@ -3608,6 +3608,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._resetPresentationRuntime();
       this._resetBackgroundRuntime();
       this.ended = true;
+      [this.els.bgA,this.els.bgB].forEach(layer=>layer?.querySelector("video.sp-background-video")?.pause());
       this.els.ending.classList.remove('is-visible');
       this.els.ending.hidden = false;
       this._playEndingAudio();
@@ -4272,6 +4273,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!this.els?.bgA || !this.els?.bgB) return;
       [this.els.bgA, this.els.bgB].forEach((layer) => {
         layer.className = layer.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
+        this._disposeBackgroundVideo(layer);
         layer.removeAttribute('style');
       });
       this.els.bgA.classList.add('is-current');
@@ -4324,6 +4326,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       for (let i = start; i <= target; i += 1) {
         const bg = this._simultaneousBounds(i).start===i?scenes[i]?.presentation?.background:null;
         if (bg && typeof bg === 'object') {
+          if (Object.prototype.hasOwnProperty.call(bg, "src") && bg.src !== state.src) state.mediaType = bg.mediaType || "image";
           Object.keys(bg).forEach((key) => {
             const value = bg[key];
             if (value !== undefined) state[key] = (value && typeof value === 'object' && !Array.isArray(value))
@@ -4472,7 +4475,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       const sceneBg = this.document?.scenes?.[index]?.presentation?.background || null;
       const transition = sceneBg?.transition || next.transition || 'fade';
       const exit = sceneBg?.exit || 'auto';
-      const srcChanged = !previous || previous.src !== next.src;
+      const srcChanged = !previous || previous.src !== next.src || previous.mediaType !== next.mediaType;
       const nextMotion = next.motion;
       const carryMotion = nextMotion?.continuity === 'carry'
         && previous?.motion?.type === nextMotion?.type
@@ -4482,6 +4485,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if (!nextMotion || nextMotion.type === 'none') this.backgroundMotionEpoch = 0;
 
       this._resetBackgroundRuntime();
+      this._disposeBackgroundVideo(this._nextBackgroundLayer());
       this.backgroundState = next;
       this._markLoadDiagSceneStart();
       this.host.classList.toggle('sp-bg-360-active', this._is360Background(next));
@@ -4537,16 +4541,41 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       this._styleCurrentBackground(state, true, motionPhase);
       const hasCustomExit=!['auto','fade'].includes(exit);
       this._backgroundTimeout(() => {
+        this._disposeBackgroundVideo(current);
         current.style.backgroundImage = '';
         current.className = current.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
         if(clearHostAfter) this.host.classList.remove('sp-has-background');
       }, mode === 'cut' && !hasCustomExit ? 20 : transitionDuration+120);
     }
 
+    _disposeBackgroundVideo(layer) {
+      const video=layer?.querySelector('video.sp-background-video');
+      if(video){video.pause();video.removeAttribute('src');video.load();video.remove();}
+    }
+
+    _syncBackgroundVideo(layer,state) {
+      if(!layer)return;
+      if(!state.src || state.mediaType!=='video'){this._disposeBackgroundVideo(layer);return;}
+      let video=layer.querySelector('video.sp-background-video');
+      if(!video || video.getAttribute('src')!==state.src){
+        this._disposeBackgroundVideo(layer);
+        video=document.createElement('video');video.className='sp-background-video';
+        video.muted=true;video.defaultMuted=true;video.loop=true;video.playsInline=true;
+        video.setAttribute('playsinline','');video.setAttribute('muted','');video.setAttribute('aria-hidden','true');
+        Object.assign(video.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none'});
+        video.preload='metadata';video.src=state.src;layer.prepend(video);
+      }
+      layer.style.backgroundImage='none';
+      video.style.objectFit=state.fit==='contain'?'contain':'cover';
+      video.style.objectPosition=state.position||'center center';
+      if(!this.ended && video.paused)video.play()?.catch(()=>{});
+    }
+
     _prepareBackgroundLayer(layer, state, motionPhase = 0) {
       layer.getAnimations?.().forEach(animation=>animation.cancel());
       layer.className = layer.classList.contains('sp-bg-a') ? 'sp-bg-layer sp-bg-a' : 'sp-bg-layer sp-bg-b';
       layer.style.backgroundImage = state.src ? `url("${String(state.src).replace(/"/g, '\"')}")` : 'none';
+      this._syncBackgroundVideo(layer,state);
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
       if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
@@ -4565,6 +4594,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     _styleCurrentBackground(state, resetMotion, motionPhase = 0) {
       const layer = this._currentBackgroundLayer();
       if (!layer) return;
+      this._syncBackgroundVideo(layer,state);
       layer.style.backgroundSize = state.fit === 'contain' ? 'contain' : 'cover';
       layer.style.backgroundPosition = state.position || 'center center';
       if(state.projection==='360'){layer.style.backgroundSize='auto 108%';layer.style.backgroundRepeat='repeat-x';}
@@ -7397,6 +7427,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
     destroy(options = {}) {
       if (this.destroyed) return;
       const preserveHost = options?.preserveHost === true;
+      [this.els?.bgA,this.els?.bgB].forEach(layer=>this._disposeBackgroundVideo(layer));
       if(this._immersiveRaf)cancelAnimationFrame(this._immersiveRaf);this._immersiveRaf=0;
       this.stopAuto();
       this._resetPresentationRuntime();

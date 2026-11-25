@@ -1611,6 +1611,7 @@
     "background": {
       "type": "object",
       "properties": {
+        "mediaType": {"enum": ["image", "video"]},
         "src": {
           "type": "string"
         },

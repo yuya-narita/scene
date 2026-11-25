@@ -794,14 +794,14 @@
             <label class="adv-field"><span>このSceneの背景</span>
               <select id="sceneBackgroundMode">
                 <option value="inherit">前Sceneから継続</option>
-                <option value="image">このSceneで画像を変更</option>
+                <option value="image">このSceneで画像・動画を変更</option>
                 <option value="clear">このSceneで背景を解除</option>
               </select>
             </label>
             <div id="sceneBackgroundControls" hidden>
               <div class="asset-row">
-                <label class="asset-button" for="sceneBackgroundInput">画像を選ぶ</label>
-                <input id="sceneBackgroundInput" type="file" accept="image/*" hidden>
+                <label class="asset-button" for="sceneBackgroundInput">画像・動画を選ぶ</label>
+                <input id="sceneBackgroundInput" type="file" accept="image/*,video/mp4,video/webm,.mp4,.webm" hidden>
                 <button id="sceneBackgroundRemoveFile" type="button" class="asset-clear">選択解除</button>
               </div>
               <div class="asset-url-row">

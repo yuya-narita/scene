@@ -7650,6 +7650,17 @@ async function makeStoreZip(entries,onProgress=null){
   function setAssetField(id, url='', name=''){
     const el=$('#'+id); if(!el)return; el.dataset.assetUrl=url||''; el.dataset.assetName=name||'';
   }
+  function isVideoBackground(src,name=''){
+    return /^video\//i.test(assetRegistry.get(src)?.blob?.type||'') || /\.(mp4|webm)(?:[?#]|$)/i.test(name||src||'');
+  }
+  function backgroundAssetPreview(layer,asset){
+    const old=layer.querySelector('video[data-bg-preview]');
+    if(old){old.pause();old.removeAttribute('src');old.load();old.remove();}
+    if(!isVideoBackground(asset.src,asset.name)){layer.style.backgroundImage=asset.src?`url("${asset.src}")`:'';return;}
+    layer.style.backgroundImage='none';layer.textContent='';
+    const video=document.createElement('video');video.dataset.bgPreview='1';video.muted=true;video.playsInline=true;video.preload='metadata';video.src=asset.src;
+    Object.assign(video.style,{width:'100%',height:'100%',objectFit:'cover',pointerEvents:'none'});layer.append(video);
+  }
   function assetFrom(id){ const el=$('#'+id); return {src:el?.dataset.assetUrl||'', name:el?.dataset.assetName||''}; }
 
   function isExternalAssetUrl(value){
@@ -7722,7 +7733,7 @@ async function makeStoreZip(entries,onProgress=null){
 
     layer.className='scene-motion-preview-image';
     wrap.classList.remove('preview-cut','preview-fade','preview-flash','preview-glitch','is-previewing');
-    layer.style.backgroundImage=asset.src?`url("${asset.src}")`:'';
+    backgroundAssetPreview(layer,asset);
     layer.style.backgroundSize=fit;
     layer.style.setProperty('--studio-motion-duration',`${motionMs}ms`);
     layer.style.setProperty('--studio-motion-amount',`${amount}%`);
@@ -7751,7 +7762,7 @@ async function makeStoreZip(entries,onProgress=null){
     $('#sceneBackgroundControls').hidden=bgMode!=='image';
     const bgAsset=assetFrom('sceneBackgroundInput');
     const bgPreview=$('#sceneBackgroundPreview');
-    if(bgPreview){ bgPreview.hidden=!bgAsset.src; bgPreview.style.backgroundImage=bgAsset.src?`url("${bgAsset.src}")`:''; }
+    if(bgPreview){ bgPreview.hidden=!bgAsset.src; backgroundAssetPreview(bgPreview,bgAsset); }
     updateRangeOutput('sceneBackgroundDim','sceneBackgroundDimOutput');
     const transitionOut=$('#sceneBackgroundTransitionDurationOutput');
     if(transitionOut)transitionOut.textContent=`${$('#sceneBackgroundTransitionDuration')?.value||700}ms`;
@@ -7785,7 +7796,9 @@ async function makeStoreZip(entries,onProgress=null){
     else {
       const asset=assetFrom('sceneBackgroundInput');
       const bg=p.background && typeof p.background==='object' ? {...p.background} : {};
-      bg.src=asset.src || bg.src || '';
+      bg.src=asset.src || '';
+      bg.mediaType=isVideoBackground(bg.src,asset.name)?'video':'image';
+      if(bg.mediaType==='video')bg.projection='flat';
       bg._editorFileName=asset.name || bg._editorFileName || '';
       bg._editorManaged=true;
       bg.transition=$('#sceneBackgroundTransition').value;
@@ -9104,6 +9117,7 @@ async function makeStoreZip(entries,onProgress=null){
     const sceneIndex=workingDocument?.scenes?.indexOf(scene)??-1;
     const source=current?.src?current:previousEffectiveBackground(sceneIndex);
     if(!coverPositionDialog||!source?.src||current?.src==='')return;
+    if(source.mediaType==='video'||isVideoBackground(source.src,source._editorFileName)){appAlert(u('動画の位置調整は次のPhaseで対応予定です。','Video framing is planned for the next phase.'));return;}
     // Inherited backgrounds have no source on this Scene. Keep that inheritance
     // intact and only save a local framing override if the author changes it.
     const bg=current?.src?current:{...(current||{}),fit:current?.fit||source.fit||'cover',position:current?.position||source.position||'center center'};
@@ -14068,22 +14082,23 @@ function openDesktopBackgroundDetail(){
     const thumb=document.createElement('div');
     thumb.className='desktop-background-detail-thumb';
     if(explicit()?.src){
-      thumb.style.backgroundImage=`url("${explicit().src}")`;
+      backgroundAssetPreview(thumb,{src:explicit().src,name:explicit()._editorFileName});
       thumb.classList.add('has-image');
     }else{
       thumb.textContent=mode==='inherit'?u('前Sceneを継続','Continue previous Scene'):mode==='clear'?u('背景なし','No background'):u('画像未選択','No image selected');
     }
     const assetActions=document.createElement('div');
     assetActions.className='desktop-background-detail-asset-actions';
-    const choose=desktopAction(explicit()?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>{
-      desktopPickFile('image/*',(url,name)=>{
+    const choose=desktopAction(explicit()?.src?u('画像・動画を変更','Change image / video'):u('画像・動画を選択','Choose image / video'),()=>{
+      desktopPickFile('image/*,video/mp4,video/webm,.mp4,.webm',(url,name)=>{
         captureUndo('背景画像の変更を元に戻せます');
         const bg=ensureImageState();
-        bg.src=url;bg._editorFileName=name;bg._editorManaged=true;
+        bg.src=url;bg._editorFileName=name;bg._editorManaged=true;bg.mediaType=isVideoBackground(url,name)?'video':'image';if(bg.mediaType==='video')bg.projection='flat';
         if(!bg.transition)bg.transition='fade';
         apply();
         closeDesktopBackgroundDetail();
         openDesktopBackgroundDetail();
+        if(isVideoBackground(url,name))return;
         // A newly selected image goes straight into framing.
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(40);
@@ -15053,7 +15068,7 @@ function openDesktopTextDetail(){
 
     const imageCard=desktopCard(u('表紙画像','Cover image'));
     const imageOps=document.createElement('div');imageOps.className='desktop-live-scene-ops desktop-cover-image-ops';
-    imageOps.append(desktopAction(coverImageUrl?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>coverImageInput?.click()));
+    imageOps.append(desktopAction(coverImageUrl?u('画像・動画を変更','Change image / video'):u('画像・動画を選択','Choose image / video'),()=>coverImageInput?.click()));
     if(coverImageUrl){
       imageOps.append(desktopAction(u('表示位置を調整','Adjust position'),()=>openCoverPositionEditor()));
       imageOps.append(desktopAction(u('画像を外す','Remove image'),()=>coverImageClear?.click(),false,'is-danger'));
@@ -15095,7 +15110,7 @@ function openDesktopTextDetail(){
       const image=workingDocument?.ending?.image;
       const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap';
       if(image?.src){const preview=document.createElement('img');preview.src=image.src;preview.alt='';preview.style.cssText='width:48px;height:48px;object-fit:contain;border:1px solid #d7d9de;border-radius:6px';row.appendChild(preview);}
-      const pick=desktopAction(image?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>pickSceneImageFile(picked=>{
+      const pick=desktopAction(image?.src?u('画像・動画を変更','Change image / video'):u('画像・動画を選択','Choose image / video'),()=>pickSceneImageFile(picked=>{
         captureUndo(u('読了画像の変更を元に戻せます','Undo ending image change'));
         workingDocument.ending=workingDocument.ending||{};
         workingDocument.ending.image={...picked,width:workingDocument.ending.image?.width||160};
@@ -15491,7 +15506,7 @@ function openDesktopTextDetail(){
 
     const sceneImageActions=document.createElement('div');sceneImageActions.className='desktop-live-stack';
     const sceneImagePick=desktopAction(
-      sceneImage?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),
+      sceneImage?.src?u('画像・動画を変更','Change image / video'):u('画像・動画を選択','Choose image / video'),
       ()=>desktopPickFile('image/*',(url,name)=>{
         captureUndo('Scene画像の変更を元に戻せます');
         p.image={
@@ -16046,9 +16061,10 @@ function openDesktopTextDetail(){
         delete p.background;
         refresh();
       },(!bg || (!bg.src && bg.src!==''))?'is-selected':''),
-      desktopAction(bg?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),()=>desktopPickFile('image/*',(url,name)=>{
+      desktopAction(bg?.src?u('画像・動画を変更','Change image / video'):u('画像・動画を選択','Choose image / video'),()=>desktopPickFile('image/*,video/mp4,video/webm,.mp4,.webm',(url,name)=>{
         captureUndo('背景画像の変更を元に戻せます');
-        p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+        p.background={...(p.background||{}),src:url,mediaType:isVideoBackground(url,name)?'video':'image',...(isVideoBackground(url,name)?{projection:'flat'}:{}),_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:p.background?.position||'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+        if(isVideoBackground(url,name)){refresh();return;}
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(40);
           refreshLivePlayer({preserveSheet:true});
@@ -17274,7 +17290,7 @@ function openDesktopTextDetail(){
         const current=p.image&&typeof p.image==='object'?p.image:null;
         const status=document.createElement('div');status.className='live-scene-image-mobile-preview';
         if(current?.src){const img=document.createElement('img');img.src=current.cover?.src||current.src;img.alt=current.cover?.alt||current.alt||'';img.style.transform=`rotate(${Number(current.rotation)||0}deg)`;status.appendChild(img);}else status.textContent=u('Scene画像なし','No Scene image');
-        const pick=makeActionButton(current?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),'is-primary');
+        const pick=makeActionButton(current?.src?u('画像・動画を変更','Change image / video'):u('画像・動画を選択','Choose image / video'),'is-primary');
         pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
           captureUndo('Scene画像の変更を元に戻せます');
           p.image={...replaceSceneImageFirst(p.image||{},url,name),src:url,fit:'contain',size:p.image?.size||((p.view==='chat')?'small':'large'),align:p.image?.align||((p.view==='chat')?'speaker':'center'),tapAction:p.image?.tapAction||((p.image?.fullscreen===false)?'none':'fullscreen'),fullscreen:p.image?.fullscreen!==false,alt:'',_editorFileName:name,_editorManaged:true};
@@ -17324,10 +17340,11 @@ function openDesktopTextDetail(){
       inherit.onclick=()=>{captureUndo('背景設定の変更を元に戻せます');delete p.background;scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       clear.onclick=()=>{captureUndo('背景設定の変更を元に戻せます');p.background={src:'',transition:'fade',_editorManaged:true};scheduleDraftSave(60);refreshLivePlayer();renderLiveEditSheet('background');};
       actions.append(inherit,clear);
-      const pick=makeActionButton(bg?.src?u('画像を変更','Change image'):u('画像を選択','Choose image'),'is-primary');
-      pick.onclick=()=>pickLiveFile('image/*',(url,name)=>{
+      const pick=makeActionButton(bg?.src?u('画像・動画を変更','Change image / video'):u('画像・動画を選択','Choose image / video'),'is-primary');
+      pick.onclick=()=>pickLiveFile('image/*,video/mp4,video/webm,.mp4,.webm',(url,name)=>{
         captureUndo('背景画像の変更を元に戻せます');
-        p.background={...(p.background||{}),src:url,_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+        p.background={...(p.background||{}),src:url,mediaType:isVideoBackground(url,name)?'video':'image',...(isVideoBackground(url,name)?{projection:'flat'}:{}),_editorFileName:name,_editorManaged:true,transition:p.background?.transition||'fade',fit:p.background?.fit||'cover',position:'50% 50%',tone:p.background?.tone||'dark',dim:p.background?.dim??.34};
+        if(isVideoBackground(url,name)){scheduleDraftSave(60);refreshLivePlayer({preserveSheet:true});renderLiveEditSheet('background');return;}
         // Open framing immediately. The shared editor is body-level, so the
         // Live Edit sheet refresh cannot hide or remove it.
         openSceneBackgroundPositionEditor(scene,()=>{
