@@ -140,7 +140,7 @@
     }
     ctx.fill();ctx.restore();
   }
-  function painter(canvas, layer) {
+  function inkPainter(canvas, layer) {
     const ctx = canvas.getContext('2d');
     const {strokes,lastTime} = prepare(layer);
     const duration = layer.display==='still' ? 0 : layer.seconds>0 ?
@@ -178,6 +178,30 @@
       return elapsed>=delay+duration;
     }
     return {render, duration:delay+duration};
+  }
+  const scratchImages=new Map();
+  function scratchImage(src){
+    if(!/^data:image\/(png|webp);base64,[A-Za-z0-9+/=]+$/.test(src||'')||src.length>3000000)return null;
+    if(scratchImages.has(src))return scratchImages.get(src);
+    const img=new Image();img.src=src;scratchImages.set(src,img);
+    if(scratchImages.size>8)scratchImages.delete(scratchImages.keys().next().value);
+    return img;
+  }
+  function painter(canvas,layer){
+    const img=scratchImage(layer.scratchImage);
+    if(!img)return inkPainter(canvas,layer);
+    const mask=document.createElement('canvas');
+    const paint=inkPainter(mask,{...layer,strokes:layer.strokes.map(st=>({...st,pen:'ball',opacity:1,color:'#000000'}))});
+    canvas.width=mask.width;canvas.height=mask.height;
+    const ctx=canvas.getContext('2d');let last=-1;
+    function composite(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if(!img.complete||!img.naturalWidth)return;
+      ctx.save();ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      ctx.globalCompositeOperation='destination-in';ctx.drawImage(mask,0,0,canvas.width,canvas.height);ctx.restore();
+    }
+    if(!img.complete)img.addEventListener('load',()=>{if(last>=0)composite();},{once:true});
+    return {duration:paint.duration,render(elapsed){last=elapsed;const done=paint.render(elapsed);composite();return done;}};
   }
   // Public/Local shells are separate from Core's internal cover and ending.
   function bindShellDrawing(page, getLayer, key){

@@ -17,6 +17,7 @@
       <div class="draw-row"><button data-action="undo">一筆戻す</button><button data-action="redo">やり直す</button>
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
+      <details><summary>SCRATCH TRACE（原画再現・試験版）</summary><div class="draw-row"><input name="scratchFile" type="file" accept="image/png,image/jpeg,image/webp"><button data-action="scratch-load">原画を読み込む</button><button data-action="scratch-off">筆跡モードに戻す</button></div><small>薄い原画をなぞると、その部分だけ現れます。太さで露出範囲を調整。白背景は透明化します。</small></details>
       <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>なぞった筆跡で確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線を大まかになぞります。下絵の連続経路に強制吸着し、短い筆先を補完します。ペンを離すまでが一筆です。</small></details>
       <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="precise">原画重視（Phase 3.4）</option><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
@@ -49,6 +50,7 @@
     field('seconds').value=layer.seconds||5;
     field('sceneZoom').value=[1,1.5,2,3].includes(layer.width/baseWidth)?String(layer.width/baseWidth):'custom';
     const routingByStroke=new WeakMap();
+    let scratchGuide=null;
     let traceWorker=null, traceBusy=false, smart=null, gesture=null;
     let active=null,wallEnd=null,preview=0,panX=0,panY=0,pan=null,redo=[], count=0;
     const endTime=()=>layer.strokes.at(-1)?.points.at(-1)?.[2]||0;
@@ -58,6 +60,9 @@
     function redraw(){
       cancelAnimationFrame(preview);
       redrawInk();
+      if(layer.scratchImage&&scratchGuide?.complete&&scratchGuide.naturalWidth){
+        const ctx=canvas.getContext('2d');ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalCompositeOperation='destination-over';ctx.globalAlpha=.22;ctx.drawImage(scratchGuide,0,0,canvas.width,canvas.height);ctx.restore();
+      }
       if(smart){
         const guide=document.createElement('canvas');
         redrawInk(guide,smart.pool);
@@ -83,7 +88,7 @@
     }
     dialog.addEventListener('change',e=>{
       const input=e.target,n=input.name;
-      if(!n||n.startsWith("trace"))return;
+      if(!n||n.startsWith("trace")||n==='scratchFile')return;
       if(input.type==='number'&&(!input.value||!input.validity.valid)){input.reportValidity();return;}
       if(n==='sceneZoom'){
         if(input.value==='custom'){find('details:last-child').open=true;field('pos-width').focus();return;}
@@ -257,7 +262,7 @@
       backing.width=canvas.width;backing.height=canvas.height;
       backing.getContext('2d').drawImage(canvas,0,0);
       const tip=document.createElement('canvas');
-      const stroke={...brush,points:[point(e,start)]};
+      const stroke={...brush,...(layer.scratchImage?{pen:'ball',opacity:1}:{}),points:[point(e,start)]};
       layer.strokes.push(stroke);redo=[];active={id:e.pointerId,stroke,start,now:e.timeStamp,backing,tip};count++;renderTip();
     };
     function renderTip(){
@@ -266,7 +271,7 @@
       redrawInk(tip,[stroke]);
       const ctx=canvas.getContext('2d');
       ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.drawImage(backing,0,0);ctx.drawImage(tip,0,0,canvas.width,canvas.height);ctx.restore();
+      ctx.drawImage(backing,0,0);ctx.drawImage(tip,0,0,canvas.width,canvas.height);if(layer.scratchImage&&scratchGuide?.complete&&scratchGuide.naturalWidth){ctx.globalCompositeOperation="destination-over";ctx.globalAlpha=.22;ctx.drawImage(scratchGuide,0,0,canvas.width,canvas.height);}ctx.restore();
     }
     let paintFrame=0;
     function sample(e,last){
@@ -294,7 +299,29 @@
     }
     map.onpointerdown=e=>{map.setPointerCapture(e.pointerId);place(e);};
     map.onpointermove=e=>{if(map.hasPointerCapture(e.pointerId))place(e);};
+    function loadGuide(){
+      scratchGuide=null;if(!layer.scratchImage)return;
+      const img=new Image();scratchGuide=img;img.onload=()=>{if(dialog.open&&scratchGuide===img)redraw();};img.src=layer.scratchImage;
+    }
+    async function loadScratch(){
+      const file=field('scratchFile').files[0],out=find('output');
+      if(!file){out.textContent='原画を選択してください。';return;}
+      if(layer.strokes.length&&!confirm('現在の筆跡を置き換えますか？'))return;
+      traceBusy=true;let url;
+      try{
+        url=URL.createObjectURL(file);const img=new Image();img.src=url;await img.decode();if(!dialog.open)return;
+        const c=document.createElement('canvas');c.width=1000;c.height=600;const ctx=c.getContext('2d');
+        const k=Math.min(1000/img.naturalWidth,600/img.naturalHeight),w=img.naturalWidth*k,h=img.naturalHeight*k;
+        ctx.drawImage(img,(1000-w)/2,(600-h)/2,w,h);
+        const data=ctx.getImageData(0,0,1000,600),a=data.data;
+        for(let i=0;i<a.length;i+=4){const m=Math.min(a[i],a[i+1],a[i+2]);if(m===255){a[i+3]=0;continue;}if(m>0){const f=255-m;a[i+3]=Math.round(a[i+3]*f/255);for(let j=0;j<3;j++)a[i+j]=Math.round((a[i+j]-m)*255/f);}}
+        ctx.putImageData(data,0,0);layer.scratchImage=c.toDataURL('image/png');layer.strokes=[];redo=[];wallEnd=null;
+        brush.width=40;field('width').value=40;field('tool').value='draw';layer.smooth='off';field('smooth').value='off';loadGuide();redraw();out.textContent='原画を読み込みました。なぞってください。';
+      }catch(e){out.textContent='原画を読み込めません：'+e.message;}finally{if(url)URL.revokeObjectURL(url);traceBusy=false;}
+    }
     async function traceImage(){
+      if(layer.scratchImage){find('output').textContent='先に筆跡モードに戻してください。';return;}
+
       const file=field('traceFile').files[0], threshold=Number(field('traceThreshold').value), out=find('output');
       if(!file){out.textContent='画像を選択してください。';return;}
       if(!field('traceThreshold').reportValidity())return;
@@ -322,7 +349,10 @@
       if(!action)return;
       if(action==='cancel'){dialog.close();return;}
       if(traceBusy)return;
+      if(action==='scratch-load'&&!smart){loadScratch();return;}
+      if(action==='scratch-off'&&!smart){if(layer.scratchImage&&confirm('原画と露出軌跡を消去しますか？')){delete layer.scratchImage;scratchGuide=null;layer.strokes=[];redo=[];redraw();}return;}
       if(action==='smart-start'){
+        if(layer.scratchImage){find('output').textContent='原画再現モードでは直接なぞってください。';return;}
         if(!layer.strokes.length){find('output').textContent='先に筆跡を生成してください。';return;}
         smart={pool:layer.strokes,routing:layer.strokes.map(st=>{const raw=routingByStroke.get(st);return raw?{...st,points:raw.points.map((p,i)=>[p[0],p[1],st.points[i][2],st.points[i][3]])}:st;}),order:[],used:new Set(),redo:[]};field('tool').value='draw';smartControls(true);smartRefresh();return;
       }
@@ -352,6 +382,6 @@
     };
     dialog.onclose=()=>{traceWorker?.terminate();cancelAnimationFrame(paintFrame);cancelAnimationFrame(preview);dialog.remove();};
     dialog.onkeydown=e=>{if(e.key!=='Escape')e.stopPropagation();};
-    document.body.append(dialog);dialog.showModal();view();redraw();
+    document.body.append(dialog);dialog.showModal();loadGuide();view();redraw();
   };
 })();
