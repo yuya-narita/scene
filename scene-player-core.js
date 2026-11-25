@@ -4738,11 +4738,11 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       let video=layer.querySelector('video.sp-background-video');
       if(!video || video.getAttribute('src')!==state.src){
         this._disposeBackgroundVideo(layer);
-        video=document.createElement('video');video.className='sp-background-video';
+        video=this.options.takePreloadedBackgroundVideo?.(state.src)||document.createElement('video');video.className='sp-background-video';
         video.muted=true;video.defaultMuted=true;video.loop=true;video.playsInline=true;
         video.setAttribute('playsinline','');video.setAttribute('muted','');video.setAttribute('aria-hidden','true');
         Object.assign(video.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none'});
-        video.preload='metadata';video.src=state.src;layer.prepend(video);
+        video.preload='metadata';if(video.getAttribute('src')!==state.src)video.src=state.src;layer.prepend(video);
         video.addEventListener('loadedmetadata',()=>{
           if(!video.isConnected || !video.videoWidth || !video.videoHeight)return;
           this._panoRatioCache=this._panoRatioCache||new Map();

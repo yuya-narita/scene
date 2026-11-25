@@ -1455,8 +1455,41 @@
     host.addEventListener('sceneplayer:historyopen', invalidateResonance);
   }
 
+  // Phase 3.2.6: one bounded, silent look-ahead video. Never play it.
+  let deliveryWarmVideo=null, deliveryWarmTimer=0;
+  function clearDeliveryWarm(){
+    clearTimeout(deliveryWarmTimer); deliveryWarmTimer=0;
+    if(deliveryWarmVideo){const v=deliveryWarmVideo;deliveryWarmVideo=null;v.pause();v.removeAttribute('src');v.load();}
+  }
+  function takeDeliveryWarm(src){
+    if(!deliveryWarmVideo || deliveryWarmVideo.getAttribute('src')!==src || deliveryWarmVideo.error)return null;
+    const v=deliveryWarmVideo;deliveryWarmVideo=null;return v;
+  }
+  function scheduleDeliveryWarm(index){
+    clearTimeout(deliveryWarmTimer);
+    if(!player || document.hidden || !ending.hidden || host.hidden){clearDeliveryWarm();return;}
+    const owner=player;
+    deliveryWarmTimer=setTimeout(()=>{
+      if(player!==owner || document.hidden || !ending.hidden || host.hidden)return;
+      const scenes=documentData?.scenes||[];
+      const current=owner._backgroundStateAt(index);
+      const next=index+1<scenes.length?owner._backgroundStateAt(index+1):null;
+      const src=next?.mediaType==='video' && next.src!==current.src?next.src:null;
+      const conn=navigator.connection;
+      if(!src || !/^https?:\/\//i.test(src) || conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType||'')){clearDeliveryWarm();return;}
+      if(deliveryWarmVideo?.getAttribute('src')===src && !deliveryWarmVideo.error)return;
+      clearDeliveryWarm();
+      const v=document.createElement('video');v.muted=true;v.defaultMuted=true;v.playsInline=true;
+      v.preload=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)?'metadata':'auto';
+      v.src=src;deliveryWarmVideo=v;v.load();
+    },400);
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)clearDeliveryWarm();else if(player&&!host.hidden&&ending.hidden)scheduleDeliveryWarm(player.index);});
+  window.addEventListener('pagehide',clearDeliveryWarm);
+
   function onSceneChange(e) {
     const index = Number(e.detail?.index);
+    if(Number.isInteger(index))scheduleDeliveryWarm(index);
     if(sceneReachReady&&!host.hidden){sceneReachTracker?.reach(index);if(Number.isInteger(index))observeReadingReturn();}
     if (Number.isInteger(index) && index > 0) {
       localStorage.setItem(storageKey(), String(index));
@@ -1529,6 +1562,7 @@
   }
 
   function onEnd() {
+    clearDeliveryWarm();
     if(!commercePreviewLocked(documentData))void window.AhakoSceneLetter?.show(currentWorkId(),ending);
     setShelfReturnReading(false);
     if(!commercePreviewLocked(documentData))localStorage.removeItem(storageKey());
@@ -1617,6 +1651,7 @@
     ownCopyReady.then(async result=>{if(!shopEntryActive)return;if(!result?.commerce){ending.classList.remove('is-shop-preparing');return;}try{await purchasePublicOwnCopy(result.commerce);}finally{ending.classList.remove('is-shop-preparing');}}).catch(error=>{ending.classList.remove('is-shop-preparing');if(ownCopyStatus)ownCopyStatus.textContent=String(error?.message||error);});
   }
   function returnToCover() {
+    clearDeliveryWarm();
     sceneReachReady=false;void sceneReachTracker?.flush();
     leaveShopEntry();
     if (player) {
@@ -1652,6 +1687,7 @@
   }
 
   async function ensurePlayer(startAt = 0) {
+    clearDeliveryWarm();
     sceneReachReady=false;
     leaveShopEntry();
     setShelfReturnReading(true);
@@ -1694,7 +1730,8 @@
 
     player = new ScenePlayerCore(host, {
       allowPrevious: true,
-      endOnNextAction: true
+      endOnNextAction: true,
+      takePreloadedBackgroundVideo: takeDeliveryWarm
     });
 
     bindPublicControls();
@@ -1728,6 +1765,7 @@
     // Resonance measures readable time. The public opening breath is not
     // operable by the reader, so Scene 1 starts when the reading surface is
     // actually revealed rather than ~690ms earlier at audio unlock.
+    scheduleDeliveryWarm(player?.index ?? startAt);
     beginResonanceClock(performance.now());
     host.style.visibility = '';
     host.style.pointerEvents = '';
