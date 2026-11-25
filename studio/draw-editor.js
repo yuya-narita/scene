@@ -17,7 +17,7 @@
       <div class="draw-row"><button data-action="undo">一筆戻す</button><button data-action="redo">やり直す</button>
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
-      <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>なぞった筆跡で確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線をなぞります。ペンを離すまでが一筆です。未描画の線は保存しません。</small></details>
+      <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>なぞった筆跡で確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線を大まかになぞります。下絵の連続経路に強制吸着します。ペンを離すまでが一筆です。</small></details>
       <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
       <label data-nib>筆先<select name="tip"><option value="pointed">穂先（細入り）</option><option value="flat">平筆（斜め）</option><option value="round">丸筆</option></select></label>
@@ -112,28 +112,51 @@
     function smartRefresh(){
       let t=0;layer.strokes=smart.order.map(st=>{const points=st.points.map(p=>{const q=p.slice();q[2]=t;t+=8;return q;});const releasedAt=t;t+=12;return {...st,points,releasedAt};});redraw();
     }
-    function smartPick(samples){
+    // Match the gesture to a connected graph of guide lines, never to raw input.
+    function smartRoute(samples){
       const r=canvas.getBoundingClientRect(),sx=r.width,sy=r.height;
-      const xy=p=>[p[0]*sx,p[1]*sy], dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
-      const raw=samples.map(xy).filter((p,i,a)=>!i||dist(p,a[i-1])>.5);
-      if(!raw.length)return;
-      const g=[raw[0]];for(let i=1;i<raw.length;i++){const a=raw[i-1],b=raw[i],n=Math.ceil(dist(a,b)/2);for(let j=1;j<=n;j++)g.push([a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n]);}
-      const radius=Math.max(5,Math.min(14,sx*.025)), segments=[];
-      for(const st of smart.pool){const ps=st.points.map(xy);for(let i=0;i<ps.length;i++){const a=ps[i],b=ps[i+1]||a;segments.push({a,b,st});}}
-      const points=[];let last=null, widths=[];
-      for(let i=0;i<g.length;i++){
-        const p=g[i],before=g[Math.max(0,i-2)],after=g[Math.min(g.length-1,i+2)],dx=after[0]-before[0],dy=after[1]-before[1],gl=Math.hypot(dx,dy);let best=null;
-        for(const seg of segments){const {a,b}=seg,x=b[0]-a[0],y=b[1]-a[1],l=Math.hypot(x,y);if(p[0]<Math.min(a[0],b[0])-radius||p[0]>Math.max(a[0],b[0])+radius||p[1]<Math.min(a[1],b[1])-radius||p[1]>Math.max(a[1],b[1])+radius)continue;
-          const f=Math.max(0,Math.min(1,((p[0]-a[0])*x+(p[1]-a[1])*y)/(l*l||1))),q=[a[0]+f*x,a[1]+f*y],d=dist(p,q);if(d>radius)continue;
-          const align=l&&gl?Math.abs((x*dx+y*dy)/(l*gl)):1;
-          const score=d+(1-align)*radius*.7+(last?Math.max(0,dist(last,q)-5)*.5:0);if(!best||score<best.score)best={q,score,st:seg.st};}
-        const q=best?best.q:p;last=q;if(best)widths.push(best.st.width);
-        const unit=v=>Math.round(Math.max(0,Math.min(1,v))*10000)/10000;
-        const next=[unit(q[0]/sx),unit(q[1]/sy),0];if(!points.length||next[0]!==points.at(-1)[0]||next[1]!==points.at(-1)[1])points.push(next);
+      const xy=p=>[p[0]*sx,p[1]*sy],dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+      const radius=Math.max(12,Math.min(42,sx*.085)),step=3;
+      function resample(ps){const out=[ps[0]];for(let i=1;i<ps.length;i++){const a=ps[i-1],b=ps[i],n=Math.ceil(dist(a,b)/step);for(let j=1;j<=n;j++)out.push([a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n]);}return out;}
+      if(!samples.length)return null;
+      const g=resample(samples.map(xy)),nodes=[],grid=new Map(),cell=4;
+      const key=(x,y)=>x+','+y;
+      function near(p,rad){const out=[];for(let x=Math.floor((p[0]-rad)/cell);x<=Math.floor((p[0]+rad)/cell);x++)for(let y=Math.floor((p[1]-rad)/cell);y<=Math.floor((p[1]+rad)/cell);y++)for(const i of grid.get(key(x,y))||[])if(dist(nodes[i].p,p)<=rad)out.push(i);return out;}
+      function link(a,b){if(a===b||nodes[a].adj.includes(b))return;nodes[a].adj.push(b);nodes[b].adj.push(a);}
+      for(const st of smart.pool){if(!st.points.length)continue;let prev=-1;for(const p of resample(st.points.map(xy))){const i=nodes.length;nodes.push({p,st,adj:[]});if(prev>=0)link(prev,i);const k=key(Math.floor(p[0]/cell),Math.floor(p[1]/cell));if(!grid.has(k))grid.set(k,[]);grid.get(k).push(i);prev=i;}}
+      // Join only almost coincident guide points, not nearby parallel lines.
+      const junction=Math.max(.65,Math.min(2,sx*.003));
+      for(let i=0;i<nodes.length;i++)for(const j of near(nodes[i].p,junction))if(j<i&&nodes[i].st!==nodes[j].st)link(i,j);
+      if(!nodes.length)return null;
+      let beam=near(g[0],radius).map(i=>({i,c:dist(nodes[i].p,g[0])**2,prev:null,path:[i]})).sort((a,b)=>a.c-b.c).slice(0,32);
+      for(let k=1;k<g.length&&beam.length;k++){
+        const p=g[k],v=[p[0]-g[k-1][0],p[1]-g[k-1][1]],vl=Math.hypot(...v),next=new Map();
+        for(const state of beam){
+          const queue=[{i:state.i,path:[],len:0}],seen=new Map([[state.i,0]]),limit=Math.max(9,vl*3+3);
+          for(let z=0;z<queue.length;z++){
+            const q=queue[z],n=nodes[q.i],d=dist(n.p,p);
+            if(d<=radius){const from=nodes[state.i].p,dx=n.p[0]-from[0],dy=n.p[1]-from[1],dl=Math.hypot(dx,dy),align=dl&&vl?(dx*v[0]+dy*v[1])/(dl*vl):0;
+              const c=state.c+d*d*.12+(q.len-vl)**2*.65+(1-align)*vl*2;
+              if(!next.has(q.i)||next.get(q.i).c>c)next.set(q.i,{i:q.i,c,prev:state,path:q.path});}
+            for(const j of n.adj){const len=q.len+dist(n.p,nodes[j].p);if(len>limit||seen.has(j)&&seen.get(j)<=len)continue;seen.set(j,len);queue.push({i:j,path:[...q.path,j],len});}
+          }
+        }
+        beam=[...next.values()].sort((a,b)=>a.c-b.c).slice(0,32);
       }
-      if(smart.order.length>=1000||count+points.length>20000){find('output').textContent='記録上限に達しました。';return;}
-      const width=widths.length?widths.sort((a,b)=>a-b)[Math.floor(widths.length/2)]:brush.width;
-      smart.order.push({...brush,width,points});smart.redo=[];smartRefresh();
+      if(!beam.length)return null;
+      let best=beam.sort((a,b)=>(a.c+dist(nodes[a.i].p,g.at(-1))**2*3)-(b.c+dist(nodes[b.i].p,g.at(-1))**2*3))[0];
+      if(dist(nodes[best.i].p,g.at(-1))>radius*.7)return null;
+      const chunks=[];while(best){chunks.push(best.path);best=best.prev;}const ids=chunks.reverse().flat();
+      const unit=v=>Math.round(Math.max(0,Math.min(1,v))*10000)/10000,points=[],widths=[];
+      for(const i of ids){const n=nodes[i],p=[unit(n.p[0]/sx),unit(n.p[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(n.st.width);}}
+      if(!points.length||g.length>3&&points.length<2)return null;
+      return {...brush,width:widths.sort((a,b)=>a-b)[Math.floor(widths.length/2)]||brush.width,points};
+    }
+    function smartPick(samples){
+      const stroke=smartRoute(samples);
+      if(!stroke){redraw();find('output').textContent='経路を特定できません。もう一度なぞってください。';return;}
+      if(smart.order.length>=1000||count+stroke.points.length>20000){find('output').textContent='記録上限に達しました。';return;}
+      smart.order.push(stroke);smart.redo=[];smartRefresh();
     }
     function smartEnd(complete){
       if(complete){if(!smart.order.length){find('output').textContent='先になぞってください。';return;}smartRefresh();redo=[];}
