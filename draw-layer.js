@@ -191,7 +191,8 @@
   const hasInk=layer=>!!(layer?.strokes?.length||readerMode(layer));
   function readerScratch(canvas,layer,onDone){
     const img=scratchImage(layer.scratchImage), cfg=layer.readerScratch||{};
-    const mask=document.createElement('canvas'), sample=document.createElement('canvas');
+    const mask=document.createElement('canvas'), sample=document.createElement('canvas'), cover=document.createElement('canvas'), overlay=document.createElement('canvas');
+    cover.width=overlay.width=W;cover.height=overlay.height=H;
     canvas.width=mask.width=W;canvas.height=mask.height=H;sample.width=250;sample.height=150;
     const ctx=canvas.getContext('2d'),m=mask.getContext('2d'),q=sample.getContext('2d',{willReadFrequently:true});
     let alpha=null,total=0,done=false,dead=false,id=null,last=null,frame=0;
@@ -199,11 +200,20 @@
     Object.assign(canvas.style,{pointerEvents:'auto',touchAction:'none',cursor:'crosshair'});
     const width=number(layer.brush?.width,40,1,80), threshold=number(cfg.threshold,80,1,100)/100;
     const listeners=[];function listen(type,fn,opts){canvas.addEventListener(type,fn,opts);listeners.push([type,fn,opts]);}
+    function makeCover(){
+      const c=cover.getContext('2d'), kind=cfg.mask||'dust';if(kind==='none')return;
+      let seed=319;const rnd=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);
+      const g=c.createLinearGradient(0,0,W,H);const colors={dust:['#b4aa96','#81796b'],sand:['#e0c18b','#a88450'],fog:['#e6eef1','#b6cbd2'],frost:['#e9f6ff','#a6c7dc'],silver:['#a2a5aa','#e1e3e6'],black:['#242424','#111111']};
+      const pair=colors[kind]||colors.dust;g.addColorStop(0,pair[0]);g.addColorStop(.55,pair[1]);g.addColorStop(1,pair[0]);c.fillStyle=g;c.fillRect(0,0,W,H);
+      if(kind!=='black'){for(let i=0;i<12000;i++){c.fillStyle=i%2?'rgba(255,255,255,.12)':'rgba(40,30,20,.09)';const r=kind==='fog'?2+rnd()*9: .4+rnd()*2.4;c.beginPath();c.arc(rnd()*W,rnd()*H,r,0,Math.PI*2);c.fill();}}
+      c.globalCompositeOperation='destination-in';c.globalAlpha=number(cfg.density,90,0,100)/100;c.fillStyle='#000';c.fillRect(0,0,W,H);c.globalAlpha=1;c.globalCompositeOperation='source-over';
+    }
+    makeCover();
     function composite(){ctx.clearRect(0,0,W,H);if(!img?.complete||!img.naturalWidth)return;
       ctx.save();ctx.drawImage(img,0,0,W,H);if(!done){ctx.globalCompositeOperation='destination-in';ctx.drawImage(mask,0,0);}ctx.restore();
-      if(!done&&cfg.guide){ctx.save();ctx.globalCompositeOperation='destination-over';ctx.globalAlpha=.18;ctx.drawImage(img,0,0,W,H);ctx.restore();}}
+      if(!done){if(cfg.guide||['fog','frost'].includes(cfg.mask)){ctx.save();ctx.globalCompositeOperation='destination-over';ctx.globalAlpha=cfg.guide?.18:.35;ctx.drawImage(img,0,0,W,H);ctx.restore();}const o=overlay.getContext('2d');o.clearRect(0,0,W,H);o.drawImage(cover,0,0);o.globalCompositeOperation='destination-out';o.drawImage(mask,0,0);o.globalCompositeOperation='source-over';ctx.drawImage(overlay,0,0);}}
     function finish(notify=true){if(done||dead)return;done=true;composite();if(notify)onDone?.();}
-    function ready(){if(dead||!img?.naturalWidth)return;q.clearRect(0,0,250,150);q.drawImage(img,0,0,250,150);alpha=q.getImageData(0,0,250,150).data;total=0;for(let i=3;i<alpha.length;i+=4)total+=alpha[i];composite();if(!total)finish();}
+    function ready(){if(dead||!img?.naturalWidth)return;q.clearRect(0,0,250,150);q.drawImage(img,0,0,250,150);alpha=q.getImageData(0,0,250,150).data;total=0;for(let i=3;i<alpha.length;i+=4)total+=alpha[i];if(layer.strokes?.length){const initial=document.createElement('canvas');inkPainter(initial,{...layer,strokes:layer.strokes.map(st=>({...st,pen:'ball',opacity:1,color:'#000000'}))}).render(Infinity);m.drawImage(initial,0,0);}update();if(!total)finish();}
     function update(){frame=0;if(dead||done)return;composite();if(!alpha||!total)return;q.clearRect(0,0,250,150);q.drawImage(mask,0,0,250,150);const a=q.getImageData(0,0,250,150).data;let revealed=0;for(let i=3;i<a.length;i+=4)revealed+=alpha[i]*a[i]/255;if(revealed/total>=threshold-.0001)finish();}
     function point(e){const r=canvas.getBoundingClientRect(),x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;
       const angle=number(layer.angle,0,-180,180)*Math.PI/180, c=Math.cos(angle),s=Math.sin(angle), sy=number(layer.height,100,10,300)/100;
@@ -223,7 +233,7 @@
   window.AhakoReaderScratch=readerScratch;
   function painter(canvas,layer){
     const img=scratchImage(layer.scratchImage);
-    if(img&&readerMode(layer)){
+    if(false&&img&&readerMode(layer)){
       canvas.width=W;canvas.height=H;const ctx=canvas.getContext('2d');let show=false;
       const draw=()=>{if(show&&img.naturalWidth){ctx.clearRect(0,0,W,H);ctx.drawImage(img,0,0,W,H);}};
       if(!img.complete)img.addEventListener('load',draw,{once:true});
