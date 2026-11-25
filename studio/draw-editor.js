@@ -17,7 +17,7 @@
       <div class="draw-row"><button data-action="undo">一筆戻す</button><button data-action="redo">やり直す</button>
       <button data-action="preview">再生確認</button><button data-action="clear">全消去</button></div>
       <output aria-live="polite"></output>
-      <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>なぞった筆跡で確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線を大まかになぞります。下絵の連続経路に強制吸着します。ペンを離すまでが一筆です。</small></details>
+      <details><summary>SMART TRACE（描画順序を指定）</summary><div class="draw-row"><button data-action="smart-start">筆跡をなぞる</button><button data-action="smart-finish" disabled>なぞった筆跡で確定</button><button data-action="smart-cancel" disabled>順序編集を中止</button></div><small>薄い線を大まかになぞります。下絵の連続経路に強制吸着し、短い筆先を補完します。ペンを離すまでが一筆です。</small></details>
       <details><summary>画像から筆跡を生成（試験版）</summary><div class="draw-row"><input name="traceFile" type="file" accept="image/png,image/jpeg,image/webp"><label>検出感度<input name="traceThreshold" type="number" min="20" max="245" value="150"></label><label>変換方式<select name="traceMode"><option value="precise">原画重視（Phase 3.4）</option><option value="natural">自然な線（Phase 2）</option><option value="legacy">従来（Phase 1）</option></select></label><button data-action="trace">筆跡を生成</button></div><small>白地の線画向け。生成すると現在の筆跡を置き換えます。</small></details>
       <div class="draw-row"><label>ペン<select name="pen"><option value="ball">ボールペン</option><option value="fountain">万年筆</option><option value="brush">筆ペン</option><option value="marker">マーカー</option><option value="crayon">クレヨン</option></select></label>
       <label data-nib>筆先<select name="tip"><option value="pointed">穂先（細入り）</option><option value="flat">平筆（斜め）</option><option value="round">丸筆</option></select></label>
@@ -147,6 +147,33 @@
       let best=beam.sort((a,b)=>(a.c+dist(nodes[a.i].p,g.at(-1))**2*3)-(b.c+dist(nodes[b.i].p,g.at(-1))**2*3))[0];
       if(dist(nodes[best.i].p,g.at(-1))>radius*.7)return null;
       const chunks=[];while(best){chunks.push(best.path);best=best.prev;}const ids=chunks.reverse().flat();
+      // Extend only short, unambiguous terminal tails. Never cross a junction
+      // or add a separate stroke. Preserve the original sampled width.
+      function terminalTail(start, inward, occupied){
+        if(inward==null)return [];
+        const origin=nodes[start].p, inner=nodes[inward].p;
+        const vx=origin[0]-inner[0],vy=origin[1]-inner[1],vl=Math.hypot(vx,vy);
+        if(vl<.01)return [];
+        const maxLen=Math.min(24,Math.max(6,sx*.035));
+        let prev=inward,cur=start,len=0;const tail=[],seen=new Set([start]);
+        while(true){
+          const next=nodes[cur].adj.filter(j=>j!==prev);
+          if(next.length===0)return tail;
+          if(next.length!==1)return [];
+          const j=next[0];if(occupied.has(j)||seen.has(j))return [];
+          const a=nodes[cur].p,b=nodes[j].p,d=dist(a,b);
+          if(!tail.length&&d>.01&&((b[0]-a[0])*vx+(b[1]-a[1])*vy)/(d*vl)<.15)return [];
+          len+=d;if(len>maxLen||tail.length>32)return [];
+          tail.push(j);seen.add(j);prev=cur;cur=j;
+        }
+      }
+      if(ids.length>1){
+        const occupied=new Set(ids);
+        const head=terminalTail(ids[0],ids[1],occupied);
+        head.forEach(i=>occupied.add(i));
+        const tail=terminalTail(ids.at(-1),ids.at(-2),occupied);
+        ids.unshift(...head.reverse());ids.push(...tail);
+      }
       const unit=v=>Math.round(Math.max(0,Math.min(1,v))*10000)/10000,points=[],widths=[];
       for(const i of ids){const n=nodes[i],p=[unit(n.p[0]/sx),unit(n.p[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(n.p[2]||n.st.width);}}
       if(!points.length||g.length>3&&points.length<2)return null;
@@ -156,7 +183,7 @@
     function smartPick(samples){
       const stroke=smartRoute(samples);
       if(!stroke){redraw();find('output').textContent='経路を特定できません。もう一度なぞってください。';return;}
-      if(smart.order.length>=1000||count+stroke.points.length>20000){find('output').textContent='記録上限に達しました。';return;}
+      if(smart.order.length>=1000||smart.order.reduce((n,st)=>n+st.points.length,0)+stroke.points.length>20000){find('output').textContent='記録上限に達しました。';return;}
       smart.order.push(stroke);smart.redo=[];smartRefresh();
     }
     function smartEnd(complete){
