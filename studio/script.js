@@ -6646,22 +6646,31 @@ async function makeStoreZip(entries,onProgress=null){
     function uint(e){let v=0;for(let i=e.start;i<e.stop;i++)v=v*256+bytes[i];return v;}
     let seg;for(let p=0;p<bytes.length;){const e=element(p,bytes.length);if(e.id===0x18538067){seg=e;break;}p=e.stop;}
     if(!seg)throw new Error('WebM Segment missing');
-    let info,scale=1000000, indexed=false, last=-1, previous=-1;
+    let info,scale=1000000,last=-1,previous=-1; const top=[];
     for(let p=seg.start;p<seg.stop;){const e=element(p,seg.stop);
-      if(e.id===0x114d9b74||e.id===0x1c53bb6b)indexed=true;
+      // Streaming clusters may have unknown size; stop at the next segment-level element.
+      if(e.id===0x1f43b675&&e.z.unknown){for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if([0x1f43b675,0x1c53bb6b,0x114d9b74,0x1549a966,0x1654ae6b,0x1254c367,0x1043a770,0x1941a469].includes(f.id)){e.stop=q;break;}if(f.z.unknown)throw new Error('Unsupported unknown-size cluster child');q=f.stop;}}
+      top.push(e);
       if(e.id===0x1549a966){info=e;for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if(f.id===0x2ad7b1)scale=uint(f);if(f.id===0x4489)return blob;q=f.stop;}}
       if(e.id===0x1f43b675){let base=0;for(let q=e.start;q<e.stop;){const f=element(q,e.stop);if(f.id===0xe7)base=uint(f);if(f.id===0xa3){const t=vint(f.start);const k=f.start+t.n;if(k+2>=f.stop)throw new Error('Invalid WebM block');let rel=(bytes[k]<<8)|bytes[k+1];if(rel>=32768)rel-=65536;const stamp=base+rel;if(stamp>last){previous=last;last=stamp;}}q=f.stop;}}
       p=e.stop;
     }
-    if(!info||indexed||!scale||last<0)throw new Error('WebM metadata repair unsupported for this layout');
+    if(!info||!scale||last<0)throw new Error('WebM metadata repair unsupported for this layout');
     const tail=last*scale/1e9, step=Math.max(0,Math.min(.1,(last-previous)*scale/1e9));
     const duration=tail+step;
     if(Math.abs(duration-expected)>.12)throw new Error('Recorded timestamps differ from master: '+duration.toFixed(3)+' s');
     const field=new Uint8Array(11);field.set([0x44,0x89,0x88]);new DataView(field.buffer).setFloat64(3,duration*1e9/scale,false);
     const infoSize=size(info.stop-info.start+field.length);
-    const delta=infoSize.length-info.z.n+field.length;
-    const segmentSize=seg.z.unknown?bytes.subarray(seg.p+seg.idn,seg.start):size(seg.stop-seg.start+delta);
-    return new Blob([bytes.subarray(0,seg.p+seg.idn),segmentSize,bytes.subarray(seg.start,info.p+info.idn),infoSize,bytes.subarray(info.start,info.stop),field,bytes.subarray(info.stop)],{type:'video/webm'});
+    const parts=[];
+    for(const e of top){
+      // Old byte-offset indexes are invalid after inserting Duration.
+      if(e.id===0x114d9b74||e.id===0x1c53bb6b)continue;
+      if(e===info)parts.push(bytes.subarray(e.p,e.p+e.idn),infoSize,bytes.subarray(e.start,e.stop),field);
+      else if(e.id===0x1f43b675&&e.z.unknown)parts.push(bytes.subarray(e.p,e.p+e.idn),size(e.stop-e.start),bytes.subarray(e.start,e.stop));
+      else parts.push(bytes.subarray(e.p,e.stop));
+    }
+    const segmentSize=size(parts.reduce((n,a)=>n+a.length,0));
+    return new Blob([bytes.subarray(0,seg.p+seg.idn),segmentSize,...parts],{type:'video/webm'});
   }
   // Real-time, browser-native experimental delivery encoder. No master mutation.
   async function encodeDeliveryVideo(blob, factor, progress, signal, diagnostic){
@@ -6685,7 +6694,7 @@ async function makeStoreZip(entries,onProgress=null){
         rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};rec.onerror=e=>reject(e.error||new Error('Encoder failed'));
         rec.onstop=()=>resolve(new Blob(chunks,{type:'video/webm'}));
         video.onended=()=>{if(rec.state!=='inactive')rec.stop();};
-        video.ontimeupdate=()=>progress(Math.min(99,Math.floor(video.currentTime/meta.duration*100)));
+        video.ontimeupdate=()=>{if(rec.state!=='inactive')progress(Math.min(99,Math.floor(video.currentTime/meta.duration*100)));};
         timer=setTimeout(()=>reject(new Error('Encoding timeout')),Math.max(30000,meta.duration*3000+15000));
         rec.start(1000);video.play().catch(reject);
       });
@@ -6702,13 +6711,13 @@ async function makeStoreZip(entries,onProgress=null){
       if(signal.aborted)throw new Error("Cancelled");
       if(!Number.isFinite(out.duration)||Math.abs(out.duration-meta.duration)>.12||out.width!==meta.width||out.height!==meta.height)throw new Error(u('出力の時間・解像度を検証できません。原本を維持します。','Output duration/resolution could not be verified. Master retained.'));
       return result;
-    }finally{clearTimeout(timer);if(abortHandler)signal.removeEventListener('abort',abortHandler);if(rec&&rec.state!=='inactive'){try{rec.stop();}catch{}}video.pause();stream?.getTracks().forEach(t=>t.stop());video.removeAttribute('src');video.load();video.remove();URL.revokeObjectURL(url);}
+    }finally{video.ontimeupdate=null;video.onended=null;clearTimeout(timer);if(abortHandler)signal.removeEventListener('abort',abortHandler);if(rec&&rec.state!=='inactive'){try{rec.stop();}catch{}}video.pause();stream?.getTracks().forEach(t=>t.stop());video.removeAttribute('src');video.load();video.remove();URL.revokeObjectURL(url);}
   }
   // Local diagnostics only: no publishing, payment, or mutation of the master.
   function showDeliveryComparison(master,result,accepted){
     const dialog=document.createElement('dialog');dialog.style.cssText='width:min(94vw,900px);max-height:85vh;overflow:auto;padding:18px;background:Canvas;color:CanvasText;border-radius:12px';
     const title=document.createElement('h3');title.textContent=u('圧縮前後の比較','Compression comparison');dialog.append(title);
-    const summary=document.createElement('p');summary.textContent=(accepted?u('公開用に登録済み','Adopted for delivery'):u('診断用・公開未採用','Diagnostic only / not adopted'))+' | '+(master.blob.size/1e6).toFixed(2)+' MB → '+(result.blob.size/1e6).toFixed(2)+' MB | '+u('削減率 ','Reduction ')+(100*(1-result.blob.size/master.blob.size)).toFixed(1)+'%';dialog.append(summary);
+    const summary=document.createElement('p');summary.textContent=(accepted?u('公開用に登録済み','Adopted for delivery'):u('診断用・公開未採用','Diagnostic only / not adopted'))+' | '+(master.blob.size/1e6).toFixed(2)+' MB → '+(result.blob.size/1e6).toFixed(2)+' MB | '+u('削減率 ','Reduction ')+(100*(1-result.blob.size/master.blob.size)).toFixed(1)+'%';dialog.append(summary);if(result.error){const error=document.createElement('p');error.textContent=u('未採用の理由：','Reason: ')+result.error;dialog.append(error);}
     const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px';dialog.append(grid);
     const urls=[],videos=[];let closed=false;
     for(const [label,item] of [['MASTER',master],['DELIVERY',result]]){
@@ -6766,7 +6775,7 @@ async function makeStoreZip(entries,onProgress=null){
       const encode=document.createElement('button'), cancel=document.createElement('button'), quality=document.createElement('select'), status=document.createElement('p');
       encode.type=cancel.type='button';encode.textContent=u('試験圧縮（WebM）','Experimental encode (WebM)');cancel.textContent=u('中止','Cancel');cancel.disabled=true;
       for(const [v,t] of [['0.75','QUALITY 75%'],['0.45','BALANCED 45%'],['0.22','ULTRA 22%']]){const o=document.createElement('option');o.value=v;o.textContent=t;quality.append(o);}quality.value='0.45';
-      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（動画の長さ程度かかります）','Encoding in real time');try{const blob=await encodeDeliveryVideo(master.blob,Number(quality.value),n=>status.textContent=u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,(blob,mime)=>{candidate={blob,mime,name:master.name.replace(/\.[^.]+$/,'')+'.webm'};});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('圧縮完了・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
+      encode.onclick=async()=>{if(activeEncode){status.textContent=u('別の動画を圧縮中です。','Another encode is running.');return;}const controller=new AbortController();activeEncode=controller;candidate=null;compare.disabled=save.disabled=true;encode.disabled=pick.disabled=reset.disabled=true;cancel.disabled=false;status.textContent=u('圧縮中（動画の長さ程度かかります）','Encoding in real time');try{const blob=await encodeDeliveryVideo(master.blob,Number(quality.value),n=>status.textContent=u('圧縮中・検証中 ','Encoding / checking ')+n+'%',controller.signal,(blob,mime)=>{candidate={blob,mime,name:master.name.replace(/\.[^.]+$/,'')+'.webm'};});if(controller.signal.aborted||!panel.open||assetRegistry.get(src)!==master)return;deliveryVideos.set(src,candidate||{blob,name:master.name.replace(/\.[^.]+$/,'')+'.webm'});status.textContent=u('100%・公開用に登録済み・削減率 ','Encoded; reduction ')+(100*(1-blob.size/master.blob.size)).toFixed(1)+'%';}catch(e){if(candidate)candidate.error=String(e);status.textContent=u('失敗・公開用には未採用：','Failed / not adopted: ')+String(e)+(candidate?' / '+mb(candidate.blob.size):'');}finally{activeEncode=null;encode.disabled=pick.disabled=false;cancel.disabled=true;update();}};
       cancel.onclick=()=>activeEncode?.abort();
       row.append(label,pick,reset,quality,encode,cancel,status,compare,save);panel.append(row);update();
     }
