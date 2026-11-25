@@ -1969,7 +1969,7 @@
     "cover": {
       "type": "object",
       "properties": {
-        "backgroundVideo": {"type":"object","properties":{"src":{"type":"string"},"fit":{"enum":["cover","contain"]},"position":{"type":"string"}},"required":["src"],"additionalProperties":true},
+        "backgroundVideo": {"type":"object","properties":{"playback":{"enum":["loop","once"],"default":"loop"},"src":{"type":"string"},"fit":{"enum":["cover","contain"]},"position":{"type":"string"}},"required":["src"],"additionalProperties":true},
         "draw": {"$ref": "#/$defs/presentation/properties/draw"},
         "startMode": {
           "enum": [
@@ -2159,7 +2159,7 @@
     "ending": {
       "type": "object",
       "properties": {
-        "backgroundVideo": {"type":"object","properties":{"src":{"type":"string"},"fit":{"enum":["cover","contain"]},"position":{"type":"string"}},"required":["src"],"additionalProperties":true},
+        "backgroundVideo": {"type":"object","properties":{"playback":{"enum":["loop","once"],"default":"loop"},"src":{"type":"string"},"fit":{"enum":["cover","contain"]},"position":{"type":"string"}},"required":["src"],"additionalProperties":true},
         "draw": {"$ref": "#/$defs/presentation/properties/draw"},
         "label": {
           "type": "string",

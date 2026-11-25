@@ -395,7 +395,7 @@
   const pageVideoStates=new Map();
   const iosPageLoop=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   function guardPublicPageVideo(page,root,state){
-    if(!iosPageLoop)return;
+    if(!iosPageLoop||state.mode==='once')return;
     const v=state.video;
     v.loop=false;
     const active=()=>pageVideoStates.get(page)===state&&v.isConnected&&!root.hidden&&!document.hidden&&!root.classList.contains('is-shop-entry')&&!root.classList.contains('is-preview-lock');
@@ -428,10 +428,12 @@
         if(state){state.dispose?.();state.video.pause();state.video.removeAttribute('src');state.video.load();state.layer.remove();pageVideoStates.delete(page);}
         if(root.classList.contains('has-page-video'))root.classList.remove('has-page-video');continue;
       }
+      const mode=cfg.playback==='once'?'once':'loop';
+      if(state&&state.mode!==mode){state.dispose?.();state.video.pause();state.video.removeAttribute('src');state.video.load();state.layer.remove();pageVideoStates.delete(page);state=null;}
       if(!state){
         const layer=document.createElement('div');layer.className='public-page-video-layer';
         const video=document.createElement('video');video.muted=true;video.defaultMuted=true;video.playsInline=true;video.loop=true;video.autoplay=true;video.preload='metadata';video.setAttribute('playsinline','');video.setAttribute('muted','');video.setAttribute('aria-hidden','true');
-        layer.append(video);target.prepend(layer);state={layer,video};pageVideoStates.set(page,state);guardPublicPageVideo(page,root,state);
+        layer.append(video);target.prepend(layer);video.loop=mode==='loop';state={layer,video,mode};pageVideoStates.set(page,state);guardPublicPageVideo(page,root,state);
       }
       const v=state.video;
       v.style.objectFit=cfg.fit==='contain'?'contain':'cover';v.style.objectPosition=cfg.position||'center center';
@@ -442,7 +444,7 @@
   const pageVideoObserver=new MutationObserver(syncPublicPageVideos);
   for(const root of [intro,ending])if(root)pageVideoObserver.observe(root,{attributes:true,attributeFilter:['hidden','class']});
   window.addEventListener('pagehide',()=>{for(const {video} of pageVideoStates.values())video.pause();});
-  window.addEventListener('pageshow',()=>{syncPublicPageVideos();for(const {video} of pageVideoStates.values())video.play()?.catch(()=>{});});
+  window.addEventListener('pageshow',()=>{syncPublicPageVideos();for(const {video,mode} of pageVideoStates.values())if(mode!=='once'||!video.ended)video.play()?.catch(()=>{});});
 
   function coverSource(doc){
     return String(doc?.cover?.src || doc?.cover?.url || doc?.cover?.image || '').trim();
