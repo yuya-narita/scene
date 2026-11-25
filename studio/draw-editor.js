@@ -195,6 +195,33 @@
       // Preserve the worker's corrected geometry. Reordering or reversing
       // a path must not reconstruct its shape from the routing skeleton.
       const route=ids.map(i=>nodes[i].paint.slice());
+      // Phase 3.12: suppress union-ink width at graph junctions only.
+      // Keep routing, corrected XY, and terminal tails unchanged.
+      const arc=[0];
+      for(let k=1;k<route.length;k++)arc.push(arc[k-1]+dist(route[k],route[k-1]));
+      const originalWidths=route.map(q=>q[2]);
+      const scale=Math.sqrt(sx*sy/(1000*600));
+      const spans=[];
+      for(let k=0;k<ids.length;k++){
+        const n=nodes[ids[k]];
+        if(!n.adj.some(j=>nodes[j].st!==n.st))continue;
+        const radius=Math.max(3,Math.min(30,originalWidths[k]*scale*1.15));
+        let a=k,b=k;
+        while(a>0&&arc[k]-arc[a]<radius)a--;
+        while(b+1<route.length&&arc[b]-arc[k]<radius)b++;
+        const last=spans.at(-1);
+        if(last&&a<=last[1])last[1]=Math.max(last[1],b);else spans.push([a,b]);
+      }
+      for(const [a,b] of spans){
+        // No reliable two-sided reference: preserve original pen tip.
+        if(a===0||b===route.length-1||arc[b]-arc[a]<.01)continue;
+        const wa=originalWidths[a],wb=originalWidths[b];
+        for(let k=a+1;k<b;k++){
+          const t=(arc[k]-arc[a])/(arc[b]-arc[a]);
+          route[k][2]=Math.min(originalWidths[k],wa+(wb-wa)*t);
+        }
+      }
+
       const unit=v=>Math.round(Math.max(0,Math.min(1,v))*10000)/10000,points=[],widths=[];
       for(let k=0;k<ids.length;k++){const n=nodes[ids[k]],q=route[k],p=[unit(q[0]/sx),unit(q[1]/sy),0];if(!points.length||p[0]!==points.at(-1)[0]||p[1]!==points.at(-1)[1]){points.push(p);widths.push(q[2]||n.st.width);}}
       if(!points.length||g.length>3&&points.length<2)return null;
