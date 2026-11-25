@@ -2739,6 +2739,7 @@
       fontFamily:endingFontFamily,
       ...(Object.keys(preservedStyle).length?{style:preservedStyle}:{}),
       ...(workingDocument?.ending?.draw?{draw:clone(workingDocument.ending.draw)}:{}),
+      ...(workingDocument?.ending?.backgroundVideo?.src?{backgroundVideo:clone(workingDocument.ending.backgroundVideo)}:{}),
       ...(workingDocument?.ending?.image?.src?{image:clone(workingDocument.ending.image)}:{}),
       ...(endingAudioFromFields().length?{audio:endingAudioFromFields()}:{}),
       coverButton:{kicker:'COVER',label:t('ending.cover')},
@@ -3311,6 +3312,7 @@
         ...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),
         ...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),
         fontFamily:coverFontFamily,
+        ...(workingDocument?.cover?.backgroundVideo?.src?{backgroundVideo:clone(workingDocument.cover.backgroundVideo)}:{}),
         ...(workingDocument?.cover?.draw?{draw:clone(workingDocument.cover.draw)}:{}),
         ...(workingDocument?.cover?.styles && Object.keys(workingDocument.cover.styles).length
           ? {styles:clone(workingDocument.cover.styles)}
@@ -3777,7 +3779,7 @@
     const preservedCoverDraw=workingDocument.cover?.draw;
     const preservedCoverStyles=clone(workingDocument.cover?.styles||{});
     const preservedCoverVisibility=clone(workingDocument.cover?.visibility||{});
-    workingDocument.cover={...(preservedCoverDraw?{draw:preservedCoverDraw}:{}),...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,startMode:coverStartMode==='comic'?'comic':'scene',startTrigger:coverStartTrigger,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
+    workingDocument.cover={...(workingDocument.cover?.backgroundVideo?.src?{backgroundVideo:clone(workingDocument.cover.backgroundVideo)}:{}),...(preservedCoverDraw?{draw:preservedCoverDraw}:{}),...(coverImageUrl?{src:coverImageUrl,fit:'cover',position:coverPositionCss('phone'),positions:coverPositionsForDocument()}:{}),...(coverLogoUrl?{logo:{src:coverLogoUrl,_editorFileName:coverLogoFileName}}:{}),fontFamily:coverFontFamily,startMode:coverStartMode==='comic'?'comic':'scene',startTrigger:coverStartTrigger,...(Object.keys(preservedCoverStyles).length?{styles:preservedCoverStyles}:{}),...(Object.keys(preservedCoverVisibility).length?{visibility:preservedCoverVisibility}:{})};
     workingDocument.ending=endingFromEasy();
   }
 
@@ -4898,6 +4900,7 @@ async function makeStoreZip(entries,onProgress=null){
 
   function walkAssetRefs(doc,callback){
     const cover=doc?.cover;
+    for(const page of ['cover','ending']){const video=doc?.[page]?.backgroundVideo;if(video?.src)callback({kind:page+'Video',sceneIndex:-1,holder:video,key:'src',src:video.src,fileName:video._editorFileName||'background.mp4'});}
     const endingImage=doc?.ending?.image;
     if(endingImage?.src)callback({kind:'endingImage',sceneIndex:-1,holder:endingImage,key:'src',src:endingImage.src,fileName:endingImage._editorFileName||''});
     if(cover?.src)callback({kind:'cover',sceneIndex:-1,holder:cover,key:'src',src:cover.src,fileName:cover._editorFileName||coverImageFileName||''});
@@ -15119,11 +15122,20 @@ function openDesktopTextDetail(){
     const pageKicker=document.createElement('small');pageKicker.textContent='COVER';
     const pageTitle=document.createElement('strong');pageTitle.textContent=u('表紙を編集','Edit cover');
     pageHead.append(pageKicker,pageTitle);
-    shell.append(pageHead,textCard,styleCard,imageCard,buildPageDrawingEditor('cover'),startCard);
+    shell.append(pageHead,textCard,styleCard,imageCard,buildPageVideoEditor('cover'),buildPageDrawingEditor('cover'),startCard);
     desktopLivePanelBody.appendChild(shell);
   }
 
   // Decorative ending logo: one managed asset and one display-width setting.
+  function buildPageVideoEditor(page){
+    const card=desktopCard(u('動画背景（無音ループ）','Video background (muted loop)'));
+    const render=()=>{card.querySelector('[data-page-video-controls]')?.remove();const body=document.createElement('div');body.dataset.pageVideoControls='1';card.append(body);
+      const current=workingDocument?.[page]?.backgroundVideo;
+      const save=()=>{syncEasyShellToWorkingDocument();refreshLivePlayerDocumentChrome();scheduleDraftSave(70);syncEasyPublishButton();render();};
+      body.append(desktopAction(current?.src?u('動画を変更','Change video'):u('動画を選択','Choose video'),()=>{const input=document.createElement('input');input.type='file';input.accept='video/mp4,video/webm,.mp4,.webm';input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{const snap=await snapshotPickedFile(file);captureUndo('動画背景');const src=URL.createObjectURL(snap.blob);registerAsset(src,snap.blob,snap.name);workingDocument[page] ||= {};workingDocument[page].backgroundVideo={src,_editorFileName:snap.name,fit:'cover',position:'center center'};save();}catch(e){appAlert(String(e));}};input.click();}));
+      if(current?.src){const label=document.createElement('div');label.textContent=current._editorFileName||'Video';body.append(label,desktopAction(u('動画を外す','Remove video'),()=>{captureUndo('動画背景');delete workingDocument[page].backgroundVideo;save();}));body.append(desktopMakeSelect(u('表示','Fit'),[['cover','cover'],['contain','contain']],current.fit||'cover',v=>{workingDocument[page].backgroundVideo.fit=v;save();}));}
+    };render();return card;
+  }
   function buildEndingImageEditor(){
     const card=desktopCard(u('読了画像（ロゴ）','Ending image (logo)'));
     card.classList.add('ending-image-editor');
@@ -15198,7 +15210,7 @@ function openDesktopTextDetail(){
     const pageKicker=document.createElement('small');pageKicker.textContent='ENDING';
     const pageTitle=document.createElement('strong');pageTitle.textContent=u('読了ページを編集','Edit ending page');
     pageHead.append(pageKicker,pageTitle);
-    shell.append(pageHead,textCard,buildEndingImageEditor(),buildPageDrawingEditor('ending'),styleCard,seCard,linksCard);
+    shell.append(pageHead,textCard,buildPageVideoEditor('ending'),buildEndingImageEditor(),buildPageDrawingEditor('ending'),styleCard,seCard,linksCard);
     desktopLivePanelBody.appendChild(shell);
   }
 
@@ -18325,7 +18337,7 @@ function openDesktopTextDetail(){
     const picker=document.createElement('input');picker.type='color';picker.value=/^#[0-9a-f]{6}$/i.test(st.color||'')?st.color:'#ffffff';
     Object.assign(picker.style,{width:'48px',height:'42px',border:'1px solid #d7d9de',borderRadius:'10px',padding:'4px',background:'#fff'});
     colors.appendChild(picker);card.append(colorTitle,colors);
-    const imageEditor=buildEndingImageEditor();imageEditor.style.marginTop='16px';card.appendChild(imageEditor);
+    const imageEditor=buildEndingImageEditor();imageEditor.style.marginTop='16px';card.appendChild(imageEditor);card.appendChild(buildPageVideoEditor('ending'));
 
     const foot=document.createElement('div');Object.assign(foot.style,{display:'flex',justifyContent:'flex-end',marginTop:'18px'});
     const done=document.createElement('button');done.type='button';done.textContent=t('common.done');Object.assign(done.style,{width:'120px',height:'48px',border:'0',borderRadius:'24px',background:'#17181b',color:'#fff',font:'800 15px/1 system-ui'});
