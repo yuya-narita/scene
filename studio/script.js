@@ -7798,7 +7798,7 @@ async function makeStoreZip(entries,onProgress=null){
       const bg=p.background && typeof p.background==='object' ? {...p.background} : {};
       bg.src=asset.src || '';
       bg.mediaType=isVideoBackground(bg.src,asset.name)?'video':'image';
-      if(bg.mediaType==='video')bg.projection='flat';
+      if(bg.mediaType==='video' && bg.projection==='360')bg.projection='flat';
       bg._editorFileName=asset.name || bg._editorFileName || '';
       bg._editorManaged=true;
       bg.transition=$('#sceneBackgroundTransition').value;
@@ -9065,6 +9065,12 @@ async function makeStoreZip(entries,onProgress=null){
   function renderCoverPositionStage(){
     if(!coverPositionStage)return;
     const src=activePositionEditorImage();
+    const videoMode=positionEditorMode==='background' && sceneBackgroundPositionContext?.sourceVideo;
+    if(videoMode){
+      let video=coverPositionStage.querySelector('video[data-position-video]');
+      if(!video){video=document.createElement('video');video.dataset.positionVideo='1';video.muted=true;video.playsInline=true;video.loop=true;video.src=src;Object.assign(video.style,{width:'100%',height:'100%',pointerEvents:'none',borderRadius:'inherit'});coverPositionStage.append(video);video.play()?.catch(()=>{});}
+      coverPositionStage.style.backgroundImage='none';video.style.objectFit=sceneBackgroundPositionContext.background?.fit||'cover';video.style.objectPosition=positionPairCss({x:coverPositionX,y:coverPositionY});return;
+    }
     coverPositionStage.style.backgroundImage=src?`url("${src}")`:'none';
     coverPositionStage.style.backgroundPosition=positionPairCss({x:coverPositionX,y:coverPositionY});
     if(positionEditorMode==='background')coverPositionStage.style.backgroundSize=sceneBackgroundPositionContext?.background?.fit||sceneBackgroundPositionContext?.sourceFit||'cover';
@@ -9117,7 +9123,6 @@ async function makeStoreZip(entries,onProgress=null){
     const sceneIndex=workingDocument?.scenes?.indexOf(scene)??-1;
     const source=current?.src?current:previousEffectiveBackground(sceneIndex);
     if(!coverPositionDialog||!source?.src||current?.src==='')return;
-    if(source.mediaType==='video'||isVideoBackground(source.src,source._editorFileName)){appAlert(u('動画の位置調整は次のPhaseで対応予定です。','Video framing is planned for the next phase.'));return;}
     // Inherited backgrounds have no source on this Scene. Keep that inheritance
     // intact and only save a local framing override if the author changes it.
     const bg=current?.src?current:{...(current||{}),fit:current?.fit||source.fit||'cover',position:current?.position||source.position||'center center'};
@@ -9125,7 +9130,7 @@ async function makeStoreZip(entries,onProgress=null){
     const restoreCover={x:coverPositionX,y:coverPositionY};
     const pos=positionPairFromValue(bg.position||'center center');
     positionEditorMode='background';
-    sceneBackgroundPositionContext={scene,background:bg,sourceSrc:source.src,sourceFit:source.fit||'cover',inherited:!current?.src,restoreCover,onApply};
+    sceneBackgroundPositionContext={scene,background:bg,sourceSrc:source.src,sourceVideo:source.mediaType==='video'||isVideoBackground(source.src,source._editorFileName),sourceFit:source.fit||'cover',inherited:!current?.src,restoreCover,onApply};
     coverPositionX=pos.x;coverPositionY=pos.y;
     coverPositionBeforeEdit={x:pos.x,y:pos.y};
     if(coverPositionStage)coverPositionStage.setAttribute('aria-label','背景画像の表示位置を調整');
@@ -9227,6 +9232,8 @@ async function makeStoreZip(entries,onProgress=null){
   }
   function closeCoverPositionEditor(save=true){
     if(!coverPositionDialog)return;
+    const framingVideo=coverPositionStage?.querySelector('video[data-position-video]');
+    if(framingVideo){framingVideo.pause();framingVideo.removeAttribute('src');framingVideo.load();framingVideo.remove();}
 
     if(positionEditorMode==='background' && sceneBackgroundPositionContext){
       const ctx=sceneBackgroundPositionContext;
@@ -14093,12 +14100,11 @@ function openDesktopBackgroundDetail(){
       desktopPickFile('image/*,video/mp4,video/webm,.mp4,.webm',(url,name)=>{
         captureUndo('背景画像の変更を元に戻せます');
         const bg=ensureImageState();
-        bg.src=url;bg._editorFileName=name;bg._editorManaged=true;bg.mediaType=isVideoBackground(url,name)?'video':'image';if(bg.mediaType==='video')bg.projection='flat';
+        bg.src=url;bg._editorFileName=name;bg._editorManaged=true;bg.mediaType=isVideoBackground(url,name)?'video':'image';if(bg.mediaType==='video' && bg.projection==='360')bg.projection='flat';
         if(!bg.transition)bg.transition='fade';
         apply();
         closeDesktopBackgroundDetail();
         openDesktopBackgroundDetail();
-        if(isVideoBackground(url,name))return;
         // A newly selected image goes straight into framing.
         openSceneBackgroundPositionEditor(scene,()=>{
           scheduleDraftSave(40);
@@ -14482,15 +14488,18 @@ function openDesktopBackgroundDetail(){
         [cancel,saveBtn].forEach(b=>Object.assign(b.style,{border:'0',background:'transparent',font:'inherit',padding:'8px 6px',cursor:'pointer'}));hd.append(cancel,ttl,saveBtn);
         const help=document.createElement('p');help.textContent=u('画像をドラッグして、Scene開始時に見せたい位置を中央へ合わせます','Drag the image to choose the starting view.');Object.assign(help.style,{textAlign:'center',color:'#737780',fontSize:'13px',margin:'4px 0 14px'});
         const stage=document.createElement('div');Object.assign(stage.style,{width:'min(390px,88vw)',height:'min(64vh,650px)',minHeight:'360px',margin:'0 auto',borderRadius:'16px',backgroundImage:`url("${source.src}")`,backgroundSize:is360?'auto 108%':'auto 108%',backgroundRepeat:is360?'repeat-x':'no-repeat',backgroundColor:'#111',boxShadow:'0 12px 36px rgba(0,0,0,.16)',touchAction:'none',cursor:'grab'});
+        const spatialVideo=!is360 && (source.mediaType==='video'||isVideoBackground(source.src,source._editorFileName));
+        let viewVideo=null;
+        if(spatialVideo){stage.style.backgroundImage='none';stage.style.position='relative';stage.style.overflow='hidden';viewVideo=document.createElement('video');viewVideo.muted=true;viewVideo.playsInline=true;viewVideo.loop=true;viewVideo.src=source.src;Object.assign(viewVideo.style,{position:'absolute',height:'108%',width:'auto',maxWidth:'none',pointerEvents:'none'});stage.append(viewVideo);viewVideo.play()?.catch(()=>{});}
         const readout=document.createElement('div');Object.assign(readout.style,{textAlign:'center',fontSize:'12px',color:'#777',marginTop:'10px'});
         const reset=document.createElement('button');reset.type='button';reset.textContent=u('中央に戻す','Reset to center');Object.assign(reset.style,{display:'block',width:'min(390px,88vw)',margin:'12px auto 0',padding:'12px',border:'1px solid #d5d7dc',borderRadius:'12px',background:'#fff',font:'inherit'});
         const clampYaw=v=>is360?v:Math.max(-180,Math.min(180,v));
-        const render=()=>{const x=is360?50+yaw/3.6:Math.max(0,Math.min(100,50+yaw/3.6));stage.style.backgroundPosition=`${x}% ${Math.max(0,Math.min(100,50-pitch*.95))}%`;readout.textContent=`${u('左右','Horizontal')} ${Math.round(yaw)}° / ${u('上下','Vertical')} ${Math.round(pitch)}°`;};
+        const render=()=>{const x=is360?50+yaw/3.6:Math.max(0,Math.min(100,50+yaw/3.6));stage.style.backgroundPosition=`${x}% ${Math.max(0,Math.min(100,50-pitch*.95))}%`;if(viewVideo){const y=Math.max(0,Math.min(100,50-pitch*.95));Object.assign(viewVideo.style,{left:`${x}%`,top:`${y}%`,transform:`translate(${-x}%,${-y}%)`});}readout.textContent=`${u('左右','Horizontal')} ${Math.round(yaw)}° / ${u('上下','Vertical')} ${Math.round(pitch)}°`;};
         let drag=null;stage.addEventListener('pointerdown',e=>{drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw,pitch};stage.setPointerCapture?.(e.pointerId);stage.style.cursor='grabbing';e.preventDefault();});
         stage.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;yaw=clampYaw(drag.yaw-dx*.46);pitch=Math.max(-40,Math.min(40,drag.pitch+dy*.20));render();e.preventDefault();});
         const end=e=>{if(drag?.id===e.pointerId){drag=null;stage.style.cursor='grab';}};stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);
         reset.addEventListener('click',()=>{yaw=0;pitch=0;render();});
-        const close=()=>ov.remove();cancel.addEventListener('click',close);ov.addEventListener('click',e=>{if(e.target===ov)close();});
+        const close=()=>{if(viewVideo){viewVideo.pause();viewVideo.removeAttribute('src');viewVideo.load();}ov.remove();};cancel.addEventListener('click',close);ov.addEventListener('click',e=>{if(e.target===ov)close();});
         saveBtn.addEventListener('click',()=>{captureUndo((is360?'360°':'パノラマ')+'初期視点の変更を元に戻せます');bg.homeYaw=yaw;bg.homePitch=pitch;apply();close();closeDesktopBackgroundDetail();openDesktopBackgroundDetail();});
         dlg.append(hd,help,stage,readout,reset);ov.appendChild(dlg);document.body.appendChild(ov);render();
       };
@@ -14499,7 +14508,7 @@ function openDesktopBackgroundDetail(){
       const homeField=document.createElement('label');homeField.className='desktop-text-detail-field';
       const homeCap=document.createElement('span');homeCap.textContent=u('初期視点','Initial view');
       const homeBtn=desktopAction(u('初期視点を調整','Adjust initial view'),openHomeEditor,'is-primary');
-      const sourceSpatial=explicit()?.src?explicit():previousFraming();if(!sourceSpatial?.src)homeBtn.disabled=true;
+      const sourceSpatial=explicit()?.src?explicit():previousFraming();if(!sourceSpatial?.src || (is360 && (sourceSpatial.mediaType==='video'||isVideoBackground(sourceSpatial.src,sourceSpatial._editorFileName))))homeBtn.disabled=true;
       homeField.append(homeCap,homeBtn);
       grid.append(homeField,desktopDetailSelect(u('モーションセンサー','Motion sensor'),[['on',u('使う','On')],['off',u('使わない','Off')]],explicit()?.motionSensor===false?'off':'on',v=>{const bg=ensureImageState();bg.motionSensor=v==='on';apply();}));
 
@@ -14509,7 +14518,7 @@ function openDesktopBackgroundDetail(){
         : u('操作：左右スワイプ／端末モーションで見渡し、画像端で停止します。上下も少し動かせます。◎で現在の視点を固定できます。','Swipe or move the device to look around; movement stops at the image edges. Use ◎ to lock the view.');
       panel.appendChild(op);
 
-      cb.addEventListener('change',()=>{const bg=ensureImageState();bg.projection=cb.checked?projection:'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();});
+      cb.addEventListener('change',()=>{if(is360 && cb.checked && (sourceSpatial?.mediaType==='video'||isVideoBackground(sourceSpatial?.src,sourceSpatial?._editorFileName))){cb.checked=false;appAlert(u('動画の360°表示は未対応です。','360° video is not supported yet.'));return;}const bg=ensureImageState();bg.projection=cb.checked?projection:'flat';if(cb.checked){bg.motionSensor=bg.motionSensor!==false;bg.motion={type:'none'};}apply();});
       return panel;
     };
 

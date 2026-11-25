@@ -4439,7 +4439,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         const cached=Number(this._panoRatioCache.get(src));
         if(cached>0){
           applyCombinedClamp(cached);
-        }else if(src && !this._panoRatioCache.has(src)){
+        }else if(src && !this._panoRatioCache.has(src) && this.backgroundState?.mediaType!=='video'){
           this._panoRatioCache.set(src,-1);
           const probe=new Image();
           probe.onload=()=>{
@@ -4460,6 +4460,7 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(layer.style.backgroundPosition!==position){
         layer.style.backgroundPosition=position;
       }
+      if(this.backgroundState?.mediaType==='video')this._positionBackgroundVideo(layer,this.backgroundState,position);
     }
     _bind360Gestures(){
       if(this._panoGesturesBound)return;this._panoGesturesBound=true;
@@ -4693,6 +4694,16 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
       if(video){video.pause();video.removeAttribute('src');video.load();video.remove();}
     }
 
+    _positionBackgroundVideo(layer,state,position) {
+      const video=layer?.querySelector('video.sp-background-video');
+      if(!video)return;
+      const pano=state?.projection==='panorama';
+      if(!pano){Object.assign(video.style,{inset:'0',width:'100%',height:'100%',transform:'none',objectFit:state?.fit==='contain'?'contain':'cover',objectPosition:position||'center center'});return;}
+      const m=String(position||'50% 50%').match(/^(?:calc\(\s*)?(-?[\d.]+)%(?:\s*\+\s*(-?[\d.]+)px\s*\))?\s+(-?[\d.]+)%$/);
+      const x=m?Number(m[1]):50, dx=m?Number(m[2]||0):0, y=m?Number(m[3]):50;
+      Object.assign(video.style,{inset:'auto',left:`calc(${x}% + ${dx}px)`,top:`${y}%`,width:'auto',height:'108%',maxWidth:'none',maxHeight:'none',objectFit:'fill',transform:`translate(${-x}%,${-y}%)`});
+    }
+
     _syncBackgroundVideo(layer,state) {
       if(!layer)return;
       if(!state.src || state.mediaType!=='video'){this._disposeBackgroundVideo(layer);return;}
@@ -4704,10 +4715,15 @@ function ahakoAvatarSrc(id){return AHAKO_COMMON_AVATARS[String(id||'')]||'';}
         video.setAttribute('playsinline','');video.setAttribute('muted','');video.setAttribute('aria-hidden','true');
         Object.assign(video.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none'});
         video.preload='metadata';video.src=state.src;layer.prepend(video);
+        video.addEventListener('loadedmetadata',()=>{
+          if(!video.isConnected || !video.videoWidth || !video.videoHeight)return;
+          this._panoRatioCache=this._panoRatioCache||new Map();
+          this._panoRatioCache.set(state.src,video.videoWidth/video.videoHeight);
+          if(this.backgroundState?.src===state.src && this.backgroundState?.projection==='panorama')this._render360Background();
+        });
       }
       layer.style.backgroundImage='none';
-      video.style.objectFit=state.fit==='contain'?'contain':'cover';
-      video.style.objectPosition=state.position||'center center';
+      this._positionBackgroundVideo(layer,state,state.projection==='panorama'?'50% 50%':state.position);
       if(!this.ended && video.paused)video.play()?.catch(()=>{});
     }
 
