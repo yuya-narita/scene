@@ -10896,7 +10896,9 @@ async function makeStoreZip(entries,onProgress=null){
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       let hiddenSince=document.hidden?performance.now():null,hiddenMs=0;
       const activeNow=()=>performance.now()-hiddenMs-(hiddenSince===null?0:performance.now()-hiddenSince);
-      const visibility=()=>{if(document.hidden){if(hiddenSince===null)hiddenSince=performance.now();status.textContent='書き出し一時停止：タブに戻ると自動再開します';}else if(hiddenSince!==null){hiddenMs+=performance.now()-hiddenSince;hiddenSince=null;}};
+      let progressText='書き出し準備中…',lastStatusAt=-Infinity;
+      const showProgress=(force=false,suffix='')=>{if(document.hidden)return;const now=activeNow();if(!force&&now-lastStatusAt<250)return;const text=progressText+suffix;if(status.textContent!==text)status.textContent=text;lastStatusAt=now;};
+      const visibility=()=>{if(document.hidden){if(hiddenSince===null)hiddenSince=performance.now();status.textContent='書き出し一時停止：タブに戻ると自動再開します';}else if(hiddenSince!==null){hiddenMs+=performance.now()-hiddenSince;hiddenSince=null;showProgress(true);}};
       async function checkpoint(){guard();while(document.hidden){await wait(100);guard();}guard();}
       document.addEventListener('visibilitychange',visibility);
 
@@ -10912,7 +10914,7 @@ async function makeStoreZip(entries,onProgress=null){
           if(!pending.length)return;
           if(pending.some(v=>v.error))throw Error(name(rows[cursor])+'：背景動画の読み込みエラー');
           if(activeNow()-began>12000)throw Error(name(rows[cursor])+'：背景動画の準備が12秒以内に完了しませんでした');
-          status.textContent=name(rows[cursor])+' ｜ 背景動画の準備待ち…';await wait(10);
+          if(activeNow()-began>=500)showProgress(false,' ｜ '+name(rows[cursor])+' 背景動画の準備待ち…');await wait(10);
         }
       }
       // Phase 5.0.4b: conservative direct background composition.
@@ -11176,7 +11178,7 @@ async function makeStoreZip(entries,onProgress=null){
         }else{ctx.drawImage(img,0,0,width,height);perf.legacy++;}
       }
       try{
-        settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
+        showProgress(true);settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
         const config={codec:'vp09.00.10.08',width,height,bitrate:1800000,framerate:fps};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error('VP9エンコーダー非対応');
         encoder=new VideoEncoder({output:c=>{const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>80*1024*1024)failure=Error('容量上限');},error:e=>failure=e});encoder.configure(config);
         await document.fonts.ready;await checkpoint();
@@ -11229,7 +11231,7 @@ async function makeStoreZip(entries,onProgress=null){
           const vf=new VideoFrame(canvas,{timestamp:stamp,duration:Math.max(1,next-stamp)});
           try{encoder.encode(vf,{keyFrame:count%fps===0});}finally{vf.close();}
           while(encoder.encodeQueueSize>2){await wait(20);await checkpoint();}
-          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);status.textContent='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒';await wait(0);
+          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);progressText='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒';showProgress();await wait(0);
         }
         dispose();spriteState=null;rasterCache.clear();cache.clear();lastSVG=null;lastImage=null;overlaySVG=null;baseImage=null;canvas.width=overlayCanvas.width=spriteCanvas.width=0;await checkpoint();await encoder.flush();await checkpoint();encoder.close();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
         if(benchmark){
@@ -11237,7 +11239,7 @@ async function makeStoreZip(entries,onProgress=null){
           const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\nベール直接合成 '+perf.veilFrames+'フレーム / 非表示疑似要素省略 '+perf.pseudoSkipped+'回 / Transform直接合成 '+perf.transformFrames+'フレーム / 階層合成 '+perf.hierarchyFrames+'フレーム\n演出更新 '+(perf.animationMs/1000).toFixed(2)+'秒 / 動画準備・シーク '+(perf.videoMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
-        status.textContent='音声合成・エンコード中…';const audio=await mixExportAudio(videoSpans,checkpoint);await checkpoint();
+        progressText='音声合成・エンコード中…';showProgress(true);const audio=await mixExportAudio(videoSpans,checkpoint);await checkpoint();
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
