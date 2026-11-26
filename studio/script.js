@@ -2233,6 +2233,13 @@
   let deliveryMode='eco', lastDeliveryActivity=performance.now(), deliveryForeground=false;
   try{const m=localStorage.getItem('ahako.delivery.mode');if(['eco','auto','fast','off'].includes(m))deliveryMode=m;}catch(_){}
   let autoDeliveryEnabled=deliveryMode!=='off';
+  // 3.4.0: diagnostics are opt-in; production never uses spatial split.
+  const deliveryDeveloperMode=new URLSearchParams(location.search).get('deliveryDev')==='1';
+  const trimRejected=new WeakMap();
+  function trimWasRejected(master,interval){return trimRejected.get(master.blob)?.has(JSON.stringify(interval))===true;}
+  function rejectTrim(master,interval){let set=trimRejected.get(master.blob);if(!set){set=new Set();trimRejected.set(master.blob,set);}set.add(JSON.stringify(interval));}
+  function deliveryTerminal(src){return /^(MASTER \/|WebM \/)/.test(autoDeliveryStatus.get(src)||'');}
+
   const deliveryIdle=()=>deliveryMode==='eco'?10000:deliveryMode==='auto'?4000:1800;
   function interruptAutoDelivery(){if(!autoDeliveryRunning)return;const {src,controller}=autoDeliveryRunning;const master=assetRegistry.get(src);if(master)queueAutoDelivery(src,master);controller.abort();}
   function deliveryActivity(){lastDeliveryActivity=performance.now();if(!deliveryForeground&&deliveryMode==='eco'&&autoDeliveryRunning){if(deliveryWorker)deliveryWorker.postMessage({type:'slow',ms:1500});else interruptAutoDelivery();}scheduleAutoDelivery();}
@@ -2253,6 +2260,7 @@
   function queueAutoDelivery(src,master){
     if(!/\.(mp4|webm|m4v)$/i.test(master.name)&&!/^video\//i.test(master.blob.type))return;
     if(deliveryVideos.has(src)){autoDeliveryQueue.delete(src);autoDeliveryStatus.set(src,'cached');return;}
+    if(deliveryCacheSuppressed.has(src)||deliveryTerminal(src))return;
     autoDeliveryQueue.set(src,master);autoDeliveryStatus.set(src,'queued');scheduleAutoDelivery();
   }
   function clearAutoDelivery(){
@@ -2260,6 +2268,7 @@
   }
   async function runAutoDelivery(){
     if(deliveryForeground||!autoDeliveryEnabled||!autoDeliveryQueue.size)return;
+    if(!window.Worker||!window.OffscreenCanvas){return;}
     if(autoDeliveryRunning||manualDeliveryBusy||deliveryBlocked()||performance.now()-lastDeliveryActivity<deliveryIdle()){scheduleAutoDelivery();return;}
     const [src,master]=autoDeliveryQueue.entries().next().value;
     autoDeliveryQueue.delete(src);
@@ -7191,10 +7200,10 @@ async function makeStoreZip(entries,onProgress=null){
   function trimIndicator(message){
     let el=document.getElementById('videoOptimizationIndicator');
     if(!el){el=document.createElement('div');el.id='videoOptimizationIndicator';el.setAttribute('role','status');el.style.cssText='position:fixed;bottom:calc(88px + env(safe-area-inset-bottom));left:12px;z-index:2147483006;max-width:calc(100vw - 24px);padding:7px 12px;border-radius:12px;background:Canvas;color:CanvasText;border:1px solid #8885;font-size:12px;pointer-events:none';document.body.append(el);}
-    if(el.textContent!==message)el.textContent=message;el.hidden=!message;el.style.setProperty('display',message?'block':'none','important');if(message){const cage=document.getElementById('cageHome');const rect=cage&&!cage.hidden?cage.getBoundingClientRect():null;el.style.bottom=rect&&rect.height?Math.max(12,window.innerHeight-rect.top+8)+'px':'calc(88px + env(safe-area-inset-bottom))';}
+    if(el.textContent!==message)el.textContent=message;const pct=message.match(/(\d+)%$/);el.style.background=pct?'linear-gradient(to right, rgba(90,160,120,.20) '+Math.min(100,Number(pct[1]))+'%, Canvas '+Math.min(100,Number(pct[1]))+'%)':'Canvas';el.hidden=!message;el.style.setProperty('display',message?'block':'none','important');if(message){const cage=document.getElementById('cageHome');const rect=cage&&!cage.hidden?cage.getBoundingClientRect():null;el.style.bottom=rect&&rect.height?Math.max(12,window.innerHeight-rect.top+8)+'px':'calc(88px + env(safe-area-inset-bottom))';}
   }
   async function scanIdleTrim(){
-    if(trimScanBusy||deliveryForeground||manualDeliveryBusy||autoDeliveryRunning||deliveryBlocked()||!autoDeliveryEnabled)return;
+    if(!window.Worker||!window.OffscreenCanvas||trimScanBusy||deliveryForeground||manualDeliveryBusy||autoDeliveryRunning||deliveryBlocked()||!autoDeliveryEnabled)return;
     if(performance.now()-lastDeliveryActivity<30000)return;
     let doc,sig;try{doc=trimSnapshot();sig=trimSignature(doc);}catch(_){return;}
     if(sig!==trimScanSignature){trimScanSignature=sig;trimScanSince=performance.now();trimScanDone='';}
@@ -7209,13 +7218,14 @@ async function makeStoreZip(entries,onProgress=null){
           let d=(await deliveryCacheOp(await structuralKey(master,interval),'get'))?.result;
           if(!current())return;
           if(!validStructural(d,interval,baseline)){
+            if(trimWasRejected(master,interval))continue;
             let candidate;const out=await optimizeDeliveryVideoIsolated(master,'ahako',n=>{trimProgress=u('動画を最適化中 ','Optimizing video ')+i+'/'+rows.length+' · '+n+'%';},signal,c=>candidate=c,()=>{},true,{start:interval[0],end:interval[1]});
             d={blob:out.blob,trim:out.trim,pass:candidate?.pass===true,name:(master.name||'video').replace(/\.[^.]+$/,'')+'.webm'};
             if(!current()||assetRegistry.get(r.src)!==master)return;
-            if(!validStructural(d,interval,baseline))continue;
+            if(!validStructural(d,interval,baseline)){rejectTrim(master,interval);continue;}
             applyStructuralPositions(clone(doc),r,d);await rememberStructural(master,interval,d);
           }
-        }catch(e){if(signal.aborted)return;console.warn('Idle trim fallback',e);}
+        }catch(e){if(signal.aborted)return;rejectTrim(master,interval);console.warn('Idle trim fallback',e);}
       }
       if(current()){trimScanDone=sig;trimReadyUntil=performance.now()+5000;}
     }catch(e){console.warn('Idle trim scan',e);}finally{trimProgress='';trimController=null;trimScanBusy=false;manualDeliveryBusy=false;scheduleAutoDelivery();}
@@ -7223,11 +7233,15 @@ async function makeStoreZip(entries,onProgress=null){
   setInterval(()=>{
     if(trimScanBusy&&(document.hidden||deliveryForeground||performance.now()-lastDeliveryActivity<1000)){trimController?.abort();}
     if(document.hidden||deliveryForeground||(!playerScreen.hidden&&!liveEditEnabled)){trimIndicator('');return;}
-    if(!autoDeliveryEnabled){trimIndicator('');return;}
+    if(!autoDeliveryEnabled||!window.Worker||!window.OffscreenCanvas){trimIndicator('');return;}
     if(trimScanBusy){trimIndicator(trimProgress||u('動画の最適化準備中','Preparing video'));return;}
-    if(autoDeliveryRunning||autoDeliveryQueue.size){trimIndicator(u('動画を最適化中','Optimizing video')+(autoDeliveryRunning?' · '+(autoDeliveryStatus.get(autoDeliveryRunning.src)||'') : ''));return;}
+    if(autoDeliveryRunning||autoDeliveryQueue.size){
+      const state=autoDeliveryRunning?autoDeliveryStatus.get(autoDeliveryRunning.src):'';
+      const pct=/^\d+%$/.test(state||'')?' · '+state:'';
+      trimIndicator(autoDeliveryRunning?u('動画を最適化中','Optimizing video')+pct:u('動画の最適化待ち','Video optimization pending'));return;
+    }
     let doc,sig,hasVideo=false;
-    try{doc=workingDocument||buildSceneDocument();walkAssetRefs(doc,r=>{if(isPublishVideoRef(r)&&assetRegistry.has(r.src))hasVideo=true;});if(hasVideo)sig=trimSignature(doc);}catch(e){console.warn('Optimization status',e);}
+    try{doc=workingDocument||buildSceneDocument();walkAssetRefs(doc,r=>{if(!isPublishVideoRef(r)||!assetRegistry.has(r.src))return;hasVideo=true;if(!deliveryVideos.has(r.src)&&!deliveryCacheSuppressed.has(r.src)&&!deliveryTerminal(r.src)&&!autoDeliveryStatus.has(r.src))queueAutoDelivery(r.src,assetRegistry.get(r.src));});if(hasVideo)sig=trimSignature(doc);}catch(e){console.warn('Optimization status',e);}
     if(!hasVideo){trimIndicator('');return;}
     if(sig!==trimScanSignature){trimScanSignature=sig;trimScanSince=performance.now();trimScanDone='';trimReadyUntil=0;}
     if(sig!==trimScanDone){
@@ -7247,15 +7261,16 @@ async function makeStoreZip(entries,onProgress=null){
           const baseline=(await restoreDeliveryVideo(r.src))?.blob||master.blob;
           let d;try{d=(await deliveryCacheOp(await structuralKey(master,interval),'get'))?.result;}catch(e){console.warn(e);}
           if(!validStructural(d,interval,baseline)){
+            if(trimWasRejected(master,interval))continue;
             let candidate;const controller=new AbortController();const out=await optimizeDeliveryVideoIsolated(master,'ahako',n=>{const status=$('#publishStateWorking p');if(status)status.textContent=u('構造的圧縮 ','Structural optimization ')+n+'%';},controller.signal,c=>candidate=c,()=>{},true,{start:interval[0],end:interval[1]});
             d={blob:out.blob,trim:out.trim,pass:candidate?.pass===true,name:(master.name||'video').replace(/\.[^.]+$/,'')+'.webm'};
-            if(!validStructural(d,interval,baseline))continue;
+            if(!validStructural(d,interval,baseline)){rejectTrim(master,interval);continue;}
             await rememberStructural(master,interval,d);
           }
           if(assetRegistry.get(r.src)!==master||deliveryCacheSuppressed.has(r.src))continue;
           // Validate mapping on a disposable copy before committing selection.
           applyStructuralPositions(clone(doc),r,d);selected.set(r.src,{r,d});
-        }catch(e){console.warn('Structural optimization fallback',e);}
+        }catch(e){rejectTrim(master,interval);console.warn('Structural optimization fallback',e);}
       }
     }catch(e){console.warn('Structural analysis fallback',e);}finally{deliveryForeground=false;scheduleAutoDelivery();}
     return selected;
@@ -7359,6 +7374,7 @@ async function makeStoreZip(entries,onProgress=null){
       let i=0;for(const src of refs){i++;const master=assetRegistry.get(src);if(!master||deliveryCacheSuppressed.has(src))continue;
         const status=$('#publishStateWorking p');const show=n=>{if(status)status.textContent=u('動画最適化 ','Optimizing video ')+i+'/'+refs.size+' · '+n+'%';};
         try{if(await restoreDeliveryVideo(src))continue;
+          if(deliveryTerminal(src))continue;
           const h=new Uint8Array(await master.blob.slice(0,4).arrayBuffer());if(h[0]===26&&h[1]===69&&h[2]===223&&h[3]===163)continue;
           let candidate;const controller=new AbortController();show(0);
           await optimizeDeliveryVideoIsolated(master,'ahako',show,controller.signal,c=>candidate=c,()=>{},true);
@@ -14959,7 +14975,7 @@ function openDesktopBackgroundDetail(){
 
     const sizeButton=desktopAction(u('作品の素材容量を確認','Check work asset sizes'),()=>showWorkAssetSizes(sizeButton));
     sourceSec.appendChild(sizeButton);
-    sourceSec.appendChild(desktopAction(u('公開用動画を設定（試験）','Set delivery videos (experimental)'),showDeliveryVideoSettings));
+    if(deliveryDeveloperMode)sourceSec.appendChild(desktopAction(u('動画最適化・開発者診断','Video optimization diagnostics'),showDeliveryVideoSettings));
 
     // Framing row: position control + background size, aligned as two equal fields.
     const sourcePositionGrid=two(sourceSec);
