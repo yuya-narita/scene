@@ -10717,6 +10717,39 @@ async function makeStoreZip(entries,onProgress=null){
   easyMenuBackdrop?.addEventListener('click',closeEasyMenu);
 
   // Phase 4.0.2: isolated timeline plan; never writes to workingDocument.
+  // Phase 4.0.3: preview against the complete original scene graph.
+  function previewShortVideoPlan(plan){
+    const rows=plan.rows.filter(r=>r.included).map(r=>({...r}));
+    if(!rows.length){appAlert('再生する区間を選択してください。');return;}
+    const doc=clone(plan.source), total=rows.reduce((n,r)=>n+r.seconds,0);
+    const dialog=document.createElement('dialog');dialog.className='sv-preview403';
+    dialog.style.cssText='width:min(96vw,900px);max-height:96vh;padding:12px;overflow:auto;background:Canvas;color:CanvasText';
+    const controls=document.createElement('div');controls.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px';
+    const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;controls.append(b);return b;};
+    const status=document.createElement('div'), progress=document.createElement('progress');progress.max=total;progress.value=0;progress.style.width='100%';
+    const host=document.createElement('div');const [w,h]=plan.ratio.split(':').map(Number);
+    host.style.cssText=`position:relative;overflow:hidden;margin:auto;width:min(100%,${Math.floor(68*w/h)}vh);aspect-ratio:${w}/${h};background:#000;pointer-events:none`;
+    let core=null, timer=0, running=false, cursor=0, started=0, previous=null;
+    function dispose(){clearInterval(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
+    function stop(message='停止'){dispose();status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
+    function enter(r){
+      if(r.kind==='cover'){core.showCover();return;}
+      if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}
+      const contiguous=previous?.kind==='scene'&&r.index===previous.index+1;
+      if(contiguous){core._finishVisibleEntranceEffects();core._clearPresentationTimers();core.index=r.index;core.maxVisitedIndex=Math.max(core.maxVisitedIndex,r.index);core._audioRenderMode='advance';core._render();}
+      else {core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.goTo(r.index);core._queueInitialOneShots(doc.scenes[r.index]);}
+    }
+    function tick(){if(!running)return;try{const elapsed=(performance.now()-started)/1000;progress.value=Math.min(total,elapsed);let end=0,i=0;for(;i<rows.length;i++){end+=rows[i].seconds;if(elapsed<end)break;}
+      if(i>=rows.length){stop('再生完了');progress.value=total;return;}
+      if(i!==cursor){previous=rows[cursor];cursor=i;enter(rows[i]);}
+      const r=rows[i];status.textContent=(r.kind==='scene'?'Scene '+(r.index+1):r.label)+' ｜ '+elapsed.toFixed(2)+' / '+total.toFixed(2)+'秒';
+    }catch(e){stop('再生エラー：'+String(e));}}
+    function start(){dispose();progress.value=0;cursor=0;previous=null;try{core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();enter(rows[0]);started=performance.now();running=true;timer=setInterval(tick,25);tick();}catch(e){stop('再生エラー：'+String(e));}}
+    button('先頭から再生',start);button('停止',()=>stop());button('閉じる',()=>dialog.close());
+    status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
+    const note=document.createElement('p');note.textContent='試験再生：非連続Sceneは元作品の継承状態を復元します。音声・演出の厳密な時間同期、一時停止・シーク、同時表示グループは未保証です。';note.style.fontSize='12px';
+    dialog.append(controls,status,progress,host,note);document.body.append(dialog);dialog.addEventListener('close',()=>{dispose();dialog.remove();scheduleAutoDelivery();},{once:true});dialog.showModal();
+  }
   let shortVideoPlan=null;
   function openShortVideoPlan(){
     closeEasyMenu();
@@ -10738,7 +10771,7 @@ async function makeStoreZip(entries,onProgress=null){
     const summary=el('div','',settings,'sv-summary');
     const timeline=el('div',null,dialog,'sv-timeline');timeline.setAttribute('aria-label','選択区間のタイムライン');
     const note=el('p','',dialog,'sv-note');
-    el('p','予定尺のみ。映像・音声同期・継承の再現は未実装です。元作品は変更しません（セッション内限定）。',dialog,'sv-note');
+    el('p','試験プレビュー対応。厳密な映像・音声同期は未保証です。元作品は変更しません（セッション内限定）。',dialog,'sv-note');
     const actions=el('div',null,dialog,'sv-actions');const list=el('div',null,dialog,'sv-list');const inputs=[];
     const name=r=>r.kind==='scene'?`Scene ${r.index+1}`:r.label;
     const fmt=n=>n.toFixed(2);
@@ -10753,6 +10786,7 @@ async function makeStoreZip(entries,onProgress=null){
       let cursor=0;plan.rows.forEach((r,i)=>{const a=inputs[i];if(!a)return;a.cb.checked=r.included;a.time.disabled=!r.included;a.row.classList.toggle('sv-off',!r.included);a.range.textContent=r.included?`${fmt(cursor)}–${fmt(cursor+=r.seconds)}秒`:'対象外';});
     }
     function setAll(value){plan.rows.forEach(r=>r.included=value);refresh();}
+    btn('動画プレビュー（試験）',actions,()=>previewShortVideoPlan(plan));
     btn('すべて選択',actions,()=>setAll(true));btn('すべて解除',actions,()=>setAll(false));btn('秒数を初期化',actions,()=>{plan.rows.forEach((r,i)=>{r.seconds=r.kind==='scene'?duration(liveTimingSeconds(source.scenes[r.index])):2.6;inputs[i].time.value=fmt(r.seconds);});refresh();});
     for(const r of plan.rows){
       const row=el('div',null,list,'sv-row');const cb=el('input',null,row);cb.type='checkbox';cb.checked=r.included;cb.setAttribute('aria-label',name(r)+'を使用');
