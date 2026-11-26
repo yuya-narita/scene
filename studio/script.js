@@ -10736,8 +10736,8 @@ async function makeStoreZip(entries,onProgress=null){
     frame.append(host,mark,guide);stage.append(frame);
     function fit(){const width=Math.max(1,Math.floor(Math.min(stage.clientWidth,stage.clientHeight*w/h)));frame.style.width=width+'px';frame.style.height=Math.floor(width*h/w)+'px';}
     const observer=new ResizeObserver(fit);observer.observe(stage);
-    let settings=plan.renderSettings||(plan.renderSettings={title:true,watermark:true,guide:false});
-    function applySettings(){host.classList.toggle('sv-hide-title',!settings.title);mark.hidden=!settings.watermark;guide.hidden=!settings.guide;}
+    let settings=plan.renderSettings||(plan.renderSettings={title:false,watermark:true,guide:false});settings.title=false;
+    function applySettings(){host.classList.add('sv-hide-title');mark.hidden=!settings.watermark;guide.hidden=!settings.guide;}
     function toggle(label,key){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.dataset.renderKey=key;c.checked=settings[key];c.onchange=()=>{settings[key]=c.checked;applySettings();};l.append(c,document.createTextNode(label));controls.append(l);}
     let core=null, timer=0, running=false, cursor=0, started=0, previous=null, exportJob=null;
     const jump=document.createElement('select');jump.setAttribute('aria-label','再生開始区間');
@@ -10770,7 +10770,7 @@ async function makeStoreZip(entries,onProgress=null){
     const closeButton=button('close','閉じる',()=>dialog.close());
     const exportButton=button('export','内部描画書き出し（映像のみ・試験）',()=>exportVideo());controls.insertBefore(exportButton,closeButton);
     const settingsPanel=document.createElement('div');settingsPanel.className='sv-preview-controls';settingsPanel.hidden=true;settingsPanel.style.cssText='display:none;padding:6px 0;gap:12px;flex-wrap:wrap';
-    toggle('上部タイトル','title');toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');for(const l of Array.from(controls.querySelectorAll('label')))settingsPanel.append(l);applySettings();
+    toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');for(const l of Array.from(controls.querySelectorAll('label')))settingsPanel.append(l);applySettings();
     status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
 
     // Phase 4.0.7: one shared plan, no writes to source scenes.
@@ -10822,7 +10822,7 @@ async function makeStoreZip(entries,onProgress=null){
       const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
       const cache=new Map(),packets=[];
-      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
+      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0,styleMs:0,xmlMs:0,decodeMs:0,pruned:0,rasterHits:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
@@ -10884,6 +10884,7 @@ async function makeStoreZip(entries,onProgress=null){
       }
       const overlayCanvas=document.createElement('canvas');overlayCanvas.width=width;overlayCanvas.height=height;
       const overlayCtx=overlayCanvas.getContext('2d');let overlaySVG=null,baseKey=null,baseImage=null;
+      const rasterCache=new Map();const rasterLimit=4;
       async function paintFadeBase(split,fw,fh){
         if(split.alpha>=1)return;
         const key=JSON.stringify([fw,fh,split.bases]);
@@ -10898,11 +10899,15 @@ async function makeStoreZip(entries,onProgress=null){
       async function snapshot(){
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
         const split=splitBackground(fw,fh);
-        const root=frame.cloneNode(true), originals=[frame,...frame.querySelectorAll('*')],copies=[root,...root.querySelectorAll('*')],pending=[];
+        const styleStart=performance.now();const root=frame.cloneNode(true), originals=[frame,...frame.querySelectorAll('*')],copies=[root,...root.querySelectorAll('*')],pending=[];
+        const skipped=new Set();
         for(let i=0;i<originals.length;i++){
-          const src=originals[i];let dst=copies[i];const cs=getComputedStyle(src);
+          const src=originals[i];let dst=copies[i];
+          if(skipped.has(src.parentElement)){skipped.add(src);continue;}
+          const cs=getComputedStyle(src);
+          if(split&&src!==frame&&src!==host&&cs.display==='none'){skipped.add(src);dst.remove();perf.pruned++;continue;}
           if(split&&src.classList.contains('sp-bg-textures')&&Number(cs.opacity)===0){dst.remove();continue;}
-          if(split&&(src===split.bg||split.bg.contains(src))){if(src===split.bg)dst.remove();continue;}
+          if(split&&(src===split.bg||split.bg.contains(src))){if(src===split.bg){dst.remove();skipped.add(src);}continue;}
           if(src instanceof HTMLVideoElement||src instanceof HTMLCanvasElement){
             if(src instanceof HTMLVideoElement){if(!visibleVideo(src)){dst.remove();continue;}if(src.readyState<2||src.seeking||!src.videoWidth)throw Error('背景動画の準備ができていません');}
             const c=document.createElement('canvas');c.width=src.videoWidth||src.width;c.height=src.videoHeight||src.height;if(!c.width||!c.height){dst.remove();continue;}
@@ -10918,12 +10923,18 @@ async function makeStoreZip(entries,onProgress=null){
           if(src instanceof HTMLImageElement){const target=dst;pending.push(inlineURL(src.currentSrc||src.src).then(v=>{target.removeAttribute('srcset');target.src=v;}));}
           if(src instanceof HTMLAudioElement||src instanceof HTMLScriptElement||src instanceof HTMLIFrameElement)dst.remove();
         }
-        await Promise.all(pending);guard();
+        await Promise.all(pending);guard();perf.styleMs+=performance.now()-styleStart;const xmlStart=performance.now();
         root.style.cssText+=';position:relative!important;inset:auto!important;margin:0!important;transform:none!important;width:'+fw+'px!important;height:'+fh+'px!important;overflow:hidden!important;';
         root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
         const xml=new XMLSerializer().serializeToString(root);
         const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
-        let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
+        perf.xmlMs+=performance.now()-xmlStart;
+        let img=lastImage;if(svg!==lastSVG||!img){
+          const cached=split?rasterCache.get(svg):null;
+          if(cached){img=cached;rasterCache.delete(svg);rasterCache.set(svg,img);perf.hits++;perf.rasterHits++;}
+          else{perf.misses++;const decodeStart=performance.now();img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();perf.decodeMs+=performance.now()-decodeStart;if(split&&svg.length<2000000){rasterCache.set(svg,img);while(rasterCache.size>rasterLimit)rasterCache.delete(rasterCache.keys().next().value);}}
+          lastSVG=svg;lastImage=img;
+        }else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
         if(split){
           const overlayStart=performance.now();if(overlaySVG!==svg){overlayCtx.clearRect(0,0,width,height);overlayCtx.drawImage(img,0,0,width,height);overlaySVG=svg;}
           perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;ctx.drawImage(overlayCanvas,0,0);perf.split++;
@@ -10983,7 +10994,7 @@ async function makeStoreZip(entries,onProgress=null){
         dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
         if(benchmark){
           const elapsed=(performance.now()-begin)/1000;
-          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms（SVG生成時間は描画に含む）\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\n不採用理由（最初の条件）: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
+          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\n不採用理由（最初の条件）: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
@@ -10999,7 +11010,7 @@ async function makeStoreZip(entries,onProgress=null){
         for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
         const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
         const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了 '+count+'フレーム ｜ '+Math.round((performance.now()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'フレーム';
-      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
+      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。区間停止後は区間先頭から再生します。フレーム単位の停止・音声同期・同時表示グループは未保証です。';
@@ -11019,14 +11030,14 @@ async function makeStoreZip(entries,onProgress=null){
     const plan=shortVideoPlan;
     const rowKey=r=>r.kind==='scene'?'scene:'+r.index:r.kind;
     // Explicit portable plan files, no media or original document mutation.
-    const snapshot=()=>({format:'ahako-short-video-plan',version:1,signature,ratio:plan.ratio,renderSettings:plan.renderSettings||{title:true,watermark:true,guide:false},rows:plan.rows.map(r=>({key:rowKey(r),seconds:r.seconds,included:r.included}))});
+    const snapshot=()=>({format:'ahako-short-video-plan',version:1,signature,ratio:plan.ratio,renderSettings:plan.renderSettings||{title:false,watermark:true,guide:false},rows:plan.rows.map(r=>({key:rowKey(r),seconds:r.seconds,included:r.included}))});
     function restore(data){
       if(data?.format!=='ahako-short-video-plan'||data.version!==1||data.signature!==signature||!['9:16','16:9','1:1'].includes(data.ratio)||!Array.isArray(data.rows)||data.rows.length!==plan.rows.length)throw Error('作品または制作プランの形式が一致しません。');
       const byKey=new Map(plan.rows.map(r=>[rowKey(r),r]));const seen=new Set();
       const next=data.rows.map(v=>{const r=byKey.get(v?.key);if(!r||seen.has(v.key)||typeof v.included!=='boolean'||!Number.isFinite(v.seconds)||v.seconds<.15||v.seconds>600)throw Error('区間設定が不正です。');seen.add(v.key);return {r,v};});
       for(const {r,v} of next){r.seconds=Math.round(v.seconds*100)/100;r.included=v.included;}
       plan.rows.splice(0,plan.rows.length,...next.map(x=>x.r));plan.ratio=data.ratio;
-      const rs=data.renderSettings;plan.renderSettings={title:rs?.title!==false,watermark:rs?.watermark!==false,guide:rs?.guide===true};
+      const rs=data.renderSettings;plan.renderSettings={title:false,watermark:rs?.watermark!==false,guide:rs?.guide===true};
     }
     function savePlan(){const url=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ahako-short-video-plan.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
     async function loadPlan(f){if(f.size>5000000)throw Error('制作プランが大きすぎます。');restore(JSON.parse(await f.text()));}
