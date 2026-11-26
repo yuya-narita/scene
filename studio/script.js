@@ -10743,6 +10743,7 @@ async function makeStoreZip(entries,onProgress=null){
     function dispose(){cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
     function stop(message='停止'){dispose();status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
     function enter(r){
+      if(previous && (previous.kind==='ending' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);applySettings();}
       if(r.kind==='cover'){core.showCover();return;}
       if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}
       const contiguous=previous?.kind==='scene'&&r.index===previous.index+1;
@@ -10787,27 +10788,34 @@ async function makeStoreZip(entries,onProgress=null){
     const timeline=el('div',null,dialog,'sv-timeline');timeline.setAttribute('aria-label','選択区間のタイムライン');
     const note=el('p','',dialog,'sv-note');
     el('p','試験プレビュー対応。厳密な映像・音声同期は未保証です。元作品は変更しません（セッション内限定）。',dialog,'sv-note');
-    const actions=el('div',null,dialog,'sv-actions');const list=el('div',null,dialog,'sv-list');const inputs=[];
+    const actions=el('div',null,dialog,'sv-actions');const list=el('div',null,dialog,'sv-list');const inputs=new Map();
+    const originalOrder=plan.rows.slice().sort((a,b)=>orderKey(a)-orderKey(b));
+    function orderKey(r){return r.kind==='cover'?-1:r.kind==='ending'?Infinity:r.index;}
+    let dragged=null;
+    function move(r,target,after=false){if(!r||r===target||!plan.rows.includes(r)||!plan.rows.includes(target))return;plan.rows.splice(plan.rows.indexOf(r),1);plan.rows.splice(plan.rows.indexOf(target)+(after?1:0),0,r);refresh();}
+    function wireDrag(node,r){node.draggable=true;node.ondragstart=e=>{dragged=r;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',name(r));};node.ondragend=()=>{dragged=null;};node.ondragover=e=>{if(dragged){e.preventDefault();e.dataTransfer.dropEffect='move';}};node.ondrop=e=>{if(!dragged)return;e.preventDefault();const rect=node.getBoundingClientRect();const from=dragged;dragged=null;move(from,r,e.clientX>rect.left+rect.width/2);};}
     const name=r=>r.kind==='scene'?`Scene ${r.index+1}`:r.label;
     const fmt=n=>n.toFixed(2);
     function refresh(){
       let total=0,count=0,previous=null,gaps=0;timeline.replaceChildren();
       for(const r of plan.rows){if(!r.included)continue;const start=total;total+=r.seconds;count++;if(r.kind==='scene'){if(previous===null?r.index>0:r.index!==previous+1)gaps++;previous=r.index;}
-        const seg=el('div',null,timeline,'sv-segment');seg.style.flexGrow=String(r.seconds);seg.title=`${name(r)}: ${fmt(start)}–${fmt(total)}秒`;el('strong',name(r),seg);el('small',fmt(r.seconds)+'秒',seg);
+        const seg=el('div',null,timeline,'sv-segment');seg.style.flexGrow=String(r.seconds);seg.title=`${name(r)}: ${fmt(start)}–${fmt(total)}秒`;el('strong',name(r),seg);el('small',fmt(r.seconds)+'秒',seg);wireDrag(seg,r);
       }
       if(!count)el('span','Sceneを選択してください',timeline,'sv-note');
       summary.textContent=`${count} / ${plan.rows.length} 区間 ｜ ${fmt(total)} 秒`;
-      note.textContent=gaps?`非連続の開始・ジャンプ ${gaps} 箇所：背景・残し文字・音声等の継承復元が必要な可能性があります。`:'選択順：元作品の順番';
-      let cursor=0;plan.rows.forEach((r,i)=>{const a=inputs[i];if(!a)return;a.cb.checked=r.included;a.time.disabled=!r.included;a.row.classList.toggle('sv-off',!r.included);a.range.textContent=r.included?`${fmt(cursor)}–${fmt(cursor+=r.seconds)}秒`:'対象外';});
+      note.textContent=gaps?`非連続の開始・ジャンプ ${gaps} 箇所：背景・残し文字・音声等の継承復元が必要な可能性があります。`:'選択順：タイムラインの順番';
+      let cursor=0;plan.rows.forEach((r,i)=>{const a=inputs.get(r);if(!a)return;list.append(a.row);a.up.disabled=i===0;a.down.disabled=i===plan.rows.length-1;a.cb.checked=r.included;a.time.disabled=!r.included;a.row.classList.toggle('sv-off',!r.included);a.range.textContent=r.included?`${fmt(cursor)}–${fmt(cursor+=r.seconds)}秒`:'対象外';});
     }
     function setAll(value){plan.rows.forEach(r=>r.included=value);refresh();}
     btn('動画プレビュー（試験）',actions,()=>previewShortVideoPlan(plan));
-    btn('すべて選択',actions,()=>setAll(true));btn('すべて解除',actions,()=>setAll(false));btn('秒数を初期化',actions,()=>{plan.rows.forEach((r,i)=>{r.seconds=r.kind==='scene'?duration(liveTimingSeconds(source.scenes[r.index])):2.6;inputs[i].time.value=fmt(r.seconds);});refresh();});
+    btn('すべて選択',actions,()=>setAll(true));btn('すべて解除',actions,()=>setAll(false));btn('秒数を初期化',actions,()=>{plan.rows.forEach((r,i)=>{r.seconds=r.kind==='scene'?duration(liveTimingSeconds(source.scenes[r.index])):2.6;inputs.get(r).time.value=fmt(r.seconds);});refresh();});
+    btn('元の順番に戻す',actions,()=>{plan.rows.splice(0,plan.rows.length,...originalOrder);refresh();});
+    el('p','上のタイムラインをドラッグ、または各行の矢印で順序変更できます。',dialog,'sv-note');
     for(const r of plan.rows){
       const row=el('div',null,list,'sv-row');const cb=el('input',null,row);cb.type='checkbox';cb.checked=r.included;cb.setAttribute('aria-label',name(r)+'を使用');
       const desc=el('div',null,row,'sv-desc');el('strong',name(r),desc);if(r.kind==='scene')el('span',r.label,desc);const range=el('small','',desc);
       const field=el('label',null,row,'sv-time');const time=el('input',null,field);time.type='number';time.min='.15';time.max='600';time.step='.01';time.value=fmt(r.seconds);time.setAttribute('aria-label',name(r)+'の再生秒数');el('span','秒',field);
-      inputs.push({row,cb,time,range});cb.onchange=()=>{r.included=cb.checked;refresh();};
+      const moves=el('div',null,row,'sv-moves');const up=btn('↑',moves,()=>{const i=plan.rows.indexOf(r);if(i>0)move(r,plan.rows[i-1]);});const down=btn('↓',moves,()=>{const i=plan.rows.indexOf(r);if(i<plan.rows.length-1)move(r,plan.rows[i+1],true);});up.setAttribute('aria-label',name(r)+'を前へ');down.setAttribute('aria-label',name(r)+'を後へ');inputs.set(r,{row,cb,time,range,up,down});cb.onchange=()=>{r.included=cb.checked;refresh();};
       time.oninput=()=>{const n=time.valueAsNumber;if(Number.isFinite(n)&&n>=.15&&n<=600){r.seconds=Math.round(n*100)/100;refresh();}};
       time.onchange=()=>{const n=time.valueAsNumber;if(Number.isFinite(n))r.seconds=Math.round(Math.max(.15,Math.min(600,n))*100)/100;time.value=fmt(r.seconds);refresh();};
     }
