@@ -10822,7 +10822,7 @@ async function makeStoreZip(entries,onProgress=null){
       const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
       const cache=new Map(),packets=[];
-      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0,styleMs:0,xmlMs:0,decodeMs:0,pruned:0,rasterHits:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
+      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0,styleMs:0,xmlMs:0,decodeMs:0,pruned:0,rasterHits:0,styleHits:0,styleMisses:0,styleReadMs:0,styleApplyMs:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
@@ -10896,6 +10896,36 @@ async function makeStoreZip(entries,onProgress=null){
         }
         ctx.drawImage(baseImage,0,0,width,height);
       }
+      // Export-local exact computed-style cache. Never assume a class or animation is static.
+      const computedStyleCache=new WeakMap();
+      const styleURLCache=new Map();
+      async function copyExportStyle(src,dst,cs){
+        const started=performance.now(), values=[];
+        for(const key of cs){if(!key.startsWith('--'))values.push(key,cs.getPropertyValue(key));}
+        const signature=JSON.stringify([dst.style.cssText,values]);perf.styleReadMs+=performance.now()-started;
+        let entry=computedStyleCache.get(src);
+        if(entry&&entry.signature===signature){perf.styleHits++;}
+        else{
+          perf.styleMisses++;const started=performance.now();
+          const scratch=document.createElement('div').style;scratch.cssText=dst.style.cssText;
+          for(let i=0;i<values.length;i+=2){const key=values[i],value=values[i+1];let result=value;
+            if(value.includes('url(')){
+              if(!styleURLCache.has(value)){
+                const task=(async()=>{let result=value;for(const m of value.matchAll(/url\(["']?([^"')]+)["']?\)/g)){if(m[1].startsWith('#'))continue;result=result.replace(m[0],'url("'+await inlineURL(m[1])+'")');}return result;})();
+                if(styleURLCache.size>=128)styleURLCache.delete(styleURLCache.keys().next().value);
+                styleURLCache.set(value,task);
+              }
+              result=await styleURLCache.get(value);
+            }
+            scratch.setProperty(key,result);
+          }
+          entry={signature,css:scratch.cssText};computedStyleCache.set(src,entry);perf.styleApplyMs+=performance.now()-started;
+        }
+        // Preserve original inline declarations (including custom properties and priorities).
+        const startedApply=performance.now();
+        dst.style.cssText=entry.css;
+        perf.styleApplyMs+=performance.now()-startedApply;
+      }
       async function snapshot(){
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
         const split=splitBackground(fw,fh);
@@ -10917,7 +10947,10 @@ async function makeStoreZip(entries,onProgress=null){
             const img=document.createElement('img');img.src=entry.data;dst.replaceWith(img);dst=img;
           }
           if(!dst.style)continue;
+          if(split){await copyExportStyle(src,dst,cs);}
+          else{
           for(const key of cs){if(key.startsWith('--'))continue;const value=cs.getPropertyValue(key);if(value.includes('url(')){const target=dst;pending.push((async()=>{let result=value;for(const m of value.matchAll(/url\(["']?([^"')]+)["']?\)/g)){if(m[1].startsWith('#'))continue;result=result.replace(m[0],'url("'+await inlineURL(m[1])+'")');}target.style.setProperty(key,result);})());}else dst.style.setProperty(key,value);}
+          }
           if(split&&(src===frame||src===host)){dst.style.setProperty('background','transparent','important');}
           dst.style.setProperty('animation','none','important');dst.style.setProperty('transition','none','important');
           if(src instanceof HTMLImageElement){const target=dst;pending.push(inlineURL(src.currentSrc||src.src).then(v=>{target.removeAttribute('srcset');target.src=v;}));}
@@ -10994,7 +11027,7 @@ async function makeStoreZip(entries,onProgress=null){
         dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
         if(benchmark){
           const elapsed=(performance.now()-begin)/1000;
-          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\n不採用理由（最初の条件）: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
+          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスタイルキャッシュ '+perf.styleHits+' hit / '+perf.styleMisses+' miss / 読取 '+(perf.styleReadMs/1000).toFixed(2)+'秒 / 適用 '+(perf.styleApplyMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\n不採用理由（最初の条件）: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
