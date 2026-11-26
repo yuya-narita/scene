@@ -7073,11 +7073,11 @@ async function makeStoreZip(entries,onProgress=null){
   function trimSnapshot(){return clone(workingDocument||buildSceneDocument());}
   function trimSignature(doc){
     const refs=[];walkAssetRefs(doc,r=>{if(isPublishVideoRef(r))refs.push(r.src);});
-    return JSON.stringify([refs,doc.scenes?.map(x=>x.presentation),doc.cover,doc.ending]);
+    return JSON.stringify([refs,doc.scenes?.map(x=>{const b=x.presentation?.background;return b?[b.src,b.mode,b.mediaType,b.video]:null;}),doc.cover?.backgroundVideo,doc.ending?.backgroundVideo]);
   }
   function trimIndicator(message){
     let el=document.getElementById('videoOptimizationIndicator');
-    if(!el){el=document.createElement('div');el.id='videoOptimizationIndicator';el.setAttribute('role','status');el.style.cssText='position:fixed;bottom:12px;left:12px;z-index:90;max-width:calc(100vw - 24px);padding:7px 12px;border-radius:12px;background:Canvas;color:CanvasText;border:1px solid #8885;font-size:12px;pointer-events:none';document.body.append(el);}
+    if(!el){el=document.createElement('div');el.id='videoOptimizationIndicator';el.setAttribute('role','status');el.style.cssText='position:fixed;bottom:82px;left:12px;z-index:1200;max-width:calc(100vw - 24px);padding:7px 12px;border-radius:12px;background:Canvas;color:CanvasText;border:1px solid #8885;font-size:12px;pointer-events:none';document.body.append(el);}
     el.textContent=message;el.hidden=!message;
   }
   async function scanIdleTrim(){
@@ -7113,7 +7113,15 @@ async function makeStoreZip(entries,onProgress=null){
     if(!autoDeliveryEnabled){trimIndicator('');return;}
     if(trimScanBusy){trimIndicator(trimProgress||u('動画の最適化準備中','Preparing video'));return;}
     if(autoDeliveryRunning||autoDeliveryQueue.size){trimIndicator(u('動画を最適化中','Optimizing video')+(autoDeliveryRunning?' · '+(autoDeliveryStatus.get(autoDeliveryRunning.src)||'') : ''));return;}
-    if(performance.now()<trimReadyUntil){trimIndicator(u('動画の最適化処理完了','Video optimization finished'));}else trimIndicator('');
+    let doc,sig,hasVideo=false;
+    try{doc=workingDocument||buildSceneDocument();walkAssetRefs(doc,r=>{if(isPublishVideoRef(r)&&assetRegistry.has(r.src))hasVideo=true;});if(hasVideo)sig=trimSignature(doc);}catch(e){console.warn('Optimization status',e);}
+    if(!hasVideo){trimIndicator('');return;}
+    if(sig!==trimScanSignature){trimScanSignature=sig;trimScanSince=performance.now();trimScanDone='';trimReadyUntil=0;}
+    if(sig!==trimScanDone){
+      const reason=deliveryWaitReason();
+      const seconds=Math.max(0,Math.ceil((30000-(performance.now()-lastDeliveryActivity))/1000));
+      trimIndicator(u('動画の最適化待ち','Video optimization pending')+' · '+(reason|| (seconds?seconds+u('秒後に開始','s until start'):u('準備中','Preparing'))));
+    }else if(performance.now()<trimReadyUntil){trimIndicator(u('動画の最適化処理完了','Video optimization finished'));}else trimIndicator('');
     void scanIdleTrim();
   },1000);
   async function prepareStructuralDeliveries(doc){
