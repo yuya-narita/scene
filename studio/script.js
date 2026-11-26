@@ -10747,7 +10747,7 @@ async function makeStoreZip(entries,onProgress=null){
     function dispose(){cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
     function stop(message='停止'){if(exportJob?.recorder?.state==='recording'){exportJob.complete=message==='再生完了';exportJob.recorder.stop();}dispose();setIcon(pauseButton,'play','選択区間から再生');status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
     function enter(r){
-      if(previous && (previous.kind==='ending' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);applySettings();}
+      if(previous && (previous.kind==='ending' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();if(!exportJob)core.unlockAudio(true);applySettings();}
       if(r.kind==='cover'){core.showCover();return;}
       if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}
       const contiguous=previous?.kind==='scene'&&r.index===previous.index+1;
@@ -10768,7 +10768,7 @@ async function makeStoreZip(entries,onProgress=null){
     const spacer=document.createElement('span');spacer.style.flex='1';controls.append(spacer);
     const settingsButton=button('settings','表示設定',()=>{settingsPanel.hidden=!settingsPanel.hidden;settingsPanel.style.display=settingsPanel.hidden?'none':'flex';settingsButton.setAttribute('aria-expanded',String(!settingsPanel.hidden));fit();});settingsButton.setAttribute('aria-expanded','false');
     const closeButton=button('close','閉じる',()=>dialog.close());
-    const exportButton=button('export','内部描画書き出し（映像のみ・試験）',()=>exportVideo());controls.insertBefore(exportButton,closeButton);
+    const exportButton=button('export','内部描画書き出し（音声付き・試験）',()=>exportVideo());controls.insertBefore(exportButton,closeButton);
     const settingsPanel=document.createElement('div');settingsPanel.className='sv-preview-controls';settingsPanel.hidden=true;settingsPanel.style.cssText='display:none;padding:6px 0;gap:12px;flex-wrap:wrap';
     toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');for(const l of Array.from(controls.querySelectorAll('label')))settingsPanel.append(l);applySettings();
     status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
@@ -10806,11 +10806,80 @@ async function makeStoreZip(entries,onProgress=null){
     // Phase 5.0.3: fixed-frame visual export trial.
     const exportFps=document.createElement('select');exportFps.setAttribute('aria-label','書き出しfps');exportFps.add(new Option('24 fps','24'));exportFps.add(new Option('30 fps','30'));exportFps.value='30';const fpsLabel=document.createElement('label');fpsLabel.append(document.createTextNode('書き出し '),exportFps);settingsPanel.append(fpsLabel);
     const benchButton=document.createElement('button');benchButton.type='button';benchButton.textContent='選択Sceneを1秒診断';benchButton.onclick=()=>exportVideo(true);settingsPanel.append(benchButton);
+    // Phase 5.0.5: offline audio clock, independent of render wall time.
+    async function mixExportAudio(videoSpans,guard){
+      const rate=48000,length=Math.round(total*rate), offline=new OfflineAudioContext(2,length,rate), decoded=new Map();
+      let decodedBytes=0, events=0;
+      const clamp=(v)=>Math.max(0,Math.min(1,Number(v??1)||0)), ms=v=>Math.max(0,Number(v)||0)/1000;
+      async function buffer(src){
+        if(!src)throw Error('音声素材がありません');
+        if(!decoded.has(src)){
+          guard();const url=/^[A-Za-z0-9_-]{20,}$/.test(src)?'https://scene-studio-api.a-hako.workers.dev/asset/'+encodeURIComponent(src):src;
+          const blob=assetRegistry.get(src)?.blob;let data;
+          if(blob)data=await blob.arrayBuffer();else{const r=await fetch(url);if(!r.ok)throw Error('音声素材取得失敗');data=await r.arrayBuffer();}
+          let b;try{b=await offline.decodeAudioData(data);}catch(e){throw Error('音声デコード不可（背景動画の音声なし・非対応形式も含む）: '+String(src).slice(0,100));}
+          guard();decodedBytes+=b.length*b.numberOfChannels*4;if(decodedBytes>96*1024*1024)throw Error('音声素材のメモリ上限');decoded.set(src,b);
+        }return decoded.get(src);
+      }
+      const active={bgm:null,ambient:null}, shots=[];
+      function gainAt(rec,t){const a=rec.points;let prev=a[0];for(const next of a.slice(1)){if(next.t>t)return next.ramp?prev.v+(next.v-prev.v)*Math.max(0,(t-prev.t)/(next.t-prev.t)):prev.v;prev=next;}return prev.v;}
+      function change(rec,t,v,fade=0){if(t>=rec.end)return;const old=gainAt(rec,t);rec.points=rec.points.filter(p=>p.t<t);rec.points.push({t,v:fade?old:v,ramp:false});if(fade)rec.points.push({t:t+fade,v,ramp:true});}
+      function stopRec(rec,t,fade=0){if(!rec||t>=rec.end)return;change(rec,t,0,fade);rec.end=Math.min(rec.end,t+fade);}
+      async function make(cmd,t,loop=false,speed=1,limit=total){
+        if(t>=limit)return null;const b=await buffer(cmd.src), offset=Math.max(0,Number(cmd.startAt)||0);if(offset>=b.duration)return null;
+        const stopAt=cmd.stopAt==null?Infinity:Math.max(0,Number(cmd.stopAt)||0), after=ms(cmd.stopAfter)||Infinity;
+        const end=Math.min(limit,t+after,t+Math.max(0,stopAt-offset)/speed,loop?Infinity:t+(b.duration-offset)/speed);
+        if(end<=t)return null;const v=clamp(cmd.volume),fade=ms(cmd.fadeIn),rec={b,t,end,offset,loop,speed,src:cmd.src,volume:v,points:[{t,v:fade?0:v,ramp:false}]};if(fade)rec.points.push({t:t+fade,v,ramp:true});shots.push(rec);return rec;
+      }
+      async function persistent(cmd,t,reconstruct=false){
+        const ch=cmd.channel;let old=active[ch];if(old&&old.end<=t)old=active[ch]=null;
+        if(['start','play'].includes(cmd.action)){
+          if(old&&old.src===cmd.src&&!cmd.restart&&!reconstruct){change(old,t,clamp(cmd.volume),ms(cmd.fadeIn));old.volume=clamp(cmd.volume);return;}
+          stopRec(old,t);active[ch]=await make({...cmd,fadeIn:reconstruct?0:cmd.fadeIn},t,cmd.loop!==false);
+        }else if(cmd.action==='stop'){stopRec(old,t,ms(cmd.fadeOut??cmd.fade));active[ch]=null;}
+        else if(old&&cmd.action==='volume'){old.volume=clamp(cmd.volume);change(old,t,old.volume,ms(cmd.fade));}
+        else if(old&&cmd.action==='duck'){const fade=ms(cmd.fade??250),hold=ms(cmd.hold??1200);change(old,t,clamp(cmd.volume??.22),fade);change(old,t+fade+hold,old.volume,fade);}
+      }
+      async function oneshot(cmd,t,limit){
+        if(!['play','start'].includes(cmd.action||'play'))return;
+        let at=t+ms(cmd.delay);const repeat=Math.max(1,Math.round(Number(cmd.repeat)||1));if(repeat>1000)throw Error('SE繰り返し上限');
+        for(let i=0;i<repeat&&at<limit;i++){const rec=await make(cmd,at,cmd.loop===true,1,limit);if(!rec||cmd.loop)break;at=rec.end;}
+      }
+      let prev=null;
+      for(let i=0;i<rows.length;i++){
+        guard();const r=rows[i],t=i?ends[i-1]:0,limit=ends[i];
+        if(r.kind==='scene'){
+          const scene=doc.scenes[r.index];if(scene?.presentation?.simultaneousGroup)throw Error('同時表示グループの音声同期は未対応');
+          const contiguous=prev?.kind==='scene'&&r.index===prev.index+1;
+          if(!contiguous){
+            // Restore original persistent state, without replaying skipped one-shots.
+            const desired={bgm:null,ambient:null};
+            for(let j=0;j<=r.index;j++)for(const c of doc.scenes[j]?.audio||[]){if(!(c.channel in desired))continue;if(['start','play'].includes(c.action))desired[c.channel]={...c};else if(c.action==='stop')desired[c.channel]=null;else if(c.action==='volume'&&desired[c.channel])desired[c.channel].volume=c.volume;}
+            for(const ch of Object.keys(desired)){const d=desired[ch],old=active[ch];if(d&&old&&old.src===d.src&&old.end>t&&ch==='bgm'){change(old,t,clamp(d.volume));old.volume=clamp(d.volume);}else{stopRec(old,t);active[ch]=d?await make({...d,fadeIn:0},t,d.loop!==false):null;}}
+            for(const rec of shots)if(rec.oneshot&&rec.end>t)stopRec(rec,t);
+          }else for(const c of scene?.audio||[])if(c.channel in active)await persistent(c,t);
+          for(const c of scene?.audio||[])if(c.channel==='oneshot'){const n=shots.length;await oneshot(c,t,total);for(const rec of shots.slice(n))rec.oneshot=true;}
+        }else{
+          for(const ch of Object.keys(active)){stopRec(active[ch],t);active[ch]=null;}
+          for(const rec of shots)if(rec.oneshot)stopRec(rec,t);
+          if(r.kind==='ending')for(const c of doc.ending?.audio||[])if(c.channel==='oneshot')await oneshot(c,t,limit);
+        }prev=r;
+      }
+      for(const v of videoSpans){guard();await make({src:v.src,startAt:v.offset,volume:v.volume},v.t,false,v.speed,v.end);}
+      if(!shots.length)return null;
+      for(const rec of shots){if(rec.end<=rec.t)continue;guard();const node=offline.createBufferSource(),gain=offline.createGain();node.buffer=rec.b;node.loop=rec.loop;node.playbackRate.value=rec.speed;node.connect(gain);gain.connect(offline.destination);for(const p of rec.points){if(p.t>rec.end){gain.gain.linearRampToValueAtTime(gainAt(rec,rec.end),rec.end);break;}if(p.ramp)gain.gain.linearRampToValueAtTime(p.v,p.t);else gain.gain.setValueAtTime(p.v,p.t);}node.start(rec.t,rec.offset);node.stop(rec.end);events++;}
+      const pcm=await offline.startRendering();guard();let peak=0;for(let c=0;c<2;c++)for(const x of pcm.getChannelData(c))peak=Math.max(peak,Math.abs(x));if(peak>1)for(let c=0;c<2;c++){const a=pcm.getChannelData(c);for(let i=0;i<a.length;i++)a[i]/=peak;}
+      const config={codec:'opus',sampleRate:rate,numberOfChannels:2,bitrate:128000,opus:{frameDuration:20000}};
+      if(!window.AudioEncoder||!window.AudioData||!(await AudioEncoder.isConfigSupported(config)).supported)throw Error('Opus音声エンコーダー非対応');
+      let head,err;const packets=[],ae=new AudioEncoder({output:(c,m)=>{if(m?.decoderConfig?.description){const v=m.decoderConfig.description;head=new Uint8Array(v.buffer||v,v.byteOffset||0,v.byteLength).slice();}const b=new Uint8Array(c.byteLength);c.copyTo(b);packets.push({t:c.timestamp,b,key:true,audio:true});},error:e=>err=e});
+      try{ae.configure(config);for(let i=0;i<length;i+=960){guard();if(err)throw err;while(ae.encodeQueueSize>4){await new Promise(r=>setTimeout(r,0));guard();if(err)throw err;}const n=Math.min(960,length-i),data=new Float32Array(n*2);for(let c=0;c<2;c++)data.set(pcm.getChannelData(c).subarray(i,i+n),c*n);const f=new AudioData({format:'f32-planar',sampleRate:rate,numberOfFrames:n,numberOfChannels:2,timestamp:Math.round(i*1e6/rate),data});try{ae.encode(f);}finally{f.close();}}await ae.flush();if(err)throw err;}finally{ae.close();}
+      if(!head||head.length<19||String.fromCharCode(...head.slice(0,8))!=='OpusHead')throw Error('Opus metadata unavailable');const skip=new DataView(head.buffer,head.byteOffset,head.byteLength).getUint16(10,true),padding=packets.length*960-skip-length;if(padding<0||padding>=960)throw Error('Opus padding mismatch');packets.forEach((p,i)=>{p.t=i*20000;p.padding=i===packets.length-1?Math.round(padding*1e9/rate):0;});return {head,delay:Math.round(skip*1e9/rate),packets,events,peak};
+    }
     async function exportVideo(benchmark=false){
       if(exportJob||!rows.length)return;
       if(!window.VideoEncoder||!window.VideoFrame){appAlert('内部描画にはPC版Chrome/Edgeが必要です。');return;}
       if(!benchmark&&total>60){appAlert('内部描画の試験は60秒以内です。');return;}
-      if(!benchmark&&!await appConfirm('内部描画の試験版です。今回は映像のみ（音声なし）・固定fpsのWebMです。書き出しますか？'))return;
+      if(!benchmark&&!await appConfirm('内部描画の試験版です。音声合成付き・固定fpsのWebMです。書き出しますか？'))return;
       if(exportJob||!dialog.open)return;
       const fps=benchmark?30:Number(exportFps.value);if(![24,30].includes(fps))return;
       const sampleRow=benchmark?Math.max(0,rows.indexOf(selected)):0;
@@ -10821,7 +10890,7 @@ async function makeStoreZip(entries,onProgress=null){
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';cancel.onclick=()=>{job.cancelled=true;};
       const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
-      const cache=new Map(),packets=[];
+      const cache=new Map(),packets=[],videoSpans=[],lastAudioSpan=new WeakMap();
       const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0,styleMs:0,xmlMs:0,decodeMs:0,pruned:0,rasterHits:0,spriteFrames:0,spriteBuilds:0,spriteHits:0,spriteMs:0,veilFrames:0,pseudoSkipped:0,transformFrames:0,hierarchyFrames:0,animationMs:0,videoMs:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -11138,6 +11207,10 @@ async function makeStoreZip(entries,onProgress=null){
             let target=state.base+(frozen?0:(t-state.time)*speed);
             if((cfg.mode||'loop')==='loop')target=a+((target-a)%(b-a)+(b-a))%(b-a);else target=Math.min(target,b-.001);
             target=Math.max(a,Math.min(target,duration-.001));state.target=target;videoClock.set(v,state);
+            if(!benchmark&&cfg.muted===false&&!frozen&&Number(cfg.volume??1)>0&&((cfg.mode||'loop')==='loop'||state.base+(t-state.time)*speed<b)){
+              const src=v.currentSrc||v.src,volume=Math.max(0,Math.min(1,Number(cfg.volume??1))),end=Math.min(total,t+1/fps,t+(b-target)/speed),old=lastAudioSpan.get(v);
+              if(end>t){if(old&&old.src===src&&old.volume===volume&&old.speed===speed&&Math.abs(old.end-t)<.0001&&Math.abs(old.offset+(t-old.t)*speed-target)<.002)old.end=end;else{const span={src,volume,speed,t,end,offset:target};videoSpans.push(span);lastAudioSpan.set(v,span);}}
+            }
             // Prevent live loop/next handlers from overriding the export seek.
             v.ontimeupdate=null;v.onended=null;v.pause();
             if(Math.abs(v.currentTime-target)>.002)v.currentTime=target;
@@ -11158,6 +11231,7 @@ async function makeStoreZip(entries,onProgress=null){
           const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\nベール直接合成 '+perf.veilFrames+'フレーム / 非表示疑似要素省略 '+perf.pseudoSkipped+'回 / Transform直接合成 '+perf.transformFrames+'フレーム / 階層合成 '+perf.hierarchyFrames+'フレーム\n演出更新 '+(perf.animationMs/1000).toFixed(2)+'秒 / 動画準備・シーク '+(perf.videoMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
+        status.textContent='音声合成・エンコード中…';const audio=await mixExportAudio(videoSpans,guard);guard();
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
@@ -11166,11 +11240,12 @@ async function makeStoreZip(entries,onProgress=null){
         const fl=new Uint8Array(8);new DataView(fl.buffer).setFloat64(0,total*1000);
         const header=el(0x1a45dfa3,ui(0x4286,1),ui(0x42f7,1),ui(0x42f2,4),ui(0x42f3,8),txt(0x4282,'webm'),ui(0x4287,4),ui(0x4285,2));
         const info=el(0x1549a966,ui(0x2ad7b1,1000000),el(0x4489,fl),txt(0x4d80,'Ahako'),txt(0x5741,'Ahako'));
-        const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),ui(0x23e383,Math.round(1e9/fps)),el(0xe0,ui(0xb0,width),ui(0xba,height))));
+        const hz=new Uint8Array(8);new DataView(hz.buffer).setFloat64(0,48000);
+        const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),ui(0x23e383,Math.round(1e9/fps)),el(0xe0,ui(0xb0,width),ui(0xba,height))),...(audio?[el(0xae,ui(0xd7,2),ui(0x73c5,2),ui(0x83,2),txt(0x86,'A_OPUS'),el(0x63a2,audio.head),ui(0x56aa,audio.delay),ui(0x56bb,80000000),el(0xe1,el(0xb5,hz),ui(0x9f,2)))]:[]));
         const clusters=[];let base=0,blocks=[];function finish(){if(blocks.length)clusters.push(el(0x1f43b675,ui(0xe7,base),...blocks));blocks=[];}
-        for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
+        for(const p of [...packets,...(audio?.packets||[])].sort((a,b)=>a.t-b.t||Number(!!a.audio)-Number(!!b.audio))){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;}const rel=t-base,block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();
         const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
-        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了 '+count+'フレーム ｜ '+Math.round((performance.now()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'フレーム';
+        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=audio?'ahako-internal-audio.webm':'ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了 '+(audio?'音声 '+audio.events+'区間 / 48kHz Opus ｜ ':'音声素材なし ｜ ')+count+'フレーム ｜ '+Math.round((performance.now()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'フレーム';
       }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';spriteObserver.disconnect();spriteState=null;spriteCanvas.width=0;cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
