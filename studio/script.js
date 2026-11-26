@@ -10716,41 +10716,53 @@ async function makeStoreZip(entries,onProgress=null){
   easyMenuPanel?.addEventListener('click',(e)=>e.stopPropagation());
   easyMenuBackdrop?.addEventListener('click',closeEasyMenu);
 
-  // Phase 4.0.1: isolated, session-only short video planning workspace.
+  // Phase 4.0.2: isolated timeline plan; never writes to workingDocument.
   let shortVideoPlan=null;
   function openShortVideoPlan(){
     closeEasyMenu();
     if(!workingDocument?.scenes?.length){appAlert('作品を開いてから動画制作を始めてください。');return;}
     const source=workingDocument;
     const signature=JSON.stringify(source.scenes.map(s=>[s.id,s.pause,scenePreviewText(s)]));
+    const duration=s=>Math.max(.15,Math.min(600,Number(s)||DEFAULT_AUTO_SECONDS));
     if(!shortVideoPlan||shortVideoPlan.source!==source||shortVideoPlan.signature!==signature){
-      shortVideoPlan={source,signature,ratio:'9:16',rows:source.scenes.map((s,i)=>({index:i,label:scenePreviewText(s),seconds:liveTimingSeconds(s),included:true}))};
+      shortVideoPlan={source,signature,ratio:'9:16',rows:[{kind:'cover',label:'表紙',seconds:2.6,included:false},...source.scenes.map((s,i)=>({kind:'scene',index:i,label:scenePreviewText(s),seconds:duration(liveTimingSeconds(s)),included:true})),{kind:'ending',label:'読了',seconds:2.6,included:false}]};
     }
     const plan=shortVideoPlan;
-    const dialog=document.createElement('dialog');
-    dialog.setAttribute('aria-label','ショート動画制作');
-    dialog.style.cssText='width:min(720px,94vw);max-height:88dvh;padding:20px;border:1px solid #ccc;border-radius:16px;background:#fff;color:#191919;overflow:auto;box-sizing:border-box';
-    const el=(tag,value,parent)=>{const n=document.createElement(tag);if(value!==null)n.textContent=value;if(parent)parent.append(n);return n;};
-    const head=el('div',null,dialog);head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px';
-    el('h2','ショート動画制作',head);const close=el('button','閉じる',head);close.type='button';close.onclick=()=>dialog.close();
-    el('p','制作プラン（試験）｜元作品は変更しません。設定はこの編集セッションのみ有効です。',dialog);
-    const controls=el('div',null,dialog);controls.style.cssText='display:flex;gap:12px;align-items:center;flex-wrap:wrap';
-    const label=el('label','画面比率 ',controls);const select=el('select',null,label);
+    const dialog=document.createElement('dialog');dialog.className='sv-plan402';dialog.setAttribute('aria-label','ショート動画制作');
+    const el=(tag,value,parent,cls)=>{const n=document.createElement(tag);if(value!==null)n.textContent=value;if(cls)n.className=cls;if(parent)parent.append(n);return n;};
+    const btn=(label,parent,fn)=>{const b=el('button',label,parent);b.type='button';b.onclick=fn;return b;};
+    const head=el('div',null,dialog,'sv-head');el('h2','ショート動画制作',head);btn('閉じる',head,()=>dialog.close());
+    const settings=el('div',null,dialog,'sv-settings');const label=el('label','画面比率',settings);const select=el('select',null,label);
     for(const [ratio,desc] of [['9:16','9:16 縦型'],['16:9','16:9 横型'],['1:1','1:1 正方形']]){const o=el('option',desc,select);o.value=ratio;}
-    select.value=plan.ratio;
-    const frame=el('div',null,dialog);frame.style.cssText='margin:16px auto;background:#24272a;color:white;display:grid;place-items:center;border-radius:8px;max-width:100%;max-height:240px';
-    function updateFrame(){plan.ratio=select.value;const [w,h]=plan.ratio.split(':').map(Number);frame.style.width=Math.min(320,240*w/h)+'px';frame.style.aspectRatio=w+'/'+h;frame.textContent=plan.ratio+' ｜ 構図ガイド';}
-    select.onchange=updateFrame;updateFrame();
-    const summary=el('strong','',dialog);summary.style.display='block';
-    el('p','本編Sceneのみ。表示尺はAUTO設定を初期値とする予定尺です。表紙・読了・音声同期・演出時間はまだ反映しません。',dialog);
-    const actions=el('div',null,dialog);actions.style.cssText='display:flex;gap:8px;margin:12px 0';
-    const all=el('button','すべて選択',actions),none=el('button','すべて解除',actions);all.type=none.type='button';
-    const list=el('div',null,dialog);const inputs=[];
-    function refresh(){let total=0,count=0;for(const r of plan.rows){if(r.included){total+=r.seconds;count++;}}summary.textContent=`${count} / ${plan.rows.length} Scene ｜ 予定尺 ${total.toFixed(2)} 秒`;}
-    for(const r of plan.rows){const row=el('label',null,list);row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #ddd';const cb=el('input',null,row);cb.type='checkbox';cb.checked=r.included;inputs.push(cb);const title=el('span',`Scene ${r.index+1} ｜ ${r.label}`,row);title.style.flex='1';el('small',r.seconds.toFixed(2)+'秒',row);cb.onchange=()=>{r.included=cb.checked;refresh();};}
-    function setAll(value){plan.rows.forEach((r,i)=>{r.included=value;inputs[i].checked=value;});refresh();}
-    all.onclick=()=>setAll(true);none.onclick=()=>setAll(false);refresh();
-    dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();
+    select.value=plan.ratio;select.onchange=()=>{plan.ratio=select.value;};
+    const summary=el('div','',settings,'sv-summary');
+    const timeline=el('div',null,dialog,'sv-timeline');timeline.setAttribute('aria-label','選択区間のタイムライン');
+    const note=el('p','',dialog,'sv-note');
+    el('p','予定尺のみ。映像・音声同期・継承の再現は未実装です。元作品は変更しません（セッション内限定）。',dialog,'sv-note');
+    const actions=el('div',null,dialog,'sv-actions');const list=el('div',null,dialog,'sv-list');const inputs=[];
+    const name=r=>r.kind==='scene'?`Scene ${r.index+1}`:r.label;
+    const fmt=n=>n.toFixed(2);
+    function refresh(){
+      let total=0,count=0,previous=null,gaps=0;timeline.replaceChildren();
+      for(const r of plan.rows){if(!r.included)continue;const start=total;total+=r.seconds;count++;if(r.kind==='scene'){if(previous===null?r.index>0:r.index!==previous+1)gaps++;previous=r.index;}
+        const seg=el('div',null,timeline,'sv-segment');seg.style.flexGrow=String(r.seconds);seg.title=`${name(r)}: ${fmt(start)}–${fmt(total)}秒`;el('strong',name(r),seg);el('small',fmt(r.seconds)+'秒',seg);
+      }
+      if(!count)el('span','Sceneを選択してください',timeline,'sv-note');
+      summary.textContent=`${count} / ${plan.rows.length} 区間 ｜ ${fmt(total)} 秒`;
+      note.textContent=gaps?`非連続の開始・ジャンプ ${gaps} 箇所：背景・残し文字・音声等の継承復元が必要な可能性があります。`:'選択順：元作品の順番';
+      let cursor=0;plan.rows.forEach((r,i)=>{const a=inputs[i];if(!a)return;a.cb.checked=r.included;a.time.disabled=!r.included;a.row.classList.toggle('sv-off',!r.included);a.range.textContent=r.included?`${fmt(cursor)}–${fmt(cursor+=r.seconds)}秒`:'対象外';});
+    }
+    function setAll(value){plan.rows.forEach(r=>r.included=value);refresh();}
+    btn('すべて選択',actions,()=>setAll(true));btn('すべて解除',actions,()=>setAll(false));btn('秒数を初期化',actions,()=>{plan.rows.forEach((r,i)=>{r.seconds=r.kind==='scene'?duration(liveTimingSeconds(source.scenes[r.index])):2.6;inputs[i].time.value=fmt(r.seconds);});refresh();});
+    for(const r of plan.rows){
+      const row=el('div',null,list,'sv-row');const cb=el('input',null,row);cb.type='checkbox';cb.checked=r.included;cb.setAttribute('aria-label',name(r)+'を使用');
+      const desc=el('div',null,row,'sv-desc');el('strong',name(r),desc);if(r.kind==='scene')el('span',r.label,desc);const range=el('small','',desc);
+      const field=el('label',null,row,'sv-time');const time=el('input',null,field);time.type='number';time.min='.15';time.max='600';time.step='.01';time.value=fmt(r.seconds);time.setAttribute('aria-label',name(r)+'の再生秒数');el('span','秒',field);
+      inputs.push({row,cb,time,range});cb.onchange=()=>{r.included=cb.checked;refresh();};
+      time.oninput=()=>{const n=time.valueAsNumber;if(Number.isFinite(n)&&n>=.15&&n<=600){r.seconds=Math.round(n*100)/100;refresh();}};
+      time.onchange=()=>{const n=time.valueAsNumber;if(Number.isFinite(n))r.seconds=Math.round(Math.max(.15,Math.min(600,n))*100)/100;time.value=fmt(r.seconds);refresh();};
+    }
+    refresh();dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();
   }
   document.querySelector('#menuShortVideoButton')?.addEventListener('click',openShortVideoPlan);
 
