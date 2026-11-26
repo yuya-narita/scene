@@ -10807,18 +10807,18 @@ async function makeStoreZip(entries,onProgress=null){
     const exportFps=document.createElement('select');exportFps.setAttribute('aria-label','書き出しfps');exportFps.add(new Option('24 fps','24'));exportFps.add(new Option('30 fps','30'));exportFps.value='30';const fpsLabel=document.createElement('label');fpsLabel.append(document.createTextNode('書き出し '),exportFps);settingsPanel.append(fpsLabel);
     const benchButton=document.createElement('button');benchButton.type='button';benchButton.textContent='選択Sceneを1秒診断';benchButton.onclick=()=>exportVideo(true);settingsPanel.append(benchButton);
     // Phase 5.0.5: offline audio clock, independent of render wall time.
-    async function mixExportAudio(videoSpans,guard){
+    async function mixExportAudio(videoSpans,checkpoint){
       const rate=48000,length=Math.round(total*rate), offline=new OfflineAudioContext(2,length,rate), decoded=new Map();
       let decodedBytes=0, events=0;
       const clamp=(v)=>Math.max(0,Math.min(1,Number(v??1)||0)), ms=v=>Math.max(0,Number(v)||0)/1000;
       async function buffer(src){
         if(!src)throw Error('音声素材がありません');
         if(!decoded.has(src)){
-          guard();const url=/^[A-Za-z0-9_-]{20,}$/.test(src)?'https://scene-studio-api.a-hako.workers.dev/asset/'+encodeURIComponent(src):src;
+          await checkpoint();const url=/^[A-Za-z0-9_-]{20,}$/.test(src)?'https://scene-studio-api.a-hako.workers.dev/asset/'+encodeURIComponent(src):src;
           const blob=assetRegistry.get(src)?.blob;let data;
           if(blob)data=await blob.arrayBuffer();else{const r=await fetch(url);if(!r.ok)throw Error('音声素材取得失敗');data=await r.arrayBuffer();}
           let b;try{b=await offline.decodeAudioData(data);}catch(e){throw Error('音声デコード不可（背景動画の音声なし・非対応形式も含む）: '+String(src).slice(0,100));}
-          guard();decodedBytes+=b.length*b.numberOfChannels*4;if(decodedBytes>96*1024*1024)throw Error('音声素材のメモリ上限');decoded.set(src,b);
+          await checkpoint();decodedBytes+=b.length*b.numberOfChannels*4;if(decodedBytes>96*1024*1024)throw Error('音声素材のメモリ上限');decoded.set(src,b);
         }return decoded.get(src);
       }
       const active={bgm:null,ambient:null}, shots=[];
@@ -10847,7 +10847,7 @@ async function makeStoreZip(entries,onProgress=null){
       }
       let prev=null;
       for(let i=0;i<rows.length;i++){
-        guard();const r=rows[i],t=i?ends[i-1]:0,limit=ends[i];
+        await checkpoint();const r=rows[i],t=i?ends[i-1]:0,limit=ends[i];
         if(r.kind==='scene'){
           const scene=doc.scenes[r.index];if(scene?.presentation?.simultaneousGroup)throw Error('同時表示グループの音声同期は未対応');
           const contiguous=prev?.kind==='scene'&&r.index===prev.index+1;
@@ -10865,14 +10865,14 @@ async function makeStoreZip(entries,onProgress=null){
           if(r.kind==='ending')for(const c of doc.ending?.audio||[])if(c.channel==='oneshot')await oneshot(c,t,limit);
         }prev=r;
       }
-      for(const v of videoSpans){guard();await make({src:v.src,startAt:v.offset,volume:v.volume},v.t,false,v.speed,v.end);}
+      for(const v of videoSpans){await checkpoint();await make({src:v.src,startAt:v.offset,volume:v.volume},v.t,false,v.speed,v.end);}
       if(!shots.length)return null;
-      for(const rec of shots){if(rec.end<=rec.t)continue;guard();const node=offline.createBufferSource(),gain=offline.createGain();node.buffer=rec.b;node.loop=rec.loop;node.playbackRate.value=rec.speed;node.connect(gain);gain.connect(offline.destination);for(const p of rec.points){if(p.t>rec.end){gain.gain.linearRampToValueAtTime(gainAt(rec,rec.end),rec.end);break;}if(p.ramp)gain.gain.linearRampToValueAtTime(p.v,p.t);else gain.gain.setValueAtTime(p.v,p.t);}node.start(rec.t,rec.offset);node.stop(rec.end);events++;}
-      const pcm=await offline.startRendering();guard();let peak=0;for(let c=0;c<2;c++)for(const x of pcm.getChannelData(c))peak=Math.max(peak,Math.abs(x));if(peak>1)for(let c=0;c<2;c++){const a=pcm.getChannelData(c);for(let i=0;i<a.length;i++)a[i]/=peak;}
+      for(const rec of shots){if(rec.end<=rec.t)continue;await checkpoint();const node=offline.createBufferSource(),gain=offline.createGain();node.buffer=rec.b;node.loop=rec.loop;node.playbackRate.value=rec.speed;node.connect(gain);gain.connect(offline.destination);for(const p of rec.points){if(p.t>rec.end){gain.gain.linearRampToValueAtTime(gainAt(rec,rec.end),rec.end);break;}if(p.ramp)gain.gain.linearRampToValueAtTime(p.v,p.t);else gain.gain.setValueAtTime(p.v,p.t);}node.start(rec.t,rec.offset);node.stop(rec.end);events++;}
+      const pcm=await offline.startRendering();decoded.clear();shots.length=0;active.bgm=active.ambient=null;await checkpoint();let peak=0;for(let c=0;c<2;c++)for(const x of pcm.getChannelData(c))peak=Math.max(peak,Math.abs(x));if(peak>1)for(let c=0;c<2;c++){const a=pcm.getChannelData(c);for(let i=0;i<a.length;i++)a[i]/=peak;}
       const config={codec:'opus',sampleRate:rate,numberOfChannels:2,bitrate:128000,opus:{frameDuration:20000}};
       if(!window.AudioEncoder||!window.AudioData||!(await AudioEncoder.isConfigSupported(config)).supported)throw Error('Opus音声エンコーダー非対応');
       let head,err;const packets=[],ae=new AudioEncoder({output:(c,m)=>{if(m?.decoderConfig?.description){const v=m.decoderConfig.description;head=new Uint8Array(v.buffer||v,v.byteOffset||0,v.byteLength).slice();}const b=new Uint8Array(c.byteLength);c.copyTo(b);packets.push({t:c.timestamp,b,key:true,audio:true});},error:e=>err=e});
-      try{ae.configure(config);for(let i=0;i<length;i+=960){guard();if(err)throw err;while(ae.encodeQueueSize>4){await new Promise(r=>setTimeout(r,0));guard();if(err)throw err;}const n=Math.min(960,length-i),data=new Float32Array(n*2);for(let c=0;c<2;c++)data.set(pcm.getChannelData(c).subarray(i,i+n),c*n);const f=new AudioData({format:'f32-planar',sampleRate:rate,numberOfFrames:n,numberOfChannels:2,timestamp:Math.round(i*1e6/rate),data});try{ae.encode(f);}finally{f.close();}}await ae.flush();if(err)throw err;}finally{ae.close();}
+      try{ae.configure(config);for(let i=0;i<length;i+=960){await checkpoint();if(err)throw err;while(ae.encodeQueueSize>4){await new Promise(r=>setTimeout(r,0));await checkpoint();if(err)throw err;}const n=Math.min(960,length-i),data=new Float32Array(n*2);for(let c=0;c<2;c++)data.set(pcm.getChannelData(c).subarray(i,i+n),c*n);const f=new AudioData({format:'f32-planar',sampleRate:rate,numberOfFrames:n,numberOfChannels:2,timestamp:Math.round(i*1e6/rate),data});try{ae.encode(f);}finally{f.close();}}await ae.flush();if(err)throw err;}finally{ae.close();}
       if(!head||head.length<19||String.fromCharCode(...head.slice(0,8))!=='OpusHead')throw Error('Opus metadata unavailable');const skip=new DataView(head.buffer,head.byteOffset,head.byteLength).getUint16(10,true),padding=packets.length*960-skip-length;if(padding<0||padding>=960)throw Error('Opus padding mismatch');packets.forEach((p,i)=>{p.t=i*20000;p.padding=i===packets.length-1?Math.round(padding*1e9/rate):0;});return {head,delay:Math.round(skip*1e9/rate),packets,events,peak};
     }
     async function exportVideo(benchmark=false){
@@ -10892,20 +10892,26 @@ async function makeStoreZip(entries,onProgress=null){
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
       const cache=new Map(),packets=[],videoSpans=[],lastAudioSpan=new WeakMap();
       const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0,styleMs:0,xmlMs:0,decodeMs:0,pruned:0,rasterHits:0,spriteFrames:0,spriteBuilds:0,spriteHits:0,spriteMs:0,veilFrames:0,pseudoSkipped:0,transformFrames:0,hierarchyFrames:0,animationMs:0,videoMs:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
-      const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
+      const guard=()=>{if(job.cancelled||!dialog.open )throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
-      async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
+      let hiddenSince=document.hidden?performance.now():null,hiddenMs=0;
+      const activeNow=()=>performance.now()-hiddenMs-(hiddenSince===null?0:performance.now()-hiddenSince);
+      const visibility=()=>{if(document.hidden){if(hiddenSince===null)hiddenSince=performance.now();status.textContent='書き出し一時停止：タブに戻ると自動再開します';}else if(hiddenSince!==null){hiddenMs+=performance.now()-hiddenSince;hiddenSince=null;}};
+      async function checkpoint(){guard();while(document.hidden){await wait(100);guard();}guard();}
+      document.addEventListener('visibilitychange',visibility);
+
+      async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});if(data.length<=4000000){while(cache.size>=8||Array.from(cache.values()).reduce((n,v)=>n+v.length,0)+data.length>8000000)cache.delete(cache.keys().next().value);cache.set(url,data);}return data;}return cache.get(url);}
       function visibleVideo(v){
         if(!v.isConnected||!v.getBoundingClientRect().width||!v.getBoundingClientRect().height)return false;
         for(let n=v;n&&n!==frame.parentElement;n=n.parentElement){const c=getComputedStyle(n);if(n.hidden||c.display==='none'||c.visibility==='hidden'||Number(c.opacity)===0)return false;}
         return true;
       }
       async function awaitVideoFrames(){
-        const began=performance.now();
-        while(true){guard();const pending=Array.from(frame.querySelectorAll('video')).filter(v=>visibleVideo(v)&&(v.readyState<2||v.seeking||!v.videoWidth));
+        const began=activeNow();
+        while(true){await checkpoint();const pending=Array.from(frame.querySelectorAll('video')).filter(v=>visibleVideo(v)&&(v.readyState<2||v.seeking||!v.videoWidth));
           if(!pending.length)return;
           if(pending.some(v=>v.error))throw Error(name(rows[cursor])+'：背景動画の読み込みエラー');
-          if(performance.now()-began>12000)throw Error(name(rows[cursor])+'：背景動画の準備が12秒以内に完了しませんでした');
+          if(activeNow()-began>12000)throw Error(name(rows[cursor])+'：背景動画の準備が12秒以内に完了しませんでした');
           status.textContent=name(rows[cursor])+' ｜ 背景動画の準備待ち…';await wait(10);
         }
       }
@@ -10953,7 +10959,7 @@ async function makeStoreZip(entries,onProgress=null){
       }
       const overlayCanvas=document.createElement('canvas');overlayCanvas.width=width;overlayCanvas.height=height;
       const overlayCtx=overlayCanvas.getContext('2d');let overlaySVG=null,baseKey=null,baseImage=null;
-      const rasterCache=new Map();const rasterLimit=4;
+      const rasterCache=new Map();const rasterLimit=2;
       async function paintFadeBase(split,fw,fh){
         if(split.alpha>=1)return;
         const key=JSON.stringify([fw,fh,split.bases]);
@@ -11041,7 +11047,7 @@ async function makeStoreZip(entries,onProgress=null){
           if(src instanceof HTMLImageElement){const target=dst;pending.push(inlineURL(src.currentSrc||src.src).then(v=>{target.removeAttribute('srcset');target.src=v;}));}
           if(src instanceof HTMLAudioElement||src instanceof HTMLScriptElement||src instanceof HTMLIFrameElement)dst.remove();
         }
-        await Promise.all(pending);guard();perf.styleMs+=performance.now()-styleStart;const xmlStart=performance.now();
+        await Promise.all(pending);await checkpoint();perf.styleMs+=performance.now()-styleStart;const xmlStart=performance.now();
         root.style.cssText+=';position:relative!important;inset:auto!important;margin:0!important;transform:none!important;width:'+fw+'px!important;height:'+fh+'px!important;overflow:hidden!important;';
         root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
         const xml=new XMLSerializer().serializeToString(root);
@@ -11050,7 +11056,7 @@ async function makeStoreZip(entries,onProgress=null){
         return svg;
       }
       async function spriteImage(svg){
-        const t=performance.now(),img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();perf.decodeMs+=performance.now()-t;guard();
+        const t=performance.now(),img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();perf.decodeMs+=performance.now()-t;await checkpoint();
         const c=document.createElement('canvas');c.width=width;c.height=height;c.getContext('2d').drawImage(img,0,0,width,height);return c;
       }
       // Each opacity group uses a separate endpoint pair relative to the same static
@@ -11105,7 +11111,7 @@ async function makeStoreZip(entries,onProgress=null){
         if(L<g.clip.l||R>=g.clip.r||U<g.clip.t||B>=g.clip.b)return spriteReject('移動先クリップ境界');
         for(let y=U;y<=B;y++)for(let x=L;x<=R;x++)if(st.bd[(y*width+x)*4+3])return spriteReject('移動先の静止画素重複');
         spriteCtx.clearRect(0,0,width,height);spriteCtx.drawImage(st.base,0,0);spriteCtx.save();try{spriteCtx.globalAlpha=alpha;spriteCtx.drawImage(st.img,dx,dy);}finally{spriteCtx.restore();}
-        ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;
+        ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);const bgStart=performance.now();await paintFadeBase(split,fw,fh);await checkpoint();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;
         paintVeil(split);ctx.drawImage(spriteCanvas,0,0);perf.spriteFrames++;perf.transformFrames++;if(chain.length>1)perf.hierarchyFrames++;perf.spriteMs+=performance.now()-t;return true;
       }
       async function paintSprite(split,fw,fh){
@@ -11118,7 +11124,7 @@ async function makeStoreZip(entries,onProgress=null){
         const same=spriteState&&!spriteState.translation&&spriteState.row===cursor&&spriteState.fw===fw&&spriteState.fh===fh&&spriteState.veil===split.veil?.n&&targets.length===spriteState.targets.length&&targets.every((n,i)=>n===spriteState.targets[i]);
         if(!same){
           spriteState=null;
-          if(width*height*4*(targets.length+2)>32*1024*1024)return spriteReject('スプライトメモリ上限');
+          if(width*height*4*(targets.length+2)>16*1024*1024)return spriteReject('スプライトメモリ上限');
           const zero=new Map(targets.map(n=>[n,0]));
           const base=await spriteImage(await makeSVG(fw,fh,split,null,1,zero));
           const layers=[];const occupied=new Uint8Array(width*height);
@@ -11147,7 +11153,7 @@ async function makeStoreZip(entries,onProgress=null){
           spriteCtx.globalCompositeOperation='lighter';spriteCtx.globalAlpha=a;spriteCtx.drawImage(l.img,l.x,l.y,l.w,l.h,l.x,l.y,l.w,l.h);
         }finally{spriteCtx.restore();}}
         ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
-        const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;
+        const bgStart=performance.now();await paintFadeBase(split,fw,fh);await checkpoint();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;
         paintVeil(split);ctx.drawImage(spriteCanvas,0,0);perf.spriteFrames++;perf.spriteMs+=performance.now()-t;return true;
       }
       async function snapshot(){
@@ -11163,27 +11169,27 @@ async function makeStoreZip(entries,onProgress=null){
           if(cached){img=cached;rasterCache.delete(svg);rasterCache.set(svg,img);perf.hits++;perf.rasterHits++;}
           else{perf.misses++;const decodeStart=performance.now();img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();perf.decodeMs+=performance.now()-decodeStart;if(split&&svg.length<2000000){rasterCache.set(svg,img);while(rasterCache.size>rasterLimit)rasterCache.delete(rasterCache.keys().next().value);}}
           lastSVG=svg;lastImage=img;
-        }else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
+        }else perf.hits++;await checkpoint();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
         if(split){
           const overlayStart=performance.now();if(overlaySVG!==svg){overlayCtx.clearRect(0,0,width,height);overlayCtx.drawImage(img,0,0,width,height);overlaySVG=svg;}
-          perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;paintVeil(split);ctx.drawImage(overlayCanvas,0,0);perf.split++;
+          perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();await paintFadeBase(split,fw,fh);await checkpoint();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;paintVeil(split);ctx.drawImage(overlayCanvas,0,0);perf.split++;
         }else{ctx.drawImage(img,0,0,width,height);perf.legacy++;}
       }
       try{
         settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
         const config={codec:'vp09.00.10.08',width,height,bitrate:1800000,framerate:fps};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error('VP9エンコーダー非対応');
         encoder=new VideoEncoder({output:c=>{const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>80*1024*1024)failure=Error('容量上限');},error:e=>failure=e});encoder.configure(config);
-        await document.fonts.ready;guard();
+        await document.fonts.ready;await checkpoint();
         // Export clock: no live preview tick. Each frame has a unique fixed timestamp.
         cursor=sampleRow;previous=null;fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});
         core.load(doc,{startAt:0});core.stopAuto();applySettings();enter(rows[cursor]);
         let count=0;const expected=Math.ceil((benchmark?Math.min(1,total-sampleStart):total)*fps-1e-8),animationClock=new WeakMap(),videoClock=new WeakMap();
-        const settle=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        const settle=async()=>{for(let i=0;i<2;i++){await checkpoint();await new Promise(resolve=>{let id,t;const done=()=>{cancelAnimationFrame(id);clearTimeout(t);resolve();};id=requestAnimationFrame(done);t=setTimeout(done,100);});}await checkpoint();};
         async function renderAt(t){
-          guard();let i=cursor;while(i<rows.length-1&&t>=ends[i]-1e-8)i++;
-          const changed=i!==cursor;let phase=performance.now();if(changed){previous=rows[cursor];cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
+          await checkpoint();let i=cursor;while(i<rows.length-1&&t>=ends[i]-1e-8)i++;
+          const changed=i!==cursor;let phase=performance.now();if(changed){spriteState=null;rasterCache.clear();lastSVG=null;lastImage=null;overlaySVG=null;baseKey=null;baseImage=null;previous=rows[cursor];cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
           // Allow deferred DOM mounting, then freeze native animations at export time.
-          if(changed||t===sampleStart)await settle();guard();perf.settle+=performance.now()-phase;phase=performance.now();
+          if(changed||t===sampleStart)await settle();await checkpoint();perf.settle+=performance.now()-phase;phase=performance.now();
           for(const anim of frame.getAnimations({subtree:true})){
             let base=animationClock.get(anim);if(base===undefined){base=t;animationClock.set(anim,base);}
             if(anim.playState!=='paused')anim.pause();anim.currentTime=Math.max(0,(t-base)*1000);
@@ -11215,23 +11221,23 @@ async function makeStoreZip(entries,onProgress=null){
             v.ontimeupdate=null;v.onended=null;v.pause();
             if(Math.abs(v.currentTime-target)>.002)v.currentTime=target;
           }
-          await awaitVideoFrames();guard();perf.videoMs+=performance.now()-videoStart;perf.seek+=performance.now()-phase;phase=performance.now();await snapshot();perf.snapshot+=performance.now()-phase;
+          await awaitVideoFrames();await checkpoint();perf.videoMs+=performance.now()-videoStart;perf.seek+=performance.now()-phase;phase=performance.now();await snapshot();perf.snapshot+=performance.now()-phase;
         }
         for(;count<expected;count++){
-          const t=sampleStart+count/fps;await renderAt(t);guard();
+          const t=sampleStart+count/fps;await renderAt(t);await checkpoint();
           const encStart=performance.now();const stamp=Math.round(count*1e6/fps),next=Math.round(Math.min(total,(count+1)/fps)*1e6);
           const vf=new VideoFrame(canvas,{timestamp:stamp,duration:Math.max(1,next-stamp)});
           try{encoder.encode(vf,{keyFrame:count%fps===0});}finally{vf.close();}
-          while(encoder.encodeQueueSize>2){await wait(20);guard();}
-          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);status.textContent='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((performance.now()-begin)/1000)+'秒';await wait(0);
+          while(encoder.encodeQueueSize>2){await wait(20);await checkpoint();}
+          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);status.textContent='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒';await wait(0);
         }
-        dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
+        dispose();spriteState=null;rasterCache.clear();cache.clear();lastSVG=null;lastImage=null;overlaySVG=null;baseImage=null;canvas.width=overlayCanvas.width=spriteCanvas.width=0;await checkpoint();await encoder.flush();await checkpoint();encoder.close();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
         if(benchmark){
-          const elapsed=(performance.now()-begin)/1000;
+          const elapsed=(activeNow()-begin)/1000;
           const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\nベール直接合成 '+perf.veilFrames+'フレーム / 非表示疑似要素省略 '+perf.pseudoSkipped+'回 / Transform直接合成 '+perf.transformFrames+'フレーム / 階層合成 '+perf.hierarchyFrames+'フレーム\n演出更新 '+(perf.animationMs/1000).toFixed(2)+'秒 / 動画準備・シーク '+(perf.videoMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
-        status.textContent='音声合成・エンコード中…';const audio=await mixExportAudio(videoSpans,guard);guard();
+        status.textContent='音声合成・エンコード中…';const audio=await mixExportAudio(videoSpans,checkpoint);await checkpoint();
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
@@ -11243,10 +11249,10 @@ async function makeStoreZip(entries,onProgress=null){
         const hz=new Uint8Array(8);new DataView(hz.buffer).setFloat64(0,48000);
         const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),ui(0x23e383,Math.round(1e9/fps)),el(0xe0,ui(0xb0,width),ui(0xba,height))),...(audio?[el(0xae,ui(0xd7,2),ui(0x73c5,2),ui(0x83,2),txt(0x86,'A_OPUS'),el(0x63a2,audio.head),ui(0x56aa,audio.delay),ui(0x56bb,80000000),el(0xe1,el(0xb5,hz),ui(0x9f,2)))]:[]));
         const clusters=[];let base=0,blocks=[];function finish(){if(blocks.length)clusters.push(el(0x1f43b675,ui(0xe7,base),...blocks));blocks=[];}
-        for(const p of [...packets,...(audio?.packets||[])].sort((a,b)=>a.t-b.t||Number(!!a.audio)-Number(!!b.audio))){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;}const rel=t-base,block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();
+        for(const p of [...packets,...(audio?.packets||[])].sort((a,b)=>a.t-b.t||Number(!!a.audio)-Number(!!b.audio))){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;}const rel=t-base,block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();packets.length=0;if(audio)audio.packets.length=0;
         const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
-        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=audio?'ahako-internal-audio.webm':'ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了 '+(audio?'音声 '+audio.events+'区間 / 48kHz Opus ｜ ':'音声素材なし ｜ ')+count+'フレーム ｜ '+Math.round((performance.now()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'フレーム';
-      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';spriteObserver.disconnect();spriteState=null;spriteCanvas.width=0;cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
+        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=audio?'ahako-internal-audio.webm':'ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);status.textContent='内部描画完了 '+(audio?'音声 '+audio.events+'区間 / 48kHz Opus ｜ ':'音声素材なし ｜ ')+count+'フレーム ｜ '+Math.round((activeNow()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'フレーム';
+      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';document.removeEventListener('visibilitychange',visibility);spriteObserver.disconnect();spriteState=null;canvas.width=overlayCanvas.width=spriteCanvas.width=0;baseImage=null;overlaySVG=null;videoSpans.length=0;cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。区間停止後は区間先頭から再生します。フレーム単位の停止・音声同期・同時表示グループは未保証です。';
