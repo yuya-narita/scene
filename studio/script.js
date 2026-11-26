@@ -10896,30 +10896,36 @@ async function makeStoreZip(entries,onProgress=null){
         }
         ctx.drawImage(baseImage,0,0,width,height);
       }
-      // b5: cache premultiplied foreground endpoint sprites for a single opacity group.
-      // Other animation properties and multiple groups retain the b3 renderer.
+      // b6: independent opacity sprites; preserve layout and reject unsafe overlap.
       let spriteState=null;
-      const spriteObserver=new MutationObserver(()=>{spriteState=null;});
+      const spriteReasons=new Map();
+      const spriteReject=(why)=>{spriteReasons.set(why,(spriteReasons.get(why)||0)+1);return false;};
+      const spriteObserver=new MutationObserver(records=>{if(records.some(spriteRelevant))spriteState=null;});
+      function spriteRelevant(r){return !r.target.closest?.('.sp-background');}
       spriteObserver.observe(frame,{subtree:true,attributes:true,childList:true,characterData:true});
       const spriteCanvas=document.createElement('canvas');spriteCanvas.width=width;spriteCanvas.height=height;
       const spriteCtx=spriteCanvas.getContext('2d');
       function spriteCandidate(split){
-        if(frame.querySelector('canvas,iframe,svg animate,svg animateTransform'))return null;
         const targets=new Set();
+        const visible=n=>{for(let x=n;x&&x!==frame.parentElement;x=x.parentElement){const c=getComputedStyle(x);if(x.hidden||c.display==='none'||c.visibility==='hidden')return false;}return true;};
+        for(const n of frame.querySelectorAll('canvas,iframe,svg animate,svg animateTransform'))if(visible(n))return spriteReject('特殊描画: '+n.tagName);
         for(const a of frame.getAnimations({subtree:true})){
-          const e=a.effect,n=e?.target;if(!n||!e.getKeyframes)return null;
-          if(split.bg.contains(n))continue;
-          if(e.pseudoElement)return null;
-          const keys=e.getKeyframes().flatMap(k=>Object.keys(k)).filter(k=>!['offset','computedOffset','easing','composite'].includes(k));
-          if(!keys.length||keys.some(k=>k!=='opacity')||!n.matches('.sp-scene,.sp-text,.sp-subtext,.sp-handdrawn-frame,.sp-scene-image-object'))return null;
+          const e=a.effect,n=e?.target;if(!n||!e.getKeyframes)return spriteReject('演出対象不明');
+          if(split.bg.contains(n)||!visible(n))continue;
+          if(e.pseudoElement)return spriteReject('疑似要素演出');
+          const keys=[...new Set(e.getKeyframes().flatMap(k=>Object.keys(k)).filter(k=>!['offset','computedOffset','easing','composite'].includes(k)))];
+          if(!keys.length||keys.some(k=>k!=='opacity'))return spriteReject('非対応演出: '+n.className+' / '+keys.join(','));
+          if(!n.matches('.sp-scene,.sp-text,.sp-subtext,.sp-handdrawn-frame,.sp-scene-image-object'))return spriteReject('対象外: '+n.className);
           targets.add(n);
         }
-        if(targets.size>1)return null;
-        const target=targets.values().next().value||null;
-        if(target){const c=getComputedStyle(target);if(c.display==='none'||c.visibility!=='visible'||c.mixBlendMode!=='normal')return null;}
-        return {target,alpha:target?Number(getComputedStyle(target).opacity):1};
+        const list=[...targets];if(list.length>4)return spriteReject('独立要素上限: '+list.length);
+        for(const n of list){
+          if(list.some(m=>m!==n&&(m.contains(n)||n.contains(m))))return spriteReject('入れ子演出');
+          for(let x=n.parentElement;x&&x!==frame.parentElement;x=x.parentElement){const c=getComputedStyle(x);if(Number(c.opacity)!==1||c.filter!=='none'||c.mixBlendMode!=='normal'||(c.maskImage&&c.maskImage!=='none'))return spriteReject('祖先の合成効果: '+x.className);}
+        }
+        return list;
       }
-      async function makeSVG(fw,fh,split,opacityTarget=null,opacityValue=1){
+      async function makeSVG(fw,fh,split,opacityTarget=null,opacityValue=1,overrides=null){
         const styleStart=performance.now();const root=frame.cloneNode(true), originals=[frame,...frame.querySelectorAll('*')],copies=[root,...root.querySelectorAll('*')],pending=[];
         const skipped=new Set();
         for(let i=0;i<originals.length;i++){
@@ -10940,6 +10946,7 @@ async function makeStoreZip(entries,onProgress=null){
           if(!dst.style)continue;
           for(const key of cs){if(key.startsWith('--'))continue;const value=cs.getPropertyValue(key);if(value.includes('url(')){const target=dst;pending.push((async()=>{let result=value;for(const m of value.matchAll(/url\(["']?([^"')]+)["']?\)/g)){if(m[1].startsWith('#'))continue;result=result.replace(m[0],'url("'+await inlineURL(m[1])+'")');}target.style.setProperty(key,result);})());}else dst.style.setProperty(key,value);}
           if(src===opacityTarget)dst.style.setProperty('opacity',String(opacityValue),'important');
+          if(overrides?.has(src))dst.style.setProperty('opacity',String(overrides.get(src)),'important');
           if(split&&(src===frame||src===host)){dst.style.setProperty('background','transparent','important');}
           dst.style.setProperty('animation','none','important');dst.style.setProperty('transition','none','important');
           if(src instanceof HTMLImageElement){const target=dst;pending.push(inlineURL(src.currentSrc||src.src).then(v=>{target.removeAttribute('srcset');target.src=v;}));}
@@ -10957,26 +10964,48 @@ async function makeStoreZip(entries,onProgress=null){
         const t=performance.now(),img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();perf.decodeMs+=performance.now()-t;guard();
         const c=document.createElement('canvas');c.width=width;c.height=height;c.getContext('2d').drawImage(img,0,0,width,height);return c;
       }
+      // Each opacity group uses a separate endpoint pair relative to the same static
+      // foreground. Disjoint changed pixels permit exact independent interpolation.
+      // Overlapping groups retain the full snapshot path.
       async function paintSprite(split,fw,fh){
         const t=performance.now();
-        if(spriteObserver.takeRecords().length)spriteState=null;
-        const candidate=spriteCandidate(split);if(!candidate){spriteState=null;return false;}
-        const {target,alpha}=candidate;
-        if(!Number.isFinite(alpha)||alpha<0||alpha>1)return false;
-        if(!spriteState||spriteState.target!==target||spriteState.row!==cursor||spriteState.fw!==fw||spriteState.fh!==fh){
-          const low=target?await spriteImage(await makeSVG(fw,fh,split,target,0)):null;
-          const high=await spriteImage(await makeSVG(fw,fh,split,target,.999999));
-          // DOM changed while rasterizing: do not reuse stale sprites.
-          if(spriteObserver.takeRecords().length){spriteState=null;return false;}
-          spriteState={target,row:cursor,fw,fh,low,high};perf.spriteBuilds++;
+        if(spriteObserver.takeRecords().some(spriteRelevant))spriteState=null;
+        const targets=spriteCandidate(split);if(!targets){spriteState=null;return false;}
+        const alphas=targets.map(n=>Number(getComputedStyle(n).opacity));
+        if(alphas.some(a=>!Number.isFinite(a)||a<0||a>1))return spriteReject('透明度不正');
+        const same=spriteState&&spriteState.row===cursor&&spriteState.fw===fw&&spriteState.fh===fh&&targets.length===spriteState.targets.length&&targets.every((n,i)=>n===spriteState.targets[i]);
+        if(!same){
+          spriteState=null;
+          if(width*height*4*(targets.length+2)>32*1024*1024)return spriteReject('スプライトメモリ上限');
+          const zero=new Map(targets.map(n=>[n,0]));
+          const base=await spriteImage(await makeSVG(fw,fh,split,null,1,zero));
+          const layers=[];const occupied=new Uint8Array(width*height);
+          const baseData=targets.length?base.getContext('2d').getImageData(0,0,width,height).data:null;
+          for(const n of targets){
+            const one=new Map(zero);one.set(n,.999999);
+            const img=await spriteImage(await makeSVG(fw,fh,split,null,1,one));
+            const data=img.getContext('2d').getImageData(0,0,width,height).data;
+            let left=width,top=height,right=-1,bottom=-1;
+            for(let i=0,j=0;i<data.length;i+=4,j++){
+              if(data[i]===baseData[i]&&data[i+1]===baseData[i+1]&&data[i+2]===baseData[i+2]&&data[i+3]===baseData[i+3])continue;
+              if(occupied[j])return spriteReject('独立要素の画素重複');occupied[j]=1;
+              const x=j%width,y=Math.floor(j/width);left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+            }
+            if(right>=0)layers.push({n,img,x:left,y:top,w:right-left+1,h:bottom-top+1});
+          }
+          // Rectangles must also be disjoint, because each includes static pixels.
+          for(let i=0;i<layers.length;i++)for(let j=0;j<i;j++){const a=layers[i],b=layers[j];if(a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h)return spriteReject('独立領域の矩形重複');}
+          if(spriteObserver.takeRecords().some(spriteRelevant))return spriteReject('生成中のDOM更新');
+          spriteState={targets,row:cursor,fw,fh,base,layers};perf.spriteBuilds+=1+layers.length;
         }else perf.spriteHits++;
-        const st=spriteState;if(!st)return false;
-        spriteCtx.clearRect(0,0,width,height);spriteCtx.save();try{
-          if(st.low){spriteCtx.globalAlpha=1-alpha;spriteCtx.drawImage(st.low,0,0);spriteCtx.globalCompositeOperation='lighter';spriteCtx.globalAlpha=alpha;}
-          spriteCtx.drawImage(st.high,0,0);
-        }finally{spriteCtx.restore();}
-          ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
-          const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;
+        const st=spriteState;if(!st)return spriteReject('生成中の状態変更');
+        spriteCtx.clearRect(0,0,width,height);spriteCtx.drawImage(st.base,0,0);
+        for(const l of st.layers){const a=alphas[targets.indexOf(l.n)];spriteCtx.save();try{
+          spriteCtx.clearRect(l.x,l.y,l.w,l.h);spriteCtx.globalAlpha=1-a;spriteCtx.drawImage(st.base,l.x,l.y,l.w,l.h,l.x,l.y,l.w,l.h);
+          spriteCtx.globalCompositeOperation='lighter';spriteCtx.globalAlpha=a;spriteCtx.drawImage(l.img,l.x,l.y,l.w,l.h,l.x,l.y,l.w,l.h);
+        }finally{spriteCtx.restore();}}
+        ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
+        const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;
         ctx.drawImage(spriteCanvas,0,0);perf.spriteFrames++;perf.spriteMs+=performance.now()-t;return true;
       }
       async function snapshot(){
@@ -10984,7 +11013,7 @@ async function makeStoreZip(entries,onProgress=null){
         const split=splitBackground(fw,fh);
         if(split){
           if(await paintSprite(split,fw,fh)){perf.split++;return;}
-        }else spriteState=null;
+        }else{spriteState=null;spriteReject('背景分離不可');}
         const svg=await makeSVG(fw,fh,split);
         let img=lastImage;if(svg!==lastSVG||!img){
           const cached=split?rasterCache.get(svg):null;
@@ -11051,7 +11080,7 @@ async function makeStoreZip(entries,onProgress=null){
         dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
         if(benchmark){
           const elapsed=(performance.now()-begin)/1000;
-          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\n不採用理由（最初の条件）: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
+          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
