@@ -10722,15 +10722,25 @@ async function makeStoreZip(entries,onProgress=null){
     const rows=plan.rows.filter(r=>r.included).map(r=>({...r}));
     if(!rows.length){appAlert('再生する区間を選択してください。');return;}
     const doc=clone(plan.source), total=rows.reduce((n,r)=>n+r.seconds,0);
-    const dialog=document.createElement('dialog');dialog.className='sv-preview403';
-    dialog.style.cssText='width:min(96vw,900px);max-height:96vh;padding:12px;overflow:auto;background:Canvas;color:CanvasText';
-    const controls=document.createElement('div');controls.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px';
+    const dialog=document.createElement('dialog');dialog.className='sv-preview404';
+    const controls=document.createElement('div');controls.className='sv-preview-controls';
     const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;controls.append(b);return b;};
-    const status=document.createElement('div'), progress=document.createElement('progress');progress.max=total;progress.value=0;progress.style.width='100%';
-    const host=document.createElement('div');const [w,h]=plan.ratio.split(':').map(Number);
-    host.style.cssText=`position:relative;overflow:hidden;margin:auto;width:min(100%,${Math.floor(68*w/h)}vh);aspect-ratio:${w}/${h};background:#000;pointer-events:none`;
+    const status=document.createElement('div'), progress=document.createElement('progress');progress.max=total;progress.value=0;
+    const stage=document.createElement('div');stage.className='sv-preview-stage';
+    const frame=document.createElement('div');frame.className='sv-preview-frame';
+    const host=document.createElement('div');host.className='sv-video-render';
+    const [w,h]=plan.ratio.split(':').map(Number);
+    const mark=document.createElement('div');mark.className='sv-watermark';mark.textContent='あ□';
+    const guide=document.createElement('div');guide.className='sv-safe-guide';guide.hidden=true;
+    frame.append(host,mark,guide);stage.append(frame);
+    function fit(){const width=Math.max(1,Math.floor(Math.min(stage.clientWidth,stage.clientHeight*w/h)));frame.style.width=width+'px';frame.style.height=Math.floor(width*h/w)+'px';}
+    const observer=new ResizeObserver(fit);observer.observe(stage);
+    const settings=plan.renderSettings||(plan.renderSettings={title:true,watermark:true,guide:false});
+    function applySettings(){host.classList.toggle('sv-hide-title',!settings.title);mark.hidden=!settings.watermark;guide.hidden=!settings.guide;}
+    function toggle(label,key){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.checked=settings[key];c.onchange=()=>{settings[key]=c.checked;applySettings();};l.append(c,document.createTextNode(label));controls.append(l);}
     let core=null, timer=0, running=false, cursor=0, started=0, previous=null;
-    function dispose(){clearInterval(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
+    const ends=[];rows.reduce((n,r)=>{ends.push(n+r.seconds);return n+r.seconds;},0);
+    function dispose(){cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
     function stop(message='停止'){dispose();status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
     function enter(r){
       if(r.kind==='cover'){core.showCover();return;}
@@ -10739,16 +10749,21 @@ async function makeStoreZip(entries,onProgress=null){
       if(contiguous){core._finishVisibleEntranceEffects();core._clearPresentationTimers();core.index=r.index;core.maxVisitedIndex=Math.max(core.maxVisitedIndex,r.index);core._audioRenderMode='advance';core._render();}
       else {core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.goTo(r.index);core._queueInitialOneShots(doc.scenes[r.index]);}
     }
-    function tick(){if(!running)return;try{const elapsed=(performance.now()-started)/1000;progress.value=Math.min(total,elapsed);let end=0,i=0;for(;i<rows.length;i++){end+=rows[i].seconds;if(elapsed<end)break;}
-      if(i>=rows.length){stop('再生完了');progress.value=total;return;}
-      if(i!==cursor){previous=rows[cursor];cursor=i;enter(rows[i]);}
+    function tick(){if(!running)return;try{const elapsed=(performance.now()-started)/1000;progress.value=Math.min(total,elapsed);
+      if(elapsed>=total){stop('再生完了');progress.value=total;return;}
+      // Never fire skipped interval audio in a burst after a stalled frame.
+      let i=cursor;while(i<rows.length-1&&elapsed>=ends[i])i++;
+      if(i!==cursor){previous=i===cursor+1?rows[cursor]:null;cursor=i;enter(rows[i]);}
       const r=rows[i];status.textContent=(r.kind==='scene'?'Scene '+(r.index+1):r.label)+' ｜ '+elapsed.toFixed(2)+' / '+total.toFixed(2)+'秒';
+      timer=requestAnimationFrame(tick);
     }catch(e){stop('再生エラー：'+String(e));}}
-    function start(){dispose();progress.value=0;cursor=0;previous=null;try{core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();enter(rows[0]);started=performance.now();running=true;timer=setInterval(tick,25);tick();}catch(e){stop('再生エラー：'+String(e));}}
+    function start(){dispose();interruptAutoDelivery();progress.value=0;cursor=0;previous=null;try{fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();applySettings();enter(rows[0]);started=performance.now();running=true;tick();}catch(e){stop('再生エラー：'+String(e));}}
     button('先頭から再生',start);button('停止',()=>stop());button('閉じる',()=>dialog.close());
+    toggle('上部タイトル','title');toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');applySettings();
     status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
-    const note=document.createElement('p');note.textContent='試験再生：非連続Sceneは元作品の継承状態を復元します。音声・演出の厳密な時間同期、一時停止・シーク、同時表示グループは未保証です。';note.style.fontSize='12px';
-    dialog.append(controls,status,progress,host,note);document.body.append(dialog);dialog.addEventListener('close',()=>{dispose();dialog.remove();scheduleAutoDelivery();},{once:true});dialog.showModal();
+    const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。音声・演出のフレーム精度、一時停止・シーク、同時表示グループは未保証です。';
+    function onVisibility(){if(document.hidden&&running)stop('タブ非表示のため停止');}
+    dialog.append(controls,status,progress,stage,note);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
   }
   let shortVideoPlan=null;
   function openShortVideoPlan(){
