@@ -10739,6 +10739,9 @@ async function makeStoreZip(entries,onProgress=null){
     function applySettings(){host.classList.toggle('sv-hide-title',!settings.title);mark.hidden=!settings.watermark;guide.hidden=!settings.guide;}
     function toggle(label,key){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.checked=settings[key];c.onchange=()=>{settings[key]=c.checked;applySettings();};l.append(c,document.createTextNode(label));controls.append(l);}
     let core=null, timer=0, running=false, cursor=0, started=0, previous=null;
+    const jump=document.createElement('select');jump.setAttribute('aria-label','再生開始区間');
+    rows.forEach((r,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=r.kind==='scene'?'Scene '+(r.index+1):r.label;jump.append(o);});
+    const pauseButton=document.createElement('button');pauseButton.type='button';pauseButton.textContent='区間停止';
     const ends=[];rows.reduce((n,r)=>{ends.push(n+r.seconds);return n+r.seconds;},0);
     function dispose(){cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
     function stop(message='停止'){dispose();status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
@@ -10754,15 +10757,15 @@ async function makeStoreZip(entries,onProgress=null){
       if(elapsed>=total){stop('再生完了');progress.value=total;return;}
       // Never fire skipped interval audio in a burst after a stalled frame.
       let i=cursor;while(i<rows.length-1&&elapsed>=ends[i])i++;
-      if(i!==cursor){previous=i===cursor+1?rows[cursor]:null;cursor=i;enter(rows[i]);}
+      if(i!==cursor){previous=i===cursor+1?rows[cursor]:null;cursor=i;jump.value=String(i);enter(rows[i]);}
       const r=rows[i];status.textContent=(r.kind==='scene'?'Scene '+(r.index+1):r.label)+' ｜ '+elapsed.toFixed(2)+' / '+total.toFixed(2)+'秒';
       timer=requestAnimationFrame(tick);
     }catch(e){stop('再生エラー：'+String(e));}}
-    function start(){dispose();interruptAutoDelivery();progress.value=0;cursor=0;previous=null;try{fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();applySettings();enter(rows[0]);started=performance.now();running=true;tick();}catch(e){stop('再生エラー：'+String(e));}}
-    button('先頭から再生',start);button('停止',()=>stop());button('閉じる',()=>dialog.close());
+    function start(at=0){dispose();interruptAutoDelivery();cursor=Math.max(0,Math.min(rows.length-1,at));jump.value=String(cursor);const offset=cursor?ends[cursor-1]:0;progress.value=offset;previous=null;try{fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();applySettings();enter(rows[cursor]);started=performance.now()-offset*1000;running=true;pauseButton.textContent='区間停止';tick();}catch(e){stop('再生エラー：'+String(e));}}
+    button('先頭から再生',()=>start(0));button('停止',()=>{stop();pauseButton.textContent='区間から再生';});controls.append(jump);button('選択区間から再生',()=>start(Number(jump.value)));pauseButton.onclick=()=>{if(running){stop('区間停止（再開時は区間先頭）');pauseButton.textContent='区間から再生';}else start(Number(jump.value));};controls.append(pauseButton);button('閉じる',()=>dialog.close());
     toggle('上部タイトル','title');toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');applySettings();
     status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
-    const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。音声・演出のフレーム精度、一時停止・シーク、同時表示グループは未保証です。';
+    const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。区間停止後は区間先頭から再生します。フレーム単位の停止・音声同期・同時表示グループは未保証です。';
     function onVisibility(){if(document.hidden&&running)stop('タブ非表示のため停止');}
     dialog.append(controls,status,progress,stage,note);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
   }
@@ -10777,6 +10780,17 @@ async function makeStoreZip(entries,onProgress=null){
       shortVideoPlan={source,signature,ratio:'9:16',rows:[{kind:'cover',label:'表紙',seconds:2.6,included:false},...source.scenes.map((s,i)=>({kind:'scene',index:i,label:scenePreviewText(s),seconds:duration(liveTimingSeconds(s)),included:true})),{kind:'ending',label:'読了',seconds:2.6,included:false}]};
     }
     const plan=shortVideoPlan;
+    const rowKey=r=>r.kind==='scene'?'scene:'+r.index:r.kind;
+    // Explicit portable plan files, no media or original document mutation.
+    const snapshot=()=>({format:'ahako-short-video-plan',version:1,signature,ratio:plan.ratio,renderSettings:plan.renderSettings||{title:true,watermark:true,guide:false},rows:plan.rows.map(r=>({key:rowKey(r),seconds:r.seconds,included:r.included}))});
+    function restore(data){
+      if(data?.format!=='ahako-short-video-plan'||data.version!==1||data.signature!==signature||!['9:16','16:9','1:1'].includes(data.ratio)||!Array.isArray(data.rows)||data.rows.length!==plan.rows.length)throw Error('作品または制作プランの形式が一致しません。');
+      const byKey=new Map(plan.rows.map(r=>[rowKey(r),r]));const seen=new Set();
+      const next=data.rows.map(v=>{const r=byKey.get(v?.key);if(!r||seen.has(v.key)||typeof v.included!=='boolean'||!Number.isFinite(v.seconds)||v.seconds<.15||v.seconds>600)throw Error('区間設定が不正です。');seen.add(v.key);return {r,v};});
+      for(const {r,v} of next){r.seconds=Math.round(v.seconds*100)/100;r.included=v.included;inputs.get(r).time.value=r.seconds.toFixed(2);}
+      plan.rows.splice(0,plan.rows.length,...next.map(x=>x.r));plan.ratio=data.ratio;select.value=plan.ratio;
+      const rs=data.renderSettings;plan.renderSettings={title:rs?.title!==false,watermark:rs?.watermark!==false,guide:rs?.guide===true};refresh();
+    }
     const dialog=document.createElement('dialog');dialog.className='sv-plan402';dialog.setAttribute('aria-label','ショート動画制作');
     const el=(tag,value,parent,cls)=>{const n=document.createElement(tag);if(value!==null)n.textContent=value;if(cls)n.className=cls;if(parent)parent.append(n);return n;};
     const btn=(label,parent,fn)=>{const b=el('button',label,parent);b.type='button';b.onclick=fn;return b;};
@@ -10787,7 +10801,7 @@ async function makeStoreZip(entries,onProgress=null){
     const summary=el('div','',settings,'sv-summary');
     const timeline=el('div',null,dialog,'sv-timeline');timeline.setAttribute('aria-label','選択区間のタイムライン');
     const note=el('p','',dialog,'sv-note');
-    el('p','試験プレビュー対応。厳密な映像・音声同期は未保証です。元作品は変更しません（セッション内限定）。',dialog,'sv-note');
+    el('p','試験プレビュー対応。厳密な映像・音声同期は未保証です。元作品は変更しません。制作プランは別ファイルに保存できます。',dialog,'sv-note');
     const actions=el('div',null,dialog,'sv-actions');const list=el('div',null,dialog,'sv-list');const inputs=new Map();
     const originalOrder=plan.rows.slice().sort((a,b)=>orderKey(a)-orderKey(b));
     function orderKey(r){return r.kind==='cover'?-1:r.kind==='ending'?Infinity:r.index;}
@@ -10808,6 +10822,9 @@ async function makeStoreZip(entries,onProgress=null){
     }
     function setAll(value){plan.rows.forEach(r=>r.included=value);refresh();}
     btn('動画プレビュー（試験）',actions,()=>previewShortVideoPlan(plan));
+    btn('制作プランを保存',actions,()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ahako-short-video-plan.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);});
+    const planFile=el('input',null,actions);planFile.type='file';planFile.accept='.json,application/json';planFile.hidden=true;
+    btn('制作プランを読み込む',actions,()=>planFile.click());planFile.onchange=async()=>{try{const f=planFile.files[0];if(!f)return;if(f.size>5000000)throw Error('制作プランが大きすぎます。');restore(JSON.parse(await f.text()));}catch(e){appAlert('制作プランを読み込めません：'+String(e.message||e));}finally{planFile.value='';}};
     btn('すべて選択',actions,()=>setAll(true));btn('すべて解除',actions,()=>setAll(false));btn('秒数を初期化',actions,()=>{plan.rows.forEach((r,i)=>{r.seconds=r.kind==='scene'?duration(liveTimingSeconds(source.scenes[r.index])):2.6;inputs.get(r).time.value=fmt(r.seconds);});refresh();});
     btn('元の順番に戻す',actions,()=>{plan.rows.splice(0,plan.rows.length,...originalOrder);refresh();});
     el('p','上のタイムラインをドラッグ、または各行の矢印で順序変更できます。',dialog,'sv-note');
