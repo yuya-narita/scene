@@ -10818,7 +10818,8 @@ async function makeStoreZip(entries,onProgress=null){
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';cancel.onclick=()=>{job.cancelled=true;};
       const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
-      const cache=new Map(),packets=[];let encoder,failure,bytesUsed=0;
+      const cache=new Map(),packets=[];
+      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0},begin=performance.now();let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
@@ -10833,7 +10834,7 @@ async function makeStoreZip(entries,onProgress=null){
           if(!pending.length)return;
           if(pending.some(v=>v.error))throw Error(name(rows[cursor])+'：背景動画の読み込みエラー');
           if(performance.now()-began>12000)throw Error(name(rows[cursor])+'：背景動画の準備が12秒以内に完了しませんでした');
-          status.textContent=name(rows[cursor])+' ｜ 背景動画の準備待ち…';await wait(50);
+          status.textContent=name(rows[cursor])+' ｜ 背景動画の準備待ち…';await wait(10);
         }
       }
       async function snapshot(){
@@ -10843,7 +10844,11 @@ async function makeStoreZip(entries,onProgress=null){
           const src=originals[i];let dst=copies[i];const cs=getComputedStyle(src);
           if(src instanceof HTMLVideoElement||src instanceof HTMLCanvasElement){
             if(src instanceof HTMLVideoElement){if(!visibleVideo(src)){dst.remove();continue;}if(src.readyState<2||src.seeking||!src.videoWidth)throw Error('背景動画の準備ができていません');}
-            const c=document.createElement('canvas');c.width=src.videoWidth||src.width;c.height=src.videoHeight||src.height;if(!c.width||!c.height){dst.remove();continue;}c.getContext('2d').drawImage(src,0,0);const img=document.createElement('img');img.src=c.toDataURL('image/png');dst.replaceWith(img);dst=img;
+            const c=document.createElement('canvas');c.width=src.videoWidth||src.width;c.height=src.videoHeight||src.height;if(!c.width||!c.height){dst.remove();continue;}
+            const key=src instanceof HTMLVideoElement?(src.currentSrc+'|'+src.currentTime+'|'+c.width+'|'+c.height):null;
+            let entry=key!==null?mediaCache.get(src):null;
+            if(!entry||entry.key!==key){c.getContext('2d').drawImage(src,0,0);entry={key,data:c.toDataURL('image/png')};if(key!==null)mediaCache.set(src,entry);}
+            const img=document.createElement('img');img.src=entry.data;dst.replaceWith(img);dst=img;
           }
           if(!dst.style)continue;
           for(const key of cs){if(key.startsWith('--'))continue;const value=cs.getPropertyValue(key);if(value.includes('url(')){const target=dst;pending.push((async()=>{let result=value;for(const m of value.matchAll(/url\(["']?([^"')]+)["']?\)/g)){if(m[1].startsWith('#'))continue;result=result.replace(m[0],'url("'+await inlineURL(m[1])+'")');}target.style.setProperty(key,result);})());}else dst.style.setProperty(key,value);}
@@ -10856,7 +10861,7 @@ async function makeStoreZip(entries,onProgress=null){
         root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
         const xml=new XMLSerializer().serializeToString(root);
         const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
-        const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
+        let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));try{img.src=url;await img.decode();}finally{URL.revokeObjectURL(url);}lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
       }
       try{
         settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
@@ -10870,9 +10875,9 @@ async function makeStoreZip(entries,onProgress=null){
         const settle=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
         async function renderAt(t){
           guard();let i=cursor;while(i<rows.length-1&&t>=ends[i]-1e-8)i++;
-          if(i!==cursor){previous=rows[cursor];cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
+          const changed=i!==cursor;let phase=performance.now();if(changed){previous=rows[cursor];cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
           // Allow deferred DOM mounting, then freeze native animations at export time.
-          await settle();guard();
+          if(changed||t===0)await settle();guard();perf.settle+=performance.now()-phase;phase=performance.now();
           for(const anim of frame.getAnimations({subtree:true})){
             let base=animationClock.get(anim);if(base===undefined){base=t;animationClock.set(anim,base);}
             anim.pause();anim.currentTime=Math.max(0,(t-base)*1000);
@@ -10899,15 +10904,15 @@ async function makeStoreZip(entries,onProgress=null){
             v.ontimeupdate=null;v.onended=null;v.pause();
             if(Math.abs(v.currentTime-target)>.002)v.currentTime=target;
           }
-          await awaitVideoFrames();guard();await snapshot();
+          await awaitVideoFrames();guard();perf.seek+=performance.now()-phase;phase=performance.now();await snapshot();perf.snapshot+=performance.now()-phase;
         }
         for(;count<expected;count++){
           const t=count/fps;await renderAt(t);guard();
-          const stamp=Math.round(count*1e6/fps),next=Math.round(Math.min(total,(count+1)/fps)*1e6);
+          const encStart=performance.now();const stamp=Math.round(count*1e6/fps),next=Math.round(Math.min(total,(count+1)/fps)*1e6);
           const vf=new VideoFrame(canvas,{timestamp:stamp,duration:Math.max(1,next-stamp)});
           try{encoder.encode(vf,{keyFrame:count%fps===0});}finally{vf.close();}
           while(encoder.encodeQueueSize>2){await wait(20);guard();}
-          progress.value=Math.min(total,(count+1)/fps);status.textContent='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム';await wait(0);
+          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);status.textContent='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((performance.now()-begin)/1000)+'秒';await wait(0);
         }
         dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
@@ -10922,8 +10927,8 @@ async function makeStoreZip(entries,onProgress=null){
         const clusters=[];let base=0,blocks=[];function finish(){if(blocks.length)clusters.push(el(0x1f43b675,ui(0xe7,base),...blocks));blocks=[];}
         for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
         const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
-        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了（映像のみ） '+count+'フレーム';
-      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
+        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了 '+count+'フレーム ｜ '+Math.round((performance.now()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回';
+      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。区間停止後は区間先頭から再生します。フレーム単位の停止・音声同期・同時表示グループは未保証です。';
