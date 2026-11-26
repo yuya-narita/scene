@@ -10724,7 +10724,9 @@ async function makeStoreZip(entries,onProgress=null){
     const doc=clone(plan.source); let total=rows.reduce((n,r)=>n+r.seconds,0);
     const dialog=document.createElement('dialog');dialog.className='sv-preview404';
     const controls=document.createElement('div');controls.className='sv-preview-controls';
-    const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;controls.append(b);return b;};
+    const iconPaths={first:'<path d="M5 5v14M19 5l-11 7 11 7z"/>',play:'<path d="m8 5 12 7-12 7z"/>',stop:'<rect x="6" y="6" width="12" height="12" rx="1"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>',left:'<path d="m14 6-6 6 6 6"/>',right:'<path d="m10 6 6 6-6 6"/>',remove:'<path d="M5 12h14"/>',save:'<path d="M5 3h12l4 4v14H3V3zM7 3v7h10V3M7 21v-7h10v7"/>',settings:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="#343a40"/><circle cx="15" cy="12" r="2" fill="#343a40"/><circle cx="9" cy="18" r="2" fill="#343a40"/>'};
+    function setIcon(b,key,label){b.innerHTML='<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+iconPaths[key]+'</svg>';b.title=label;b.setAttribute('aria-label',label);b.style.cssText='display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;flex:none';}
+    const button=(key,label,fn)=>{const b=document.createElement('button');b.type='button';setIcon(b,key,label);b.onclick=fn;controls.append(b);return b;};
     const status=document.createElement('div'), progress=document.createElement('progress');progress.max=total;progress.value=0;
     const stage=document.createElement('div');stage.className='sv-preview-stage';
     const frame=document.createElement('div');frame.className='sv-preview-frame';
@@ -10741,10 +10743,10 @@ async function makeStoreZip(entries,onProgress=null){
     let core=null, timer=0, running=false, cursor=0, started=0, previous=null;
     const jump=document.createElement('select');jump.setAttribute('aria-label','再生開始区間');
     
-    const pauseButton=document.createElement('button');pauseButton.type='button';pauseButton.textContent='区間停止';
+    const pauseButton=document.createElement('button');pauseButton.type='button';setIcon(pauseButton,'play','選択区間から再生');
     const ends=[];rows.reduce((n,r)=>{ends.push(n+r.seconds);return n+r.seconds;},0);
     function dispose(){cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
-    function stop(message='停止'){dispose();status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
+    function stop(message='停止'){dispose();setIcon(pauseButton,'play','選択区間から再生');status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
     function enter(r){
       if(previous && (previous.kind==='ending' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);applySettings();}
       if(r.kind==='cover'){core.showCover();return;}
@@ -10761,9 +10763,14 @@ async function makeStoreZip(entries,onProgress=null){
       const r=rows[i];status.textContent=(r.kind==='scene'?'Scene '+(r.index+1):r.label)+' ｜ '+elapsed.toFixed(2)+' / '+total.toFixed(2)+'秒';
       timer=requestAnimationFrame(tick);
     }catch(e){stop('再生エラー：'+String(e));}}
-    function start(at=0){if(!rows.length)return;dispose();interruptAutoDelivery();cursor=Math.max(0,Math.min(rows.length-1,at));jump.value=String(cursor);selectRow(rows[cursor]);const offset=cursor?ends[cursor-1]:0;progress.value=offset;previous=null;try{fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();applySettings();enter(rows[cursor]);started=performance.now()-offset*1000;running=true;pauseButton.textContent='区間停止';tick();}catch(e){stop('再生エラー：'+String(e));}}
-    button('先頭から再生',()=>start(0));button('停止',()=>{stop();pauseButton.textContent='区間から再生';});button('選択区間から再生',()=>start(Number(jump.value)));pauseButton.onclick=()=>{if(running){stop('区間停止（再開時は区間先頭）');pauseButton.textContent='区間から再生';}else start(Number(jump.value));};controls.append(pauseButton);button('閉じる',()=>dialog.close());
-    toggle('上部タイトル','title');toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');applySettings();
+    function start(at=0){if(!rows.length)return;dispose();interruptAutoDelivery();cursor=Math.max(0,Math.min(rows.length-1,at));jump.value=String(cursor);selectRow(rows[cursor]);const offset=cursor?ends[cursor-1]:0;progress.value=offset;previous=null;try{fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();applySettings();enter(rows[cursor]);started=performance.now()-offset*1000;running=true;setIcon(pauseButton,'stop','区間停止');tick();}catch(e){stop('再生エラー：'+String(e));}}
+    button('first','先頭から再生',()=>start(0));
+    pauseButton.onclick=()=>{if(running)stop('区間停止（再開時は区間先頭）');else start(Number(jump.value));};controls.append(pauseButton);
+    const spacer=document.createElement('span');spacer.style.flex='1';controls.append(spacer);
+    const settingsButton=button('settings','表示設定',()=>{settingsPanel.hidden=!settingsPanel.hidden;settingsPanel.style.display=settingsPanel.hidden?'none':'flex';settingsButton.setAttribute('aria-expanded',String(!settingsPanel.hidden));fit();});settingsButton.setAttribute('aria-expanded','false');
+    const closeButton=button('close','閉じる',()=>dialog.close());
+    const settingsPanel=document.createElement('div');settingsPanel.className='sv-preview-controls';settingsPanel.hidden=true;settingsPanel.style.cssText='display:none;padding:6px 0;gap:12px';
+    toggle('上部タイトル','title');toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');for(const l of Array.from(controls.querySelectorAll('label')))settingsPanel.append(l);applySettings();
     status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
 
     // Phase 4.0.7: one shared plan, no writes to source scenes.
@@ -10773,25 +10780,25 @@ async function makeStoreZip(entries,onProgress=null){
     editor.append(strip,tools);let selected=rows[0],dragged=null;
     const name=r=>r.kind==='scene'?'Scene '+(r.index+1):r.label;
     const add=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;tools.append(b);return b;};
-    jump.style.cssText='width:auto;max-width:130px;color:#fff;background:#343a40';tools.append(jump);
-    const time=document.createElement('input');time.type='number';time.min='.15';time.max='600';time.step='.01';time.style.cssText='width:80px;color:#fff;background:#343a40';time.setAttribute('aria-label','再生秒数');
-    const ratio=document.createElement('select');ratio.style.cssText='width:auto;color:#fff;background:#343a40';for(const v of ['9:16','16:9','1:1'])ratio.add(new Option(v,v));ratio.value=plan.ratio;controls.append(ratio);
-    const left=add('← 前へ',()=>shift(-1)),right=add('後へ →',()=>shift(1));tools.append(time,document.createTextNode('秒'));
+    jump.hidden=true;jump.style.display='none';tools.append(jump);const selectedLabel=document.createElement('span');selectedLabel.style.cssText='min-width:65px;font-weight:600';tools.append(selectedLabel);
+    const time=document.createElement('input');time.type='number';time.min='.15';time.max='600';time.step='.01';time.style.cssText='width:68px;height:34px;padding:4px 6px;color:#fff;background:#343a40';time.setAttribute('aria-label','再生秒数');
+    const ratio=document.createElement('select');ratio.style.cssText='width:auto;color:#fff;background:#343a40';for(const v of ['9:16','16:9','1:1'])ratio.add(new Option(v,v));ratio.value=plan.ratio;controls.insertBefore(ratio,settingsButton);
+    const left=add('前へ',()=>shift(-1)),right=add('後へ',()=>shift(1));setIcon(left,'left','前へ移動');setIcon(right,'right','後へ移動');tools.append(time,document.createTextNode('秒'));
     const exclude=add('除外',()=>{if(selected){selected.included=false;rebuild();}});
-    const restore=document.createElement('select');restore.style.cssText='width:auto;max-width:150px;color:#fff;background:#343a40';tools.append(restore);
+    setIcon(exclude,'remove','選択区間を除外');const restore=document.createElement('select');restore.style.cssText='width:auto;max-width:150px;color:#fff;background:#343a40';tools.append(restore);
     const restoreButton=add('復帰',()=>{const r=plan.rows[Number(restore.value)];if(r&&!r.included){r.included=true;selected=r;rebuild();}});
-    add('制作プラン保存',savePlan);
-    function selectRow(r){selected=r||null;const i=rows.indexOf(selected);jump.value=String(i);time.value=selected?selected.seconds.toFixed(2):'';time.disabled=i<0;left.disabled=i<=0;right.disabled=i<0||i>=rows.length-1;exclude.disabled=i<0;for(const n of strip.children)n.setAttribute('aria-pressed',String(n._row===selected)),n.style.background=n._row===selected?'#386da8':'#343a40';}
+    const save=add('制作プラン保存',savePlan);setIcon(save,'save','制作プラン保存');save.style.marginLeft='auto';
+    function selectRow(r){selected=r||null;selectedLabel.textContent=selected?name(selected):'未選択';const i=rows.indexOf(selected);jump.value=String(i);time.value=selected?selected.seconds.toFixed(2):'';time.disabled=i<0;left.disabled=i<=0;right.disabled=i<0||i>=rows.length-1;exclude.disabled=i<0;for(const n of strip.children)n.setAttribute('aria-pressed',String(n._row===selected)),n.style.background=n._row===selected?'#386da8':'#343a40';}
     function shift(d){const i=rows.indexOf(selected),target=rows[i+d];if(i<0||!target)return;moveRow(selected,target,d>0);}
     function moveRow(r,target,after){if(!r||r===target)return;plan.rows.splice(plan.rows.indexOf(r),1);plan.rows.splice(plan.rows.indexOf(target)+(after?1:0),0,r);selected=r;rebuild();}
-    function rebuild(initial=false){if(!initial){stop('編集しました・再生待ち');pauseButton.textContent='区間から再生';}rows=plan.rows.filter(r=>r.included);if(!rows.includes(selected))selected=rows[0]||null;ends.length=0;total=rows.reduce((n,r)=>{ends.push(n+r.seconds);return n+r.seconds;},0);progress.max=total||1;progress.value=selected?ends[rows.indexOf(selected)]-selected.seconds:0;strip.replaceChildren();jump.replaceChildren();rows.forEach((r,i)=>{jump.add(new Option(name(r),String(i)));const n=document.createElement('button');n.type='button';n._row=r;n.textContent=name(r)+' · '+r.seconds.toFixed(2)+'秒';n.style.cssText='flex:none;white-space:nowrap;color:white;border:1px solid #777;border-radius:5px;padding:8px;cursor:pointer';n.draggable=true;n.onclick=()=>{if(running)stop('区間選択');selectRow(r);start(rows.indexOf(r));};n.ondragstart=e=>{dragged=r;e.dataTransfer.setData('text/plain',name(r));};n.ondragend=()=>dragged=null;n.ondragover=e=>{if(dragged)e.preventDefault();};n.ondrop=e=>{e.preventDefault();const from=dragged;dragged=null;const rect=n.getBoundingClientRect();moveRow(from,r,e.clientX>rect.left+rect.width/2);};strip.append(n);});restore.replaceChildren();plan.rows.forEach((r,i)=>{if(!r.included)restore.add(new Option(name(r),String(i)));});restore.disabled=restoreButton.disabled=!restore.options.length;selectRow(selected);status.textContent=(rows.length?'再生ボタンを押してください':'再生区間を復帰してください')+' ｜ '+total.toFixed(2)+'秒';if(!initial)onEdit();}
+    function rebuild(initial=false){if(!initial){stop('編集しました・再生待ち');setIcon(pauseButton,'play','選択区間から再生');}rows=plan.rows.filter(r=>r.included);if(!rows.includes(selected))selected=rows[0]||null;ends.length=0;total=rows.reduce((n,r)=>{ends.push(n+r.seconds);return n+r.seconds;},0);progress.max=total||1;progress.value=selected?ends[rows.indexOf(selected)]-selected.seconds:0;strip.replaceChildren();jump.replaceChildren();rows.forEach((r,i)=>{jump.add(new Option(name(r),String(i)));const n=document.createElement('button');n.type='button';n._row=r;n.textContent=name(r)+' · '+r.seconds.toFixed(2)+'秒';n.style.cssText='flex:none;white-space:nowrap;color:white;border:1px solid #777;border-radius:5px;padding:8px;cursor:pointer';n.draggable=true;n.onclick=()=>{if(running)stop('区間選択');selectRow(r);start(rows.indexOf(r));};n.ondragstart=e=>{dragged=r;e.dataTransfer.setData('text/plain',name(r));};n.ondragend=()=>dragged=null;n.ondragover=e=>{if(dragged)e.preventDefault();};n.ondrop=e=>{e.preventDefault();const from=dragged;dragged=null;const rect=n.getBoundingClientRect();moveRow(from,r,e.clientX>rect.left+rect.width/2);};strip.append(n);});restore.replaceChildren();plan.rows.forEach((r,i)=>{if(!r.included)restore.add(new Option(name(r),String(i)));});restore.disabled=restoreButton.disabled=!restore.options.length;restore.hidden=restoreButton.hidden=!restore.options.length;restore.style.display=restoreButton.style.display=restore.options.length?'':'none';selectRow(selected);status.textContent=(rows.length?'再生ボタンを押してください':'再生区間を復帰してください')+' ｜ '+total.toFixed(2)+'秒';if(!initial)onEdit();}
     jump.onchange=()=>{if(running)stop('区間選択');selectRow(rows[Number(jump.value)]);};
     time.onchange=()=>{if(!selected)return;const n=time.valueAsNumber;if(Number.isFinite(n))selected.seconds=Math.round(Math.max(.15,Math.min(600,n))*100)/100;rebuild();};
     ratio.onchange=()=>{plan.ratio=ratio.value;[w,h]=plan.ratio.split(':').map(Number);rebuild();fit();};
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。区間停止後は区間先頭から再生します。フレーム単位の停止・音声同期・同時表示グループは未保証です。';
     function onVisibility(){if(document.hidden&&running)stop('タブ非表示のため停止');}
-    dialog.append(controls,status,progress,stage,editor,note);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
+    settingsPanel.append(note);dialog.append(controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
   }
   let shortVideoPlan=null;
   function openShortVideoPlan(){
