@@ -10718,13 +10718,13 @@ async function makeStoreZip(entries,onProgress=null){
 
   // Phase 4.0.2: isolated timeline plan; never writes to workingDocument.
   // Phase 4.0.3: preview against the complete original scene graph.
-  function previewShortVideoPlan(plan,onEdit,savePlan){
+  function previewShortVideoPlan(plan,onEdit,savePlan,loadPlan){
     let rows=plan.rows.filter(r=>r.included);
     if(!rows.length){appAlert('再生する区間を選択してください。');return;}
     const doc=clone(plan.source); let total=rows.reduce((n,r)=>n+r.seconds,0);
     const dialog=document.createElement('dialog');dialog.className='sv-preview404';
     const controls=document.createElement('div');controls.className='sv-preview-controls';
-    const iconPaths={first:'<path d="M5 5v14M19 5l-11 7 11 7z"/>',play:'<path d="m8 5 12 7-12 7z"/>',stop:'<rect x="6" y="6" width="12" height="12" rx="1"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>',left:'<path d="m14 6-6 6 6 6"/>',right:'<path d="m10 6 6 6-6 6"/>',remove:'<path d="M5 12h14"/>',save:'<path d="M5 3h12l4 4v14H3V3zM7 3v7h10V3M7 21v-7h10v7"/>',settings:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="#343a40"/><circle cx="15" cy="12" r="2" fill="#343a40"/><circle cx="9" cy="18" r="2" fill="#343a40"/>'};
+    const iconPaths={first:'<path d="M5 5v14M19 5l-11 7 11 7z"/>',play:'<path d="m8 5 12 7-12 7z"/>',stop:'<rect x="6" y="6" width="12" height="12" rx="1"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>',left:'<path d="m14 6-6 6 6 6"/>',right:'<path d="m10 6 6 6-6 6"/>',remove:'<path d="M5 12h14"/>',save:'<path d="M5 3h12l4 4v14H3V3zM7 3v7h10V3M7 21v-7h10v7"/>',load:'<path d="M3 7V5h7l2 2h9v12H3zM12 9v7m-3-3 3 3 3-3"/>',settings:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="#343a40"/><circle cx="15" cy="12" r="2" fill="#343a40"/><circle cx="9" cy="18" r="2" fill="#343a40"/>'};
     function setIcon(b,key,label){b.innerHTML='<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+iconPaths[key]+'</svg>';b.title=label;b.setAttribute('aria-label',label);b.style.cssText='display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;flex:none';}
     const button=(key,label,fn)=>{const b=document.createElement('button');b.type='button';setIcon(b,key,label);b.onclick=fn;controls.append(b);return b;};
     const status=document.createElement('div'), progress=document.createElement('progress');progress.max=total;progress.value=0;
@@ -10737,9 +10737,9 @@ async function makeStoreZip(entries,onProgress=null){
     frame.append(host,mark,guide);stage.append(frame);
     function fit(){const width=Math.max(1,Math.floor(Math.min(stage.clientWidth,stage.clientHeight*w/h)));frame.style.width=width+'px';frame.style.height=Math.floor(width*h/w)+'px';}
     const observer=new ResizeObserver(fit);observer.observe(stage);
-    const settings=plan.renderSettings||(plan.renderSettings={title:true,watermark:true,guide:false});
+    let settings=plan.renderSettings||(plan.renderSettings={title:true,watermark:true,guide:false});
     function applySettings(){host.classList.toggle('sv-hide-title',!settings.title);mark.hidden=!settings.watermark;guide.hidden=!settings.guide;}
-    function toggle(label,key){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.checked=settings[key];c.onchange=()=>{settings[key]=c.checked;applySettings();};l.append(c,document.createTextNode(label));controls.append(l);}
+    function toggle(label,key){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.dataset.renderKey=key;c.checked=settings[key];c.onchange=()=>{settings[key]=c.checked;applySettings();};l.append(c,document.createTextNode(label));controls.append(l);}
     let core=null, timer=0, running=false, cursor=0, started=0, previous=null;
     const jump=document.createElement('select');jump.setAttribute('aria-label','再生開始区間');
     
@@ -10788,6 +10788,11 @@ async function makeStoreZip(entries,onProgress=null){
     setIcon(exclude,'remove','選択区間を除外');const restore=document.createElement('select');restore.style.cssText='width:auto;max-width:150px;color:#fff;background:#343a40';tools.append(restore);
     const restoreButton=add('復帰',()=>{const r=plan.rows[Number(restore.value)];if(r&&!r.included){r.included=true;selected=r;rebuild();}});
     const save=add('制作プラン保存',savePlan);setIcon(save,'save','制作プラン保存');save.style.marginLeft='auto';
+    const load=add('制作プラン読み込み',()=>previewPlanFile.click());setIcon(load,'load','制作プラン読み込み');
+    const previewPlanFile=document.createElement('input');previewPlanFile.type='file';previewPlanFile.accept='.json,application/json';previewPlanFile.hidden=true;previewPlanFile.style.display='none';tools.append(previewPlanFile);
+    previewPlanFile.onchange=async()=>{try{const f=previewPlanFile.files[0];if(!f)return;await loadPlan(f);if(!dialog.open)return;settings=plan.renderSettings;for(const c of settingsPanel.querySelectorAll('[data-render-key]'))c.checked=settings[c.dataset.renderKey];applySettings();ratio.value=plan.ratio;[w,h]=plan.ratio.split(':').map(Number);rebuild();fit();}catch(e){appAlert('制作プランを読み込めません：'+String(e.message||e));}finally{previewPlanFile.value='';}};
+    for(const b of [left,right,exclude,restoreButton,save,load,restore]){b.style.setProperty('border','0','important');b.style.setProperty('background','transparent','important');b.style.setProperty('box-shadow','none','important');}
+    restore.style.colorScheme='dark';
     function selectRow(r){selected=r||null;selectedLabel.textContent=selected?name(selected):'未選択';const i=rows.indexOf(selected);jump.value=String(i);time.value=selected?selected.seconds.toFixed(2):'';time.disabled=i<0;left.disabled=i<=0;right.disabled=i<0||i>=rows.length-1;exclude.disabled=i<0;for(const n of strip.children)n.setAttribute('aria-pressed',String(n._row===selected)),n.style.background=n._row===selected?'#386da8':'#343a40';}
     function shift(d){const i=rows.indexOf(selected),target=rows[i+d];if(i<0||!target)return;moveRow(selected,target,d>0);}
     function moveRow(r,target,after){if(!r||r===target)return;plan.rows.splice(plan.rows.indexOf(r),1);plan.rows.splice(plan.rows.indexOf(target)+(after?1:0),0,r);selected=r;rebuild();}
@@ -10852,11 +10857,12 @@ async function makeStoreZip(entries,onProgress=null){
       let cursor=0;plan.rows.forEach((r,i)=>{const a=inputs.get(r);if(!a)return;list.append(a.row);a.up.disabled=i===0;a.down.disabled=i===plan.rows.length-1;a.cb.checked=r.included;a.time.disabled=!r.included;a.row.classList.toggle('sv-off',!r.included);a.range.textContent=r.included?`${fmt(cursor)}–${fmt(cursor+=r.seconds)}秒`:'対象外';});
     }
     function setAll(value){plan.rows.forEach(r=>r.included=value);refresh();}
-    btn('動画プレビュー（試験）',actions,()=>previewShortVideoPlan(plan,()=>{select.value=plan.ratio;for(const r of plan.rows)inputs.get(r).time.value=fmt(r.seconds);refresh();},savePlan));
+    btn('動画プレビュー（試験）',actions,()=>previewShortVideoPlan(plan,()=>{select.value=plan.ratio;for(const r of plan.rows)inputs.get(r).time.value=fmt(r.seconds);refresh();},savePlan,loadPlan));
     function savePlan(){const url=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ahako-short-video-plan.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
     btn('制作プランを保存',actions,savePlan);
     const planFile=el('input',null,actions);planFile.type='file';planFile.accept='.json,application/json';planFile.hidden=true;
-    btn('制作プランを読み込む',actions,()=>planFile.click());planFile.onchange=async()=>{try{const f=planFile.files[0];if(!f)return;if(f.size>5000000)throw Error('制作プランが大きすぎます。');restore(JSON.parse(await f.text()));}catch(e){appAlert('制作プランを読み込めません：'+String(e.message||e));}finally{planFile.value='';}};
+    async function loadPlan(f){if(f.size>5000000)throw Error('制作プランが大きすぎます。');restore(JSON.parse(await f.text()));}
+    btn('制作プランを読み込む',actions,()=>planFile.click());planFile.onchange=async()=>{try{const f=planFile.files[0];if(!f)return;await loadPlan(f);}catch(e){appAlert('制作プランを読み込めません：'+String(e.message||e));}finally{planFile.value='';}};
     btn('すべて選択',actions,()=>setAll(true));btn('すべて解除',actions,()=>setAll(false));btn('秒数を初期化',actions,()=>{plan.rows.forEach((r,i)=>{r.seconds=r.kind==='scene'?duration(liveTimingSeconds(source.scenes[r.index])):2.6;inputs.get(r).time.value=fmt(r.seconds);});refresh();});
     btn('元の順番に戻す',actions,()=>{plan.rows.splice(0,plan.rows.length,...originalOrder);refresh();});
     el('p','上のタイムラインをドラッグ、または各行の矢印で順序変更できます。',dialog,'sv-note');
