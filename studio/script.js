@@ -10726,7 +10726,7 @@ async function makeStoreZip(entries,onProgress=null){
     const iconPaths={first:'<path d="M5 5v14M19 5l-11 7 11 7z"/>',play:'<path d="m8 5 12 7-12 7z"/>',stop:'<rect x="6" y="6" width="12" height="12" rx="1"/>',close:'<path d="m6 6 12 12M18 6 6 18"/>',left:'<path d="m14 6-6 6 6 6"/>',right:'<path d="m10 6 6 6-6 6"/>',remove:'<path d="M5 12h14"/>',save:'<path d="M5 3h12l4 4v14H3V3zM7 3v7h10V3M7 21v-7h10v7"/>',load:'<path d="M3 7V5h7l2 2h9v12H3zM12 9v7m-3-3 3 3 3-3"/>',export:'<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',settings:'<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="#343a40"/><circle cx="15" cy="12" r="2" fill="#343a40"/><circle cx="9" cy="18" r="2" fill="#343a40"/>'};
     function setIcon(b,key,label){b.innerHTML='<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+iconPaths[key]+'</svg>';b.title=label;b.setAttribute('aria-label',label);b.style.cssText='display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;flex:none;border:0!important;background:transparent!important;box-shadow:none!important';}
     const button=(key,label,fn)=>{const b=document.createElement('button');b.type='button';setIcon(b,key,label);b.onclick=fn;controls.append(b);return b;};
-    const status=document.createElement('div'), progress=document.createElement('progress');progress.max=total;progress.value=0;
+    const status=document.createElement('div'), progress=document.createElement('progress');status.style.cssText='flex:none;max-height:90px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere';progress.max=total;progress.value=0;
     const stage=document.createElement('div');stage.className='sv-preview-stage';
     const frame=document.createElement('div');frame.className='sv-preview-frame';
     const host=document.createElement('div');host.className='sv-video-render';
@@ -10853,7 +10853,7 @@ async function makeStoreZip(entries,onProgress=null){
         const transparent=c=>c==='transparent'||c==='rgba(0, 0, 0, 0)';
         for(let n=v;n;n=n.parentElement){
           const c=getComputedStyle(n);
-          if(Number(c.opacity)!==1||c.filter!=='none'||c.mixBlendMode!=='normal'||c.clipPath!=='none'||(c.maskImage&&c.maskImage!=='none')||parseFloat(c.borderRadius)||c.perspective!=='none')return reject('背景スタイル: '+n.className+' opacity='+c.opacity+' filter='+c.filter+' blend='+c.mixBlendMode+' clip='+c.clipPath+' radius='+c.borderRadius+' perspective='+c.perspective);
+          if((n!==layer&&Number(c.opacity)!==1)||c.filter!=='none'||c.mixBlendMode!=='normal'||c.clipPath!=='none'||(c.maskImage&&c.maskImage!=='none')||parseFloat(c.borderRadius)||c.perspective!=='none')return reject('背景スタイル: '+n.className+' opacity='+(Number(c.opacity)===1?'1':'変化中')+' filter='+c.filter+' blend='+c.mixBlendMode+' clip='+c.clipPath+' radius='+c.borderRadius+' perspective='+c.perspective);
           if(c.transform!=='none'){const m=new DOMMatrixReadOnly(c.transform);if(!m.is2D||m.b!==0||m.c!==0||m.a<=0||m.d<=0)return reject('非対応変形: '+n.className);}
           if(n===frame)break;
         }
@@ -10865,20 +10865,43 @@ async function makeStoreZip(entries,onProgress=null){
         for(const n of [v,layer,bg,host]){const r=n.getBoundingClientRect();if(r.left>fr.left+.01||r.top>fr.top+.01||r.right<fr.right-.01||r.bottom<fr.bottom-.01)return reject('背景の被覆不足: '+n.className);}
         if(!transparent(c.backgroundColor)||c.backgroundImage!=='none')return reject('動画背景色・画像');
         // Backdrop-dependent foreground effects cannot be flattened independently.
-        for(const n of frame.querySelectorAll('*')){const cs=getComputedStyle(n);if(cs.display==='none'||cs.visibility==='hidden'||!n.getClientRects().length)continue;if((cs.backdropFilter&&cs.backdropFilter!=='none')||cs.mixBlendMode!=='normal')return reject('前景backdrop/blend: '+n.className);}
+        for(const n of frame.querySelectorAll('*')){const cs=getComputedStyle(n);if(cs.display==='none'||cs.visibility==='hidden'||Number(cs.opacity)===0||!n.getClientRects().length)continue;if((cs.backdropFilter&&cs.backdropFilter!=='none')||cs.mixBlendMode!=='normal')return reject('前景backdrop/blend: '+n.className);}
         let dw=vr.width,dh=vr.height,x=vr.left-fr.left,y=vr.top-fr.top;
         if(fit==='cover'){const scale=Math.max(dw/v.videoWidth,dh/v.videoHeight),nw=v.videoWidth*scale,nh=v.videoHeight*scale;x+=(dw-nw)*Number(pos[1])/100;y+=(dh-nh)*Number(pos[2])/100;dw=nw;dh=nh;}
         if(x>0||y>0||x+dw<fr.width||y+dh<fr.height)return reject('描画範囲不足');
-        return {v,bg,x:x*width/fr.width,y:y*height/fr.height,w:dw*width/fr.width,h:dh*height/fr.height};
+        const alpha=Number(getComputedStyle(layer).opacity);
+        const bases=[];
+        if(alpha<1){
+          const lc=getComputedStyle(layer);
+          if(!transparent(lc.backgroundColor)||lc.backgroundImage!=='none')return reject('フェード背景レイヤーに別素材');
+          for(const n of [frame,host,bg]){
+            const c=getComputedStyle(n);
+            if(c.backgroundImage.includes('url(')||c.backgroundBlendMode!=='normal')return reject('フェード下地の非対応背景');
+            bases.push(['background-color','background-image','background-size','background-position','background-repeat','background-origin','background-clip'].map(k=>[k,c.getPropertyValue(k)]));
+          }
+        }
+        return {v,bg,alpha,bases,x:x*width/fr.width,y:y*height/fr.height,w:dw*width/fr.width,h:dh*height/fr.height};
       }
       const overlayCanvas=document.createElement('canvas');overlayCanvas.width=width;overlayCanvas.height=height;
-      const overlayCtx=overlayCanvas.getContext('2d');let overlaySVG=null;
+      const overlayCtx=overlayCanvas.getContext('2d');let overlaySVG=null,baseKey=null,baseImage=null;
+      async function paintFadeBase(split,fw,fh){
+        if(split.alpha>=1)return;
+        const key=JSON.stringify([fw,fh,split.bases]);
+        if(key!==baseKey){
+          const root=document.createElement('div');root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');root.style.cssText='position:relative;width:'+fw+'px;height:'+fh+'px';
+          for(const props of split.bases){const n=document.createElement('div');n.style.cssText='position:absolute;inset:0';for(const [k,v] of props)n.style.setProperty(k,v);root.append(n);}
+          const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+new XMLSerializer().serializeToString(root)+'</foreignObject></svg>';
+          const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();baseImage=img;baseKey=key;
+        }
+        ctx.drawImage(baseImage,0,0,width,height);
+      }
       async function snapshot(){
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
         const split=splitBackground(fw,fh);
         const root=frame.cloneNode(true), originals=[frame,...frame.querySelectorAll('*')],copies=[root,...root.querySelectorAll('*')],pending=[];
         for(let i=0;i<originals.length;i++){
           const src=originals[i];let dst=copies[i];const cs=getComputedStyle(src);
+          if(split&&src.classList.contains('sp-bg-textures')&&Number(cs.opacity)===0){dst.remove();continue;}
           if(split&&(src===split.bg||split.bg.contains(src))){if(src===split.bg)dst.remove();continue;}
           if(src instanceof HTMLVideoElement||src instanceof HTMLCanvasElement){
             if(src instanceof HTMLVideoElement){if(!visibleVideo(src)){dst.remove();continue;}if(src.readyState<2||src.seeking||!src.videoWidth)throw Error('背景動画の準備ができていません');}
@@ -10903,7 +10926,7 @@ async function makeStoreZip(entries,onProgress=null){
         let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
         if(split){
           const overlayStart=performance.now();if(overlaySVG!==svg){overlayCtx.clearRect(0,0,width,height);overlayCtx.drawImage(img,0,0,width,height);overlaySVG=svg;}
-          perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();ctx.drawImage(split.v,split.x,split.y,split.w,split.h);perf.bgMs+=performance.now()-bgStart;ctx.drawImage(overlayCanvas,0,0);perf.split++;
+          perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;ctx.drawImage(overlayCanvas,0,0);perf.split++;
         }else{ctx.drawImage(img,0,0,width,height);perf.legacy++;}
       }
       try{
