@@ -6771,6 +6771,35 @@ async function makeStoreZip(entries,onProgress=null){
     const coverage=analyzeVideoCoverage(doc,groups,durations);
     return [...groups].map(([src,refs])=>({src,name:assetRegistry.get(src)?.name||refs[0].fileName||u('外部動画','Remote video'),bytes:assetRegistry.get(src)?.blob?.size??null,deliveryBytes:deliveryVideos.get(src)?.blob?.size??null,duration:durations.get(src),explicit:refs.length,...coverage.get(src)}));
   }
+  // Phase 3.3.1a: read-only, bounded temporal variation probe.
+  async function trialSpatialAnalysis(r,button,section){
+    let out=section.querySelector('[data-spatial-result]');if(!out){out=document.createElement('div');out.dataset.spatialResult='1';section.append(out);}out.replaceChildren();
+    const master=assetRegistry.get(r.src),panel=section.closest('dialog');
+    if(!master?.blob){out.textContent='ローカル原本なし';return;}
+    if(autoDeliveryRunning||manualDeliveryBusy||deliveryForeground||trimScanBusy){out.textContent='別の最適化処理中です。完了後に再試行してください。';return;}
+    const controller=new AbortController(),signal=controller.signal,cancel=()=>controller.abort();panel.addEventListener('close',cancel,{once:true});
+    const video=document.createElement('video');video.muted=true;video.playsInline=true;video.preload='auto';const url=URL.createObjectURL(master.blob);
+    const wait=(event,action)=>new Promise((resolve,reject)=>{let timer;const finish=e=>{clearTimeout(timer);video.removeEventListener(event,ok);video.removeEventListener('error',bad);signal.removeEventListener('abort',bad);e?reject(e):resolve();};const ok=()=>finish();const bad=()=>finish(Error('動画読み込み中断・失敗'));if(signal.aborted){bad();return;}video.addEventListener(event,ok,{once:true});video.addEventListener('error',bad,{once:true});signal.addEventListener('abort',bad,{once:true});timer=setTimeout(bad,12000);try{action();}catch(e){finish(e);}});
+    button.disabled=true;manualDeliveryBusy=true;
+    try{
+      out.textContent='静止・動的領域を分析中…';await wait('loadeddata',()=>{video.src=url;});
+      const d=video.duration;if(!Number.isFinite(d)||d<=0||!video.videoWidth)throw Error('時間情報なし');
+      const w=Math.min(320,video.videoWidth),h=Math.max(1,Math.round(w*video.videoHeight/video.videoWidth));if(h>640)throw Error('縦横比が分析範囲外');
+      const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{willReadFrequently:true});
+      const n=w*h,lo=new Uint8Array(n*3).fill(255),hi=new Uint8Array(n*3);const count=Math.min(25,Math.max(3,Math.ceil(d*5)));let first;
+      for(let k=0;k<count;k++){
+        const t=Math.max(0,Math.min(d-.001,d*k/count));if(Math.abs(video.currentTime-t)>.00001)await wait('seeked',()=>{video.currentTime=t;});if(signal.aborted)throw Error('中断');
+        ctx.drawImage(video,0,0,w,h);const p=ctx.getImageData(0,0,w,h);if(!first)first=p;
+        for(let i=0;i<n;i++)for(let c=0;c<3;c++){const j=i*3+c,v=p.data[i*4+c];if(v<lo[j])lo[j]=v;if(v>hi[j])hi[j]=v;}
+        out.textContent='静止・動的領域を分析中 '+Math.round((k+1)/count*100)+'%';await new Promise(resolve=>setTimeout(resolve,20));
+      }
+      if(signal.aborted)return;
+      let stable=0;const overlay=ctx.createImageData(w,h);for(let i=0;i<n;i++){const j=i*3,a=i*4,delta=Math.max(hi[j]-lo[j],hi[j+1]-lo[j+1],hi[j+2]-lo[j+2]);const s=delta<=12;if(s)stable++;overlay.data[a]=s?35:240;overlay.data[a+1]=s?190:85;overlay.data[a+2]=s?110:45;overlay.data[a+3]=255;}
+      const ratio=stable/n;out.textContent='静止候補 '+(ratio*100).toFixed(1)+'% / 動的候補 '+((1-ratio)*100).toFixed(1)+'% | '+count+' sampled / '+w+'×'+h+' / 全区間';
+      const note=document.createElement('p');note.textContent=(ratio>=.65?'分離検討候補': '通常DELIVERY推奨')+'（暫定）｜緑：静止候補、赤：変化領域。RGB最大変動12以下を静止候補と判定。容量削減率ではありません。';out.append(note);
+      const pair=document.createElement('div');pair.style.cssText='display:flex;gap:8px';for(const data of [first,overlay]){const c=document.createElement('canvas');c.width=w;c.height=h;c.style.cssText='width:calc(50% - 4px);height:auto;object-fit:contain';c.getContext('2d').putImageData(data,0,0);pair.append(c);}out.append(pair);
+    }catch(e){if(!signal.aborted)out.textContent='分析できません：'+String(e);}finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);panel.removeEventListener('close',cancel);manualDeliveryBusy=false;button.disabled=false;scheduleAutoDelivery();}
+  }
   async function showVideoStructure(button){
     button.disabled=true;
     try{
@@ -6788,6 +6817,7 @@ async function makeStoreZip(entries,onProgress=null){
         add('p',u('設定上の区間: ','Nominal intervals: ')+(r.intervals.map(x=>sec(x[0])+' – '+sec(x[1])).join(' / ')||'—'),section);
         if(r.status==='candidate')add('p',u('未使用時間候補: ','Potential unused time: ')+sec(r.savings),section);
         if(r.status==='candidate'){const b=add('button',u('区間削減を試す（無料プレビュー）','Try trim (free preview)'),section);b.type='button';b.onclick=()=>trialStructuralTrim(doc,r,b,section);}
+        {const b=add('button','静止・動的領域を分析（試験）',section);b.type='button';b.onclick=()=>trialSpatialAnalysis(r,b,section);}
         for(const use of r.uses)add('div',use.label+(use.inherited?u('（継承）',' (inherited)'):'')+' | '+sec(use.start)+' – '+sec(use.end)+' | '+use.mode+' / '+use.continuity+(use.projection==='panorama'?' / panorama':''),section);
       }
       const close=add('button',u('閉じる','Close'));close.type='button';close.onclick=()=>panel.close();panel.addEventListener('close',()=>panel.remove(),{once:true});document.body.append(panel);panel.showModal();
