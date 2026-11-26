@@ -6784,6 +6784,29 @@ async function makeStoreZip(entries,onProgress=null){
     const ok=zero-best.s>=1.5&&best.s<=zero*.8&&best.s<14&&rival-best.s>=.7&&Math.abs(best.dx)<limit&&Math.abs(best.dy)<limit;
     return {dx:ok?best.dx:0,dy:ok?best.dy:0,ok};
   }
+  // Phase 3.3.1a3: reuse sampled frames; no additional decoding or encoding.
+  async function spatialWindowStats(frames,w,h,d,signal){
+    const n=w*h, results=[];
+    for(const span of [.5,1,2]){
+      const groups=new Map();for(const f of frames){const k=Math.floor(f.t/span);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(f);}
+      let weighted=0,blocksWeighted=0,weight=0,min=100,max=0,windows=0,refresh=0,covered=0,prev=null;
+      for(const [k,fs] of groups){
+        if(signal.aborted)throw Error('中断');
+        if(fs.length<3){prev=null;continue;}
+        const duration=Math.min(span,d-k*span);if(fs[fs.length-1].t-fs[0].t<duration*.5){prev=null;continue;}
+        const lo=new Uint8Array(n*3).fill(255),hi=new Uint8Array(n*3);
+        for(const f of fs)for(let i=0;i<n;i++)for(let c=0;c<3;c++){const j=i*3+c,v=f.data[i*4+c];if(v<lo[j])lo[j]=v;if(v>hi[j])hi[j]=v;}
+        let stable=0,blockPixels=0;const mask=new Uint8Array(n);
+        for(let i=0;i<n;i++){const j=i*3;if(Math.max(hi[j]-lo[j],hi[j+1]-lo[j+1],hi[j+2]-lo[j+2])<=12){mask[i]=1;stable++;}}
+        for(let y=0;y<h;y+=16)for(let x=0;x<w;x+=16){let total=0,ok=0;for(let yy=y;yy<Math.min(y+16,h);yy++)for(let xx=x;xx<Math.min(x+16,w);xx++){total++;ok+=mask[yy*w+xx];}if(ok===total)blockPixels+=total;}
+        const ratio=100*stable/n;weighted+=ratio*duration;blocksWeighted+=100*blockPixels/n*duration;weight+=duration;min=Math.min(min,ratio);max=Math.max(max,ratio);windows++;
+        // Raw pixel-frame proxy: each window pays for its first full frame.
+        covered+=n*fs.length;refresh+=blockPixels*(fs.length-1);
+        await new Promise(resolve=>setTimeout(resolve,0));
+      }
+      results.push({span,windows,total:groups.size,mean:weight?weighted/weight:null,blocks:weight?blocksWeighted/weight:null,min,max,coverage:weight/d,proxy:covered?100*refresh/covered:null});
+    }return results;
+  }
   // Phase 3.3.1a: read-only, bounded temporal variation probe.
   async function trialSpatialAnalysis(r,button,section){
     let out=section.querySelector('[data-spatial-result]');if(!out){out=document.createElement('div');out.dataset.spatialResult='1';section.append(out);}out.replaceChildren();
@@ -6799,10 +6822,10 @@ async function makeStoreZip(entries,onProgress=null){
       const d=video.duration;if(!Number.isFinite(d)||d<=0||!video.videoWidth)throw Error('時間情報なし');
       const w=Math.min(320,video.videoWidth),h=Math.max(1,Math.round(w*video.videoHeight/video.videoWidth));if(h>640)throw Error('縦横比が分析範囲外');
       const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{willReadFrequently:true});
-      const n=w*h,lo=new Uint8Array(n*3).fill(255),hi=new Uint8Array(n*3);const count=Math.min(25,Math.max(3,Math.ceil(d*5)));let first;const alo=new Uint8Array(n*3).fill(255),ahi=new Uint8Array(n*3),valid=new Uint8Array(n);let accepted=0,maxShift=0;
+      const n=w*h,lo=new Uint8Array(n*3).fill(255),hi=new Uint8Array(n*3);const count=Math.min(25,Math.max(3,Math.ceil(d*5)));let first;const sampledFrames=[];const alo=new Uint8Array(n*3).fill(255),ahi=new Uint8Array(n*3),valid=new Uint8Array(n);let accepted=0,maxShift=0;
       for(let k=0;k<count;k++){
         const t=Math.max(0,Math.min(d-.001,d*k/count));if(Math.abs(video.currentTime-t)>.00001)await wait('seeked',()=>{video.currentTime=t;});if(signal.aborted)throw Error('中断');
-        ctx.drawImage(video,0,0,w,h);const p=ctx.getImageData(0,0,w,h);if(!first)first=p;
+        ctx.drawImage(video,0,0,w,h);const p=ctx.getImageData(0,0,w,h);if(!first)first=p;sampledFrames.push({t,data:p.data});
         for(let i=0;i<n;i++)for(let c=0;c<3;c++){const j=i*3+c,v=p.data[i*4+c];if(v<lo[j])lo[j]=v;if(v>hi[j])hi[j]=v;}
         const shift=k?spatialTranslation(first.data,p.data,w,h):{dx:0,dy:0,ok:false};if(shift.ok){accepted++;maxShift=Math.max(maxShift,Math.hypot(shift.dx,shift.dy));}
         for(let y=0;y<h;y++)for(let x=0;x<w;x++){const xx=x+shift.dx,yy=y+shift.dy;if(xx<0||xx>=w||yy<0||yy>=h)continue;const i=y*w+x;valid[i]++;for(let c=0;c<3;c++){const j=i*3+c,v=p.data[(yy*w+xx)*4+c];if(v<alo[j])alo[j]=v;if(v>ahi[j])ahi[j]=v;}}
@@ -6819,6 +6842,13 @@ async function makeStoreZip(entries,onProgress=null){
       const note=document.createElement('p');note.textContent='移動補正採用 '+accepted+'/'+(count-1)+' フレーム / 最大 '+maxShift.toFixed(1)+'px（分析解像度）｜緑：静止、青：補正で静止、黄：微小変動、赤：動的、灰：範囲外。微小変動は静止に加算しません。';out.append(note);
       const summary=document.createElement('p');summary.textContent='補正由来 '+pct(motion)+' / 微小変動 '+pct(micro)+' / 動的 '+pct(n-strict-micro-unknown)+' / 範囲外 '+pct(unknown)+'｜'+(strict/n>=.65?'分離検討候補':'通常DELIVERY推奨')+'（暫定）。平行移動のみ。ズーム・回転・視差は未補正。容量削減率ではありません。';out.append(summary);
       const pair=document.createElement('div');pair.style.cssText='display:flex;gap:6px';for(const [label,data] of [['原本',first],['補正前',overlay],['補正後',aligned]]){const wrap=document.createElement('div');wrap.style.cssText='flex:1;min-width:0';const title=document.createElement('div');title.textContent=label;const c=document.createElement('canvas');c.width=w;c.height=h;c.style.cssText='width:100%;height:auto';c.getContext('2d').putImageData(data,0,0);wrap.append(title,c);pair.append(wrap);}out.append(pair);
+      const temporal=document.createElement('div');temporal.style.cssText='border-top:1px solid #aaa;margin-top:12px;padding-top:8px';temporal.textContent='時間分割・局所静止分析中…';out.append(temporal);
+      const stats=await spatialWindowStats(sampledFrames,w,h,d,signal);if(signal.aborted)return;
+      temporal.textContent='時間分割・局所静止分析（補正なし・試験）';
+      const line=t=>{const el=document.createElement('p');el.textContent=t;temporal.append(el);};
+      const fmt=v=>v==null?'—':v.toFixed(1)+'%';
+      for(const a of stats){line(a.span.toFixed(1)+'秒 | '+a.windows+'/'+a.total+'区間 | 対象時間 '+fmt(a.coverage*100)+' | 平均静止 '+fmt(a.mean)+(a.windows?' / 最小 '+fmt(a.min)+' / 最大 '+fmt(a.max):'')+' | 完全静止16×16ブロック '+fmt(a.blocks)+' | 背景更新 最大 '+(1/a.span).toFixed(1)+'回/秒 | 画素再利用指標 '+fmt(a.proxy));}
+      line('各区間3標本以上・時間幅50%以上のみ集計。長尺動画では標本不足になる場合があります。RGB変動12以下。画素再利用指標は区間ごとの初回全画面更新を差し引いた標本上の指標で、実際の容量削減率ではありません。VP9との差・マスク費用は未測定。');
     }catch(e){if(!signal.aborted)out.textContent='分析できません：'+String(e);}finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);panel.removeEventListener('close',cancel);manualDeliveryBusy=false;button.disabled=false;scheduleAutoDelivery();}
   }
   async function showVideoStructure(button){
