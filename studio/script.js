@@ -10819,7 +10819,7 @@ async function makeStoreZip(entries,onProgress=null){
       const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
       const cache=new Map(),packets=[];
-      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0},begin=performance.now();let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
+      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0},begin=performance.now();let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
@@ -10837,11 +10837,46 @@ async function makeStoreZip(entries,onProgress=null){
           status.textContent=name(rows[cursor])+' ｜ 背景動画の準備待ち…';await wait(10);
         }
       }
+      // Phase 5.0.4b: conservative direct background composition.
+      // Keep the old snapshot for crossfades, unsupported geometry and effects.
+      function splitBackground(fw,fh){
+        const videos=Array.from(frame.querySelectorAll('video')).filter(visibleVideo);
+        if(videos.length!==1)return null;
+        const v=videos[0],layer=v.parentElement,bg=layer?.parentElement;
+        if(!v.classList.contains('sp-background-video')||!layer?.classList.contains('sp-bg-layer')||!bg?.classList.contains('sp-background')||bg.parentElement!==host)return null;
+        if(Array.from(bg.children).some(n=>n!==layer&&Number(getComputedStyle(n).opacity)>0))return null;
+        if(layer.children.length!==1||v.readyState<2||v.seeking)return null;
+        const fr=frame.getBoundingClientRect(),vr=v.getBoundingClientRect();
+        const transparent=c=>c==='transparent'||c==='rgba(0, 0, 0, 0)';
+        for(let n=v;n;n=n.parentElement){
+          const c=getComputedStyle(n);
+          if(Number(c.opacity)!==1||c.filter!=='none'||c.mixBlendMode!=='normal'||c.clipPath!=='none'||(c.maskImage&&c.maskImage!=='none')||parseFloat(c.borderRadius)||c.perspective!=='none')return null;
+          if(c.transform!=='none'){const m=new DOMMatrixReadOnly(c.transform);if(!m.is2D||m.b!==0||m.c!==0||m.a<=0||m.d<=0)return null;}
+          if(n===frame)break;
+        }
+        // Only fully covered output: no need to reconstruct underlying colors.
+        const c=getComputedStyle(v),fit=c.objectFit;
+        if(!['cover','fill'].includes(fit))return null;
+        const pos=c.objectPosition.match(/^(-?[\d.]+)%\s+(-?[\d.]+)%$/);
+        if(fit==='cover'&&!pos)return null;
+        for(const n of [v,layer,bg,host]){const r=n.getBoundingClientRect();if(r.left>fr.left+.01||r.top>fr.top+.01||r.right<fr.right-.01||r.bottom<fr.bottom-.01)return null;}
+        if(!transparent(c.backgroundColor)||c.backgroundImage!=='none')return null;
+        // Backdrop-dependent foreground effects cannot be flattened independently.
+        for(const n of frame.querySelectorAll('*')){const cs=getComputedStyle(n);if(cs.display==='none'||cs.visibility==='hidden'||!n.getClientRects().length)continue;if((cs.backdropFilter&&cs.backdropFilter!=='none')||cs.mixBlendMode!=='normal')return null;}
+        let dw=vr.width,dh=vr.height,x=vr.left-fr.left,y=vr.top-fr.top;
+        if(fit==='cover'){const scale=Math.max(dw/v.videoWidth,dh/v.videoHeight),nw=v.videoWidth*scale,nh=v.videoHeight*scale;x+=(dw-nw)*Number(pos[1])/100;y+=(dh-nh)*Number(pos[2])/100;dw=nw;dh=nh;}
+        if(x>0||y>0||x+dw<fr.width||y+dh<fr.height)return null;
+        return {v,bg,x:x*width/fr.width,y:y*height/fr.height,w:dw*width/fr.width,h:dh*height/fr.height};
+      }
+      const overlayCanvas=document.createElement('canvas');overlayCanvas.width=width;overlayCanvas.height=height;
+      const overlayCtx=overlayCanvas.getContext('2d');let overlaySVG=null;
       async function snapshot(){
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
+        const split=splitBackground(fw,fh);
         const root=frame.cloneNode(true), originals=[frame,...frame.querySelectorAll('*')],copies=[root,...root.querySelectorAll('*')],pending=[];
         for(let i=0;i<originals.length;i++){
           const src=originals[i];let dst=copies[i];const cs=getComputedStyle(src);
+          if(split&&(src===split.bg||split.bg.contains(src))){if(src===split.bg)dst.remove();continue;}
           if(src instanceof HTMLVideoElement||src instanceof HTMLCanvasElement){
             if(src instanceof HTMLVideoElement){if(!visibleVideo(src)){dst.remove();continue;}if(src.readyState<2||src.seeking||!src.videoWidth)throw Error('背景動画の準備ができていません');}
             const c=document.createElement('canvas');c.width=src.videoWidth||src.width;c.height=src.videoHeight||src.height;if(!c.width||!c.height){dst.remove();continue;}
@@ -10852,6 +10887,7 @@ async function makeStoreZip(entries,onProgress=null){
           }
           if(!dst.style)continue;
           for(const key of cs){if(key.startsWith('--'))continue;const value=cs.getPropertyValue(key);if(value.includes('url(')){const target=dst;pending.push((async()=>{let result=value;for(const m of value.matchAll(/url\(["']?([^"')]+)["']?\)/g)){if(m[1].startsWith('#'))continue;result=result.replace(m[0],'url("'+await inlineURL(m[1])+'")');}target.style.setProperty(key,result);})());}else dst.style.setProperty(key,value);}
+          if(split&&(src===frame||src===host)){dst.style.setProperty('background','transparent','important');}
           dst.style.setProperty('animation','none','important');dst.style.setProperty('transition','none','important');
           if(src instanceof HTMLImageElement){const target=dst;pending.push(inlineURL(src.currentSrc||src.src).then(v=>{target.removeAttribute('srcset');target.src=v;}));}
           if(src instanceof HTMLAudioElement||src instanceof HTMLScriptElement||src instanceof HTMLIFrameElement)dst.remove();
@@ -10861,7 +10897,11 @@ async function makeStoreZip(entries,onProgress=null){
         root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
         const xml=new XMLSerializer().serializeToString(root);
         const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
-        let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
+        let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
+        if(split){
+          if(overlaySVG!==svg){overlayCtx.clearRect(0,0,width,height);overlayCtx.drawImage(img,0,0,width,height);overlaySVG=svg;}
+          ctx.drawImage(split.v,split.x,split.y,split.w,split.h);ctx.drawImage(overlayCanvas,0,0);perf.split++;
+        }else{ctx.drawImage(img,0,0,width,height);perf.legacy++;}
       }
       try{
         settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
@@ -10927,7 +10967,7 @@ async function makeStoreZip(entries,onProgress=null){
         const clusters=[];let base=0,blocks=[];function finish(){if(blocks.length)clusters.push(el(0x1f43b675,ui(0xe7,base),...blocks));blocks=[];}
         for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
         const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
-        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了 '+count+'フレーム ｜ '+Math.round((performance.now()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回';
+        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了 '+count+'フレーム ｜ '+Math.round((performance.now()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'フレーム';
       }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
