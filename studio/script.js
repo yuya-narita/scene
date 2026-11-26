@@ -6771,6 +6771,19 @@ async function makeStoreZip(entries,onProgress=null){
     const coverage=analyzeVideoCoverage(doc,groups,durations);
     return [...groups].map(([src,refs])=>({src,name:assetRegistry.get(src)?.name||refs[0].fileName||u('外部動画','Remote video'),bytes:assetRegistry.get(src)?.blob?.size??null,deliveryBytes:deliveryVideos.get(src)?.blob?.size??null,duration:durations.get(src),explicit:refs.length,...coverage.get(src)}));
   }
+  // Bounded translation-only registration. Reject ambiguous or weak matches.
+  function spatialTranslation(ref,cur,w,h){
+    const margin=Math.min(24,Math.floor(Math.min(w,h)/5));
+    if(margin<4)return {dx:0,dy:0,ok:false};
+    const score=(dx,dy)=>{let sum=0,n=0;for(let y=margin;y<h-margin;y+=5)for(let x=margin;x<w-margin;x+=5){const a=(y*w+x)*4,b=((y+dy)*w+x+dx)*4;const l=(v,i)=>(v[i]*77+v[i+1]*150+v[i+2]*29)/256;sum+=Math.min(48,Math.abs(l(ref,a)-l(cur,b)));n++;}return sum/Math.max(1,n);};
+    const zero=score(0,0), candidates=[];let best={dx:0,dy:0,s:zero};
+    const limit=margin-1;
+    for(let dy=-limit;dy<=limit;dy+=4)for(let dx=-limit;dx<=limit;dx+=4){const s=score(dx,dy);candidates.push({dx,dy,s});if(s<best.s)best={dx,dy,s};}
+    const coarse=best;for(let dy=Math.max(-limit,coarse.dy-3);dy<=Math.min(limit,coarse.dy+3);dy++)for(let dx=Math.max(-limit,coarse.dx-3);dx<=Math.min(limit,coarse.dx+3);dx++){const s=score(dx,dy);if(s<best.s)best={dx,dy,s};}
+    const rival=Math.min(...candidates.filter(c=>Math.abs(c.dx-best.dx)+Math.abs(c.dy-best.dy)>5).map(c=>c.s));
+    const ok=zero-best.s>=1.5&&best.s<=zero*.8&&best.s<14&&rival-best.s>=.7&&Math.abs(best.dx)<limit&&Math.abs(best.dy)<limit;
+    return {dx:ok?best.dx:0,dy:ok?best.dy:0,ok};
+  }
   // Phase 3.3.1a: read-only, bounded temporal variation probe.
   async function trialSpatialAnalysis(r,button,section){
     let out=section.querySelector('[data-spatial-result]');if(!out){out=document.createElement('div');out.dataset.spatialResult='1';section.append(out);}out.replaceChildren();
@@ -6786,18 +6799,26 @@ async function makeStoreZip(entries,onProgress=null){
       const d=video.duration;if(!Number.isFinite(d)||d<=0||!video.videoWidth)throw Error('時間情報なし');
       const w=Math.min(320,video.videoWidth),h=Math.max(1,Math.round(w*video.videoHeight/video.videoWidth));if(h>640)throw Error('縦横比が分析範囲外');
       const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{willReadFrequently:true});
-      const n=w*h,lo=new Uint8Array(n*3).fill(255),hi=new Uint8Array(n*3);const count=Math.min(25,Math.max(3,Math.ceil(d*5)));let first;
+      const n=w*h,lo=new Uint8Array(n*3).fill(255),hi=new Uint8Array(n*3);const count=Math.min(25,Math.max(3,Math.ceil(d*5)));let first;const alo=new Uint8Array(n*3).fill(255),ahi=new Uint8Array(n*3),valid=new Uint8Array(n);let accepted=0,maxShift=0;
       for(let k=0;k<count;k++){
         const t=Math.max(0,Math.min(d-.001,d*k/count));if(Math.abs(video.currentTime-t)>.00001)await wait('seeked',()=>{video.currentTime=t;});if(signal.aborted)throw Error('中断');
         ctx.drawImage(video,0,0,w,h);const p=ctx.getImageData(0,0,w,h);if(!first)first=p;
         for(let i=0;i<n;i++)for(let c=0;c<3;c++){const j=i*3+c,v=p.data[i*4+c];if(v<lo[j])lo[j]=v;if(v>hi[j])hi[j]=v;}
+        const shift=k?spatialTranslation(first.data,p.data,w,h):{dx:0,dy:0,ok:false};if(shift.ok){accepted++;maxShift=Math.max(maxShift,Math.hypot(shift.dx,shift.dy));}
+        for(let y=0;y<h;y++)for(let x=0;x<w;x++){const xx=x+shift.dx,yy=y+shift.dy;if(xx<0||xx>=w||yy<0||yy>=h)continue;const i=y*w+x;valid[i]++;for(let c=0;c<3;c++){const j=i*3+c,v=p.data[(yy*w+xx)*4+c];if(v<alo[j])alo[j]=v;if(v>ahi[j])ahi[j]=v;}}
         out.textContent='静止・動的領域を分析中 '+Math.round((k+1)/count*100)+'%';await new Promise(resolve=>setTimeout(resolve,20));
       }
       if(signal.aborted)return;
-      let stable=0;const overlay=ctx.createImageData(w,h);for(let i=0;i<n;i++){const j=i*3,a=i*4,delta=Math.max(hi[j]-lo[j],hi[j+1]-lo[j+1],hi[j+2]-lo[j+2]);const s=delta<=12;if(s)stable++;overlay.data[a]=s?35:240;overlay.data[a+1]=s?190:85;overlay.data[a+2]=s?110:45;overlay.data[a+3]=255;}
-      const ratio=stable/n;out.textContent='静止候補 '+(ratio*100).toFixed(1)+'% / 動的候補 '+((1-ratio)*100).toFixed(1)+'% | '+count+' sampled / '+w+'×'+h+' / 全区間';
-      const note=document.createElement('p');note.textContent=(ratio>=.65?'分離検討候補': '通常DELIVERY推奨')+'（暫定）｜緑：静止候補、赤：変化領域。RGB最大変動12以下を静止候補と判定。容量削減率ではありません。';out.append(note);
-      const pair=document.createElement('div');pair.style.cssText='display:flex;gap:8px';for(const data of [first,overlay]){const c=document.createElement('canvas');c.width=w;c.height=h;c.style.cssText='width:calc(50% - 4px);height:auto;object-fit:contain';c.getContext('2d').putImageData(data,0,0);pair.append(c);}out.append(pair);
+      let stable=0,strict=0,micro=0,motion=0,unknown=0;const overlay=ctx.createImageData(w,h),aligned=ctx.createImageData(w,h);
+      const paint=(img,i,r,g,b)=>{img.data.set([r,g,b,255],i*4);};
+      for(let i=0;i<n;i++){const j=i*3,delta=Math.max(hi[j]-lo[j],hi[j+1]-lo[j+1],hi[j+2]-lo[j+2]);const fixed=delta<=12;if(fixed)stable++;paint(overlay,i,...(fixed?[35,190,110]:[240,85,45]));
+        if(valid[i]!==count){unknown++;paint(aligned,i,120,120,120);continue;}
+        const d=Math.max(ahi[j]-alo[j],ahi[j+1]-alo[j+1],ahi[j+2]-alo[j+2]);if(d<=12){strict++;if(!fixed){motion++;paint(aligned,i,65,145,235);}else paint(aligned,i,35,190,110);}else if(d<=24){micro++;paint(aligned,i,240,190,45);}else paint(aligned,i,240,85,45);
+      }
+      const pct=x=>(100*x/n).toFixed(1)+'%';out.textContent='補正前静止 '+pct(stable)+' / 補正後静止 '+pct(strict)+' | '+count+' sampled / '+w+'×'+h;
+      const note=document.createElement('p');note.textContent='移動補正採用 '+accepted+'/'+(count-1)+' フレーム / 最大 '+maxShift.toFixed(1)+'px（分析解像度）｜緑：静止、青：補正で静止、黄：微小変動、赤：動的、灰：範囲外。微小変動は静止に加算しません。';out.append(note);
+      const summary=document.createElement('p');summary.textContent='補正由来 '+pct(motion)+' / 微小変動 '+pct(micro)+' / 動的 '+pct(n-strict-micro-unknown)+' / 範囲外 '+pct(unknown)+'｜'+(strict/n>=.65?'分離検討候補':'通常DELIVERY推奨')+'（暫定）。平行移動のみ。ズーム・回転・視差は未補正。容量削減率ではありません。';out.append(summary);
+      const pair=document.createElement('div');pair.style.cssText='display:flex;gap:6px';for(const [label,data] of [['原本',first],['補正前',overlay],['補正後',aligned]]){const wrap=document.createElement('div');wrap.style.cssText='flex:1;min-width:0';const title=document.createElement('div');title.textContent=label;const c=document.createElement('canvas');c.width=w;c.height=h;c.style.cssText='width:100%;height:auto';c.getContext('2d').putImageData(data,0,0);wrap.append(title,c);pair.append(wrap);}out.append(pair);
     }catch(e){if(!signal.aborted)out.textContent='分析できません：'+String(e);}finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);panel.removeEventListener('close',cancel);manualDeliveryBusy=false;button.disabled=false;scheduleAutoDelivery();}
   }
   async function showVideoStructure(button){
