@@ -10820,13 +10820,27 @@ async function makeStoreZip(entries,onProgress=null){
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
+      function visibleVideo(v){
+        if(!v.isConnected||!v.getBoundingClientRect().width||!v.getBoundingClientRect().height)return false;
+        for(let n=v;n&&n!==frame.parentElement;n=n.parentElement){const c=getComputedStyle(n);if(n.hidden||c.display==='none'||c.visibility==='hidden'||Number(c.opacity)===0)return false;}
+        return true;
+      }
+      async function awaitVideoFrames(){
+        const began=performance.now();
+        while(true){guard();const pending=Array.from(frame.querySelectorAll('video')).filter(v=>visibleVideo(v)&&(v.readyState<2||v.seeking||!v.videoWidth));
+          if(!pending.length)return;
+          if(pending.some(v=>v.error))throw Error(name(rows[cursor])+'：背景動画の読み込みエラー');
+          if(performance.now()-began>12000)throw Error(name(rows[cursor])+'：背景動画の準備が12秒以内に完了しませんでした');
+          status.textContent=name(rows[cursor])+' ｜ 背景動画の準備待ち…';await wait(50);
+        }
+      }
       async function snapshot(){
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
         const root=frame.cloneNode(true), originals=[frame,...frame.querySelectorAll('*')],copies=[root,...root.querySelectorAll('*')],pending=[];
         for(let i=0;i<originals.length;i++){
           const src=originals[i];let dst=copies[i];const cs=getComputedStyle(src);
           if(src instanceof HTMLVideoElement||src instanceof HTMLCanvasElement){
-            if(src instanceof HTMLVideoElement&&src.readyState<2){if(cs.display!=='none'&&cs.visibility!=='hidden'&&src.getBoundingClientRect().width>0)throw Error('背景動画の準備ができていません');dst.remove();continue;}
+            if(src instanceof HTMLVideoElement){if(!visibleVideo(src)){dst.remove();continue;}if(src.readyState<2||src.seeking||!src.videoWidth)throw Error('背景動画の準備ができていません');}
             const c=document.createElement('canvas');c.width=src.videoWidth||src.width;c.height=src.videoHeight||src.height;if(!c.width||!c.height){dst.remove();continue;}c.getContext('2d').drawImage(src,0,0);const img=document.createElement('img');img.src=c.toDataURL('image/png');dst.replaceWith(img);dst=img;
           }
           if(!dst.style)continue;
@@ -10850,7 +10864,10 @@ async function makeStoreZip(entries,onProgress=null){
         // Sample the existing live player; exact offline animation/audio clocks are a later phase.
         let count=0,last=-1;while(running){guard();const t=Math.max(0,Math.round((performance.now()-started)*1000));if(t>=total*1e6)break;
           if(t-last<100000&&last>=0){await wait(20);continue;}
-          try{await snapshot();}catch(e){if(count===0&&running&&performance.now()-started<1500&&String(e).includes('準備')){await wait(40);continue;}throw e;}
+          cancelAnimationFrame(timer);timer=0;
+          const hold=performance.now();
+          try{await awaitVideoFrames();try{await snapshot();}catch(e){if(!String(e).includes('準備'))throw e;await awaitVideoFrames();await snapshot();}}
+          finally{started+=performance.now()-hold;if(running&&!job.cancelled)timer=requestAnimationFrame(tick);}
           guard();if(!running)break;const stamp=count===0?0:t;const vf=new VideoFrame(canvas,{timestamp:stamp});try{encoder.encode(vf,{keyFrame:count===0||count%20===0});}finally{vf.close();}last=t;count++;while(encoder.encodeQueueSize>2){await wait(20);guard();}
           status.textContent='内部描画中 '+Math.min(99,Math.round(t/(total*10000)))+'% ｜ '+count+'フレーム';await wait(0);
         }
