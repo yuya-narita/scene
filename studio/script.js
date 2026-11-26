@@ -10768,7 +10768,7 @@ async function makeStoreZip(entries,onProgress=null){
     const spacer=document.createElement('span');spacer.style.flex='1';controls.append(spacer);
     const settingsButton=button('settings','表示設定',()=>{settingsPanel.hidden=!settingsPanel.hidden;settingsPanel.style.display=settingsPanel.hidden?'none':'flex';settingsButton.setAttribute('aria-expanded',String(!settingsPanel.hidden));fit();});settingsButton.setAttribute('aria-expanded','false');
     const closeButton=button('close','閉じる',()=>dialog.close());
-    const exportButton=button('export','動画書き出し（WebM・試験）',()=>exportVideo());controls.insertBefore(exportButton,closeButton);
+    const exportButton=button('export','内部描画書き出し（映像のみ・試験）',()=>exportVideo());controls.insertBefore(exportButton,closeButton);
     const settingsPanel=document.createElement('div');settingsPanel.className='sv-preview-controls';settingsPanel.hidden=true;settingsPanel.style.cssText='display:none;padding:6px 0;gap:12px;flex-wrap:wrap';
     toggle('上部タイトル','title');toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');for(const l of Array.from(controls.querySelectorAll('label')))settingsPanel.append(l);applySettings();
     status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
@@ -10803,35 +10803,71 @@ async function makeStoreZip(entries,onProgress=null){
     const planActions=document.createElement('div');planActions.style.cssText='display:flex;flex-wrap:wrap;gap:6px;width:100%';
     for(const [label,action] of [['すべて選択',()=>plan.rows.forEach(r=>r.included=true)],['すべて解除',()=>plan.rows.forEach(r=>r.included=false)],['秒数を初期化',resetSeconds],['元の順番に戻す',resetOrder]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();rebuild();};planActions.append(b);}
     settingsPanel.append(planActions);
-    // Phase 5.0.1: Chromium Region Capture, real-time recording of the actual render frame.
-    // No DOM rasterizer, no mutation of the source or delivery assets.
+    // Phase 5.0.2: internal DOM rasterization, no display capture. Visual-only trial.
     async function exportVideo(){
       if(exportJob||!rows.length)return;
-      if(!navigator.mediaDevices?.getDisplayMedia||!window.CropTarget||!window.MediaRecorder){appAlert('このブラウザは領域録画に対応していません。PC版Chromeを使用してください。');return;}
-      const mime=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
-      if(!mime){appAlert('WebM録画に対応していません。');return;}
-      if(total>300){appAlert('試験書き出しは5分以内です。');return;}
+      if(!window.VideoEncoder||!window.VideoFrame){appAlert('内部描画にはPC版Chrome/Edgeが必要です。');return;}
+      if(total>60){appAlert('内部描画の試験は60秒以内です。');return;}
+      if(!await appConfirm('内部描画の試験版です。今回は映像のみ（音声なし）・10fps目標のWebMです。書き出しますか？'))return;
+      if(exportJob||!dialog.open)return;
       stop();interruptAutoDelivery();
-      const job={stream:null,recorder:null,complete:false,chunks:[],bytes:0};exportJob=job;
-      const oldGuide=settings.guide;const oldPanel=settingsPanel.hidden;
-      const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';
-      cancel.onclick=()=>{job.cancelled=true;stop('書き出し中止');job.stream?.getTracks().forEach(t=>t.stop());};
-      function cleanup(){job.stream?.getTracks().forEach(t=>t.stop());cancel.remove();controls.inert=false;editor.inert=false;settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';if(exportJob===job)exportJob=null;fit();}
+      const job={cancelled:false};exportJob=job;
+      const oldGuide=settings.guide,oldPanel=settingsPanel.hidden;
+      const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';cancel.onclick=()=>{job.cancelled=true;};
+      const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
+      const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
+      const cache=new Map(),packets=[];let encoder,failure,bytesUsed=0;
+      const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
+      const wait=ms=>new Promise(r=>setTimeout(r,ms));
+      async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
+      async function snapshot(){
+        const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
+        const root=frame.cloneNode(true), originals=[frame,...frame.querySelectorAll('*')],copies=[root,...root.querySelectorAll('*')],pending=[];
+        for(let i=0;i<originals.length;i++){
+          const src=originals[i];let dst=copies[i];const cs=getComputedStyle(src);
+          if(src instanceof HTMLVideoElement||src instanceof HTMLCanvasElement){
+            if(src instanceof HTMLVideoElement&&src.readyState<2){if(cs.display!=='none'&&cs.visibility!=='hidden'&&src.getBoundingClientRect().width>0)throw Error('背景動画の準備ができていません');dst.remove();continue;}
+            const c=document.createElement('canvas');c.width=src.videoWidth||src.width;c.height=src.videoHeight||src.height;if(!c.width||!c.height){dst.remove();continue;}c.getContext('2d').drawImage(src,0,0);const img=document.createElement('img');img.src=c.toDataURL('image/png');dst.replaceWith(img);dst=img;
+          }
+          if(!dst.style)continue;
+          for(const key of cs){if(key.startsWith('--'))continue;const value=cs.getPropertyValue(key);if(value.includes('url(')){const target=dst;pending.push((async()=>{let result=value;for(const m of value.matchAll(/url\(["']?([^"')]+)["']?\)/g)){if(m[1].startsWith('#'))continue;result=result.replace(m[0],'url("'+await inlineURL(m[1])+'")');}target.style.setProperty(key,result);})());}else dst.style.setProperty(key,value);}
+          dst.style.setProperty('animation','none','important');dst.style.setProperty('transition','none','important');
+          if(src instanceof HTMLImageElement){const target=dst;pending.push(inlineURL(src.currentSrc||src.src).then(v=>{target.removeAttribute('srcset');target.src=v;}));}
+          if(src instanceof HTMLAudioElement||src instanceof HTMLScriptElement||src instanceof HTMLIFrameElement)dst.remove();
+        }
+        await Promise.all(pending);guard();
+        root.style.cssText+=';position:relative!important;inset:auto!important;margin:0!important;transform:none!important;width:'+fw+'px!important;height:'+fh+'px!important;overflow:hidden!important;';
+        root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
+        const xml=new XMLSerializer().serializeToString(root);
+        const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
+        const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
+      }
       try{
-        const stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:30}},audio:true,preferCurrentTab:true,selfBrowserSurface:'include',surfaceSwitching:'exclude',systemAudio:'exclude'});job.stream=stream;
-        if(!dialog.open||job.cancelled)throw Error('中止しました');
-        const track=stream.getVideoTracks()[0];if(!track||track.getSettings().displaySurface!=='browser'||typeof track.cropTo!=='function')throw Error('現在のあ箱タブを選択してください。');
-        if(!stream.getAudioTracks().length)throw Error('タブの音声を共有してください。');
-        settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=true;editor.inert=true;settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
-        await track.cropTo(await CropTarget.fromElement(frame));
-        if(!dialog.open||job.cancelled)throw Error('中止しました');
-        const recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:2500000,audioBitsPerSecond:128000});job.recorder=recorder;
-        recorder.ondataavailable=e=>{if(e.data.size){job.bytes+=e.data.size;if(job.bytes>150*1024*1024){job.cancelled=true;stop('容量上限のため中止');return;}job.chunks.push(e.data);}};
-        recorder.onerror=()=>{job.cancelled=true;stop('録画エラー');cleanup();};
-        recorder.onstop=()=>{try{if(job.complete&&!job.cancelled&&job.chunks.length){const blob=new Blob(job.chunks,{type:recorder.mimeType});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='ahako-short-video.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='動画書き出し完了';}else status.textContent='書き出し中止・未保存';}finally{job.chunks.length=0;cleanup();}};
-        track.addEventListener('ended',()=>{job.cancelled=true;stop('画面共有終了');},{once:true});
-        recorder.start(500);start(0);if(!running)throw Error('再生を開始できませんでした');
-      }catch(e){job.cancelled=true;if(job.recorder?.state==='recording')job.recorder.stop();dispose();cleanup();status.textContent='書き出し失敗：'+String(e.message||e);}
+        settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
+        const config={codec:'vp09.00.10.08',width,height,bitrate:1800000,framerate:10};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error('VP9エンコーダー非対応');
+        encoder=new VideoEncoder({output:c=>{const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>80*1024*1024)failure=Error('容量上限');},error:e=>failure=e});encoder.configure(config);
+        await document.fonts.ready;guard();start(0);if(!running)throw Error('再生開始失敗');
+        // Sample the existing live player; exact offline animation/audio clocks are a later phase.
+        let count=0,last=-1;while(running){guard();const t=Math.max(0,Math.round((performance.now()-started)*1000));if(t>=total*1e6)break;
+          if(t-last<100000&&last>=0){await wait(20);continue;}
+          try{await snapshot();}catch(e){if(count===0&&running&&performance.now()-started<1500&&String(e).includes('準備')){await wait(40);continue;}throw e;}
+          guard();if(!running)break;const stamp=count===0?0:t;const vf=new VideoFrame(canvas,{timestamp:stamp});try{encoder.encode(vf,{keyFrame:count===0||count%20===0});}finally{vf.close();}last=t;count++;while(encoder.encodeQueueSize>2){await wait(20);guard();}
+          status.textContent='内部描画中 '+Math.min(99,Math.round(t/(total*10000)))+'% ｜ '+count+'フレーム';await wait(0);
+        }
+        guard();await encoder.flush();guard();if(!packets.length||count!==packets.length||last<total*1e6-1000000)throw Error('描画不足：短い作品または低負荷環境で再試行してください');
+        const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
+        function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
+        function vint(n){for(let k=1;k<=8;k++){if(BigInt(n)<(1n<<BigInt(7*k))-1n){let x=BigInt(n)|(1n<<BigInt(7*k)),r=new Uint8Array(k);for(let i=k-1;i>=0;i--){r[i]=Number(x&255n);x>>=8n;}return r;}}throw Error('EBML overflow');}
+        const el=(id,...p)=>{const b=cat(...p);return cat(num(id),vint(b.length),b);},ui=(id,n)=>el(id,num(n)),txt=(id,s)=>el(id,new TextEncoder().encode(s));
+        const fl=new Uint8Array(8);new DataView(fl.buffer).setFloat64(0,total*1000);
+        const header=el(0x1a45dfa3,ui(0x4286,1),ui(0x42f7,1),ui(0x42f2,4),ui(0x42f3,8),txt(0x4282,'webm'),ui(0x4287,4),ui(0x4285,2));
+        const info=el(0x1549a966,ui(0x2ad7b1,1000000),el(0x4489,fl),txt(0x4d80,'Ahako'),txt(0x5741,'Ahako'));
+        const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),el(0xe0,ui(0xb0,width),ui(0xba,height))));
+        const clusters=[];let base=0,blocks=[];function finish(){if(blocks.length)clusters.push(el(0x1f43b675,ui(0xe7,base),...blocks));blocks=[];}
+        for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
+        const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
+        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了（映像のみ） '+count+'フレーム';
+      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。区間停止後は区間先頭から再生します。フレーム単位の停止・音声同期・同時表示グループは未保証です。';
