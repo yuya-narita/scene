@@ -10861,7 +10861,7 @@ async function makeStoreZip(entries,onProgress=null){
         root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
         const xml=new XMLSerializer().serializeToString(root);
         const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
-        let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml;charset=utf-8'}));try{img.src=url;await img.decode();}finally{URL.revokeObjectURL(url);}lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
+        let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);
       }
       try{
         settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
