@@ -10803,13 +10803,15 @@ async function makeStoreZip(entries,onProgress=null){
     const planActions=document.createElement('div');planActions.style.cssText='display:flex;flex-wrap:wrap;gap:6px;width:100%';
     for(const [label,action] of [['すべて選択',()=>plan.rows.forEach(r=>r.included=true)],['すべて解除',()=>plan.rows.forEach(r=>r.included=false)],['秒数を初期化',resetSeconds],['元の順番に戻す',resetOrder]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();rebuild();};planActions.append(b);}
     settingsPanel.append(planActions);
-    // Phase 5.0.2: internal DOM rasterization, no display capture. Visual-only trial.
+    // Phase 5.0.3: fixed-frame visual export trial.
+    const exportFps=document.createElement('select');exportFps.setAttribute('aria-label','書き出しfps');exportFps.add(new Option('24 fps','24'));exportFps.add(new Option('30 fps','30'));exportFps.value='30';const fpsLabel=document.createElement('label');fpsLabel.append(document.createTextNode('書き出し '),exportFps);settingsPanel.append(fpsLabel);
     async function exportVideo(){
       if(exportJob||!rows.length)return;
       if(!window.VideoEncoder||!window.VideoFrame){appAlert('内部描画にはPC版Chrome/Edgeが必要です。');return;}
       if(total>60){appAlert('内部描画の試験は60秒以内です。');return;}
-      if(!await appConfirm('内部描画の試験版です。今回は映像のみ（音声なし）・10fps目標のWebMです。書き出しますか？'))return;
+      if(!await appConfirm('内部描画の試験版です。今回は映像のみ（音声なし）・固定fpsのWebMです。書き出しますか？'))return;
       if(exportJob||!dialog.open)return;
+      const fps=Number(exportFps.value);if(![24,30].includes(fps))return;
       stop();interruptAutoDelivery();
       const job={cancelled:false};exportJob=job;
       const oldGuide=settings.guide,oldPanel=settingsPanel.hidden;
@@ -10858,20 +10860,57 @@ async function makeStoreZip(entries,onProgress=null){
       }
       try{
         settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();
-        const config={codec:'vp09.00.10.08',width,height,bitrate:1800000,framerate:10};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error('VP9エンコーダー非対応');
+        const config={codec:'vp09.00.10.08',width,height,bitrate:1800000,framerate:fps};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error('VP9エンコーダー非対応');
         encoder=new VideoEncoder({output:c=>{const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>80*1024*1024)failure=Error('容量上限');},error:e=>failure=e});encoder.configure(config);
-        await document.fonts.ready;guard();start(0);if(!running)throw Error('再生開始失敗');
-        // Sample the existing live player; exact offline animation/audio clocks are a later phase.
-        let count=0,last=-1;while(running){guard();const t=Math.max(0,Math.round((performance.now()-started)*1000));if(t>=total*1e6)break;
-          if(t-last<100000&&last>=0){await wait(20);continue;}
-          cancelAnimationFrame(timer);timer=0;
-          const hold=performance.now();
-          try{await awaitVideoFrames();try{await snapshot();}catch(e){if(!String(e).includes('準備'))throw e;await awaitVideoFrames();await snapshot();}}
-          finally{started+=performance.now()-hold;if(running&&!job.cancelled)timer=requestAnimationFrame(tick);}
-          guard();if(!running)break;const stamp=count===0?0:t;const vf=new VideoFrame(canvas,{timestamp:stamp});try{encoder.encode(vf,{keyFrame:count===0||count%20===0});}finally{vf.close();}last=t;count++;while(encoder.encodeQueueSize>2){await wait(20);guard();}
-          status.textContent='内部描画中 '+Math.min(99,Math.round(t/(total*10000)))+'% ｜ '+count+'フレーム';await wait(0);
+        await document.fonts.ready;guard();
+        // Export clock: no live preview tick. Each frame has a unique fixed timestamp.
+        cursor=0;previous=null;fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});
+        core.load(doc,{startAt:0});core.stopAuto();applySettings();enter(rows[0]);
+        let count=0;const expected=Math.ceil(total*fps-1e-8),animationClock=new WeakMap(),videoClock=new WeakMap();
+        const settle=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        async function renderAt(t){
+          guard();let i=cursor;while(i<rows.length-1&&t>=ends[i]-1e-8)i++;
+          if(i!==cursor){previous=rows[cursor];cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
+          // Allow deferred DOM mounting, then freeze native animations at export time.
+          await settle();guard();
+          for(const anim of frame.getAnimations({subtree:true})){
+            let base=animationClock.get(anim);if(base===undefined){base=t;animationClock.set(anim,base);}
+            anim.pause();anim.currentTime=Math.max(0,(t-base)*1000);
+          }
+          const videos=Array.from(frame.querySelectorAll('video')).filter(visibleVideo);
+          for(const v of videos){v.pause();v.muted=true;}
+          await awaitVideoFrames();
+          for(const v of videos){
+            if(!v.isConnected)continue;
+            const cfg=v._ahVideoConfig||{},key=(v.currentSrc||v.src)+'|'+(v._ahVideoKey||'');
+            const duration=v.duration;if(!Number.isFinite(duration)||duration<=0)throw Error('動画の長さを取得できません');
+            const a=Math.min(Math.max(0,Number(cfg.start)||0),Math.max(0,duration-.001));
+            const b=Math.max(a+.001,Math.min(duration,cfg.end==null?duration:Number(cfg.end)||duration));
+            const speed=Math.max(.25,Math.min(2,Number(cfg.speed)||1));
+            const scene=rows[cursor],command=scene.kind==='scene'?doc.scenes[scene.index]?.presentation?.background?.video?.continuity:'restart';
+            let state=videoClock.get(v);
+            if(!state||state.key!==key||(state.row!==cursor&&command==='restart'))state={key,row:cursor,base:a,time:t};
+            else if(state.row!==cursor){state={...state,row:cursor,base:state.target??a,time:t};}
+            const frozen=cfg.mode==='freeze'||v._ahScenePaused;
+            let target=state.base+(frozen?0:(t-state.time)*speed);
+            if((cfg.mode||'loop')==='loop')target=a+((target-a)%(b-a)+(b-a))%(b-a);else target=Math.min(target,b-.001);
+            target=Math.max(a,Math.min(target,duration-.001));state.target=target;videoClock.set(v,state);
+            // Prevent live loop/next handlers from overriding the export seek.
+            v.ontimeupdate=null;v.onended=null;v.pause();
+            if(Math.abs(v.currentTime-target)>.002)v.currentTime=target;
+          }
+          await awaitVideoFrames();guard();await snapshot();
         }
-        guard();await encoder.flush();guard();if(!packets.length||count!==packets.length||last<total*1e6-1000000)throw Error('描画不足：短い作品または低負荷環境で再試行してください');
+        for(;count<expected;count++){
+          const t=count/fps;await renderAt(t);guard();
+          const stamp=Math.round(count*1e6/fps),next=Math.round(Math.min(total,(count+1)/fps)*1e6);
+          const vf=new VideoFrame(canvas,{timestamp:stamp,duration:Math.max(1,next-stamp)});
+          try{encoder.encode(vf,{keyFrame:count%fps===0});}finally{vf.close();}
+          while(encoder.encodeQueueSize>2){await wait(20);guard();}
+          progress.value=Math.min(total,(count+1)/fps);status.textContent='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム';await wait(0);
+        }
+        dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
+        packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
         function vint(n){for(let k=1;k<=8;k++){if(BigInt(n)<(1n<<BigInt(7*k))-1n){let x=BigInt(n)|(1n<<BigInt(7*k)),r=new Uint8Array(k);for(let i=k-1;i>=0;i--){r[i]=Number(x&255n);x>>=8n;}return r;}}throw Error('EBML overflow');}
@@ -10879,12 +10918,12 @@ async function makeStoreZip(entries,onProgress=null){
         const fl=new Uint8Array(8);new DataView(fl.buffer).setFloat64(0,total*1000);
         const header=el(0x1a45dfa3,ui(0x4286,1),ui(0x42f7,1),ui(0x42f2,4),ui(0x42f3,8),txt(0x4282,'webm'),ui(0x4287,4),ui(0x4285,2));
         const info=el(0x1549a966,ui(0x2ad7b1,1000000),el(0x4489,fl),txt(0x4d80,'Ahako'),txt(0x5741,'Ahako'));
-        const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),el(0xe0,ui(0xb0,width),ui(0xba,height))));
+        const track=el(0x1654ae6b,el(0xae,ui(0xd7,1),ui(0x73c5,1),ui(0x83,1),txt(0x86,'V_VP9'),ui(0x23e383,Math.round(1e9/fps)),el(0xe0,ui(0xb0,width),ui(0xba,height))));
         const clusters=[];let base=0,blocks=[];function finish(){if(blocks.length)clusters.push(el(0x1f43b675,ui(0xe7,base),...blocks));blocks=[];}
         for(const p of packets){const t=Math.round(p.t/1000);if(!blocks.length||p.key||t-base>30000){finish();base=t;}const rel=t-base;blocks.push(el(0xa3,bytes(0x81,(rel>>8)&255,rel&255,p.key?128:0),p.b));}finish();
         const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
         const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='ahako-internal-visual.webm';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='内部描画完了（映像のみ） '+count+'フレーム';
-      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
+      }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';cache.clear();packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='試験再生：ガイドは確認専用。区間停止後は区間先頭から再生します。フレーム単位の停止・音声同期・同時表示グループは未保証です。';
