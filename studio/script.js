@@ -10805,13 +10805,16 @@ async function makeStoreZip(entries,onProgress=null){
     settingsPanel.append(planActions);
     // Phase 5.0.3: fixed-frame visual export trial.
     const exportFps=document.createElement('select');exportFps.setAttribute('aria-label','書き出しfps');exportFps.add(new Option('24 fps','24'));exportFps.add(new Option('30 fps','30'));exportFps.value='30';const fpsLabel=document.createElement('label');fpsLabel.append(document.createTextNode('書き出し '),exportFps);settingsPanel.append(fpsLabel);
-    async function exportVideo(){
+    const benchButton=document.createElement('button');benchButton.type='button';benchButton.textContent='選択Sceneを1秒診断';benchButton.onclick=()=>exportVideo(true);settingsPanel.append(benchButton);
+    async function exportVideo(benchmark=false){
       if(exportJob||!rows.length)return;
       if(!window.VideoEncoder||!window.VideoFrame){appAlert('内部描画にはPC版Chrome/Edgeが必要です。');return;}
-      if(total>60){appAlert('内部描画の試験は60秒以内です。');return;}
-      if(!await appConfirm('内部描画の試験版です。今回は映像のみ（音声なし）・固定fpsのWebMです。書き出しますか？'))return;
+      if(!benchmark&&total>60){appAlert('内部描画の試験は60秒以内です。');return;}
+      if(!benchmark&&!await appConfirm('内部描画の試験版です。今回は映像のみ（音声なし）・固定fpsのWebMです。書き出しますか？'))return;
       if(exportJob||!dialog.open)return;
-      const fps=Number(exportFps.value);if(![24,30].includes(fps))return;
+      const fps=benchmark?30:Number(exportFps.value);if(![24,30].includes(fps))return;
+      const sampleRow=benchmark?Math.max(0,rows.indexOf(selected)):0;
+      const sampleStart=sampleRow?ends[sampleRow-1]:0;
       stop();interruptAutoDelivery();
       const job={cancelled:false};exportJob=job;
       const oldGuide=settings.guide,oldPanel=settingsPanel.hidden;
@@ -10819,7 +10822,7 @@ async function makeStoreZip(entries,onProgress=null){
       const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
       const cache=new Map(),packets=[];
-      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0},begin=performance.now();let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
+      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
@@ -10841,31 +10844,31 @@ async function makeStoreZip(entries,onProgress=null){
       // Keep the old snapshot for crossfades, unsupported geometry and effects.
       function splitBackground(fw,fh){
         const videos=Array.from(frame.querySelectorAll('video')).filter(visibleVideo);
-        if(videos.length!==1)return null;
+        if(videos.length!==1)return reject('表示動画数: '+videos.length);
         const v=videos[0],layer=v.parentElement,bg=layer?.parentElement;
-        if(!v.classList.contains('sp-background-video')||!layer?.classList.contains('sp-bg-layer')||!bg?.classList.contains('sp-background')||bg.parentElement!==host)return null;
-        if(Array.from(bg.children).some(n=>n!==layer&&Number(getComputedStyle(n).opacity)>0))return null;
-        if(layer.children.length!==1||v.readyState<2||v.seeking)return null;
+        if(!v.classList.contains('sp-background-video')||!layer?.classList.contains('sp-bg-layer')||!bg?.classList.contains('sp-background')||bg.parentElement!==host)return reject('背景DOM構造: '+v.className+' / '+layer?.className+' / '+bg?.className);
+        if(Array.from(bg.children).some(n=>n!==layer&&Number(getComputedStyle(n).opacity)>0))return reject('複数背景レイヤー');
+        if(layer.children.length!==1||v.readyState<2||v.seeking)return reject('動画準備または子要素');
         const fr=frame.getBoundingClientRect(),vr=v.getBoundingClientRect();
         const transparent=c=>c==='transparent'||c==='rgba(0, 0, 0, 0)';
         for(let n=v;n;n=n.parentElement){
           const c=getComputedStyle(n);
-          if(Number(c.opacity)!==1||c.filter!=='none'||c.mixBlendMode!=='normal'||c.clipPath!=='none'||(c.maskImage&&c.maskImage!=='none')||parseFloat(c.borderRadius)||c.perspective!=='none')return null;
-          if(c.transform!=='none'){const m=new DOMMatrixReadOnly(c.transform);if(!m.is2D||m.b!==0||m.c!==0||m.a<=0||m.d<=0)return null;}
+          if(Number(c.opacity)!==1||c.filter!=='none'||c.mixBlendMode!=='normal'||c.clipPath!=='none'||(c.maskImage&&c.maskImage!=='none')||parseFloat(c.borderRadius)||c.perspective!=='none')return reject('背景スタイル: '+n.className+' opacity='+c.opacity+' filter='+c.filter+' blend='+c.mixBlendMode+' clip='+c.clipPath+' radius='+c.borderRadius+' perspective='+c.perspective);
+          if(c.transform!=='none'){const m=new DOMMatrixReadOnly(c.transform);if(!m.is2D||m.b!==0||m.c!==0||m.a<=0||m.d<=0)return reject('非対応変形: '+n.className);}
           if(n===frame)break;
         }
         // Only fully covered output: no need to reconstruct underlying colors.
         const c=getComputedStyle(v),fit=c.objectFit;
-        if(!['cover','fill'].includes(fit))return null;
+        if(!['cover','fill'].includes(fit))return reject('object-fit: '+fit);
         const pos=c.objectPosition.match(/^(-?[\d.]+)%\s+(-?[\d.]+)%$/);
-        if(fit==='cover'&&!pos)return null;
-        for(const n of [v,layer,bg,host]){const r=n.getBoundingClientRect();if(r.left>fr.left+.01||r.top>fr.top+.01||r.right<fr.right-.01||r.bottom<fr.bottom-.01)return null;}
-        if(!transparent(c.backgroundColor)||c.backgroundImage!=='none')return null;
+        if(fit==='cover'&&!pos)return reject('object-position: '+c.objectPosition);
+        for(const n of [v,layer,bg,host]){const r=n.getBoundingClientRect();if(r.left>fr.left+.01||r.top>fr.top+.01||r.right<fr.right-.01||r.bottom<fr.bottom-.01)return reject('背景の被覆不足: '+n.className);}
+        if(!transparent(c.backgroundColor)||c.backgroundImage!=='none')return reject('動画背景色・画像');
         // Backdrop-dependent foreground effects cannot be flattened independently.
-        for(const n of frame.querySelectorAll('*')){const cs=getComputedStyle(n);if(cs.display==='none'||cs.visibility==='hidden'||!n.getClientRects().length)continue;if((cs.backdropFilter&&cs.backdropFilter!=='none')||cs.mixBlendMode!=='normal')return null;}
+        for(const n of frame.querySelectorAll('*')){const cs=getComputedStyle(n);if(cs.display==='none'||cs.visibility==='hidden'||!n.getClientRects().length)continue;if((cs.backdropFilter&&cs.backdropFilter!=='none')||cs.mixBlendMode!=='normal')return reject('前景backdrop/blend: '+n.className);}
         let dw=vr.width,dh=vr.height,x=vr.left-fr.left,y=vr.top-fr.top;
         if(fit==='cover'){const scale=Math.max(dw/v.videoWidth,dh/v.videoHeight),nw=v.videoWidth*scale,nh=v.videoHeight*scale;x+=(dw-nw)*Number(pos[1])/100;y+=(dh-nh)*Number(pos[2])/100;dw=nw;dh=nh;}
-        if(x>0||y>0||x+dw<fr.width||y+dh<fr.height)return null;
+        if(x>0||y>0||x+dw<fr.width||y+dh<fr.height)return reject('描画範囲不足');
         return {v,bg,x:x*width/fr.width,y:y*height/fr.height,w:dw*width/fr.width,h:dh*height/fr.height};
       }
       const overlayCanvas=document.createElement('canvas');overlayCanvas.width=width;overlayCanvas.height=height;
@@ -10899,8 +10902,8 @@ async function makeStoreZip(entries,onProgress=null){
         const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
         let img=lastImage;if(svg!==lastSVG||!img){perf.misses++;img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();lastSVG=svg;lastImage=img;}else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
         if(split){
-          if(overlaySVG!==svg){overlayCtx.clearRect(0,0,width,height);overlayCtx.drawImage(img,0,0,width,height);overlaySVG=svg;}
-          ctx.drawImage(split.v,split.x,split.y,split.w,split.h);ctx.drawImage(overlayCanvas,0,0);perf.split++;
+          const overlayStart=performance.now();if(overlaySVG!==svg){overlayCtx.clearRect(0,0,width,height);overlayCtx.drawImage(img,0,0,width,height);overlaySVG=svg;}
+          perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();ctx.drawImage(split.v,split.x,split.y,split.w,split.h);perf.bgMs+=performance.now()-bgStart;ctx.drawImage(overlayCanvas,0,0);perf.split++;
         }else{ctx.drawImage(img,0,0,width,height);perf.legacy++;}
       }
       try{
@@ -10909,15 +10912,15 @@ async function makeStoreZip(entries,onProgress=null){
         encoder=new VideoEncoder({output:c=>{const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>80*1024*1024)failure=Error('容量上限');},error:e=>failure=e});encoder.configure(config);
         await document.fonts.ready;guard();
         // Export clock: no live preview tick. Each frame has a unique fixed timestamp.
-        cursor=0;previous=null;fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});
-        core.load(doc,{startAt:0});core.stopAuto();applySettings();enter(rows[0]);
-        let count=0;const expected=Math.ceil(total*fps-1e-8),animationClock=new WeakMap(),videoClock=new WeakMap();
+        cursor=sampleRow;previous=null;fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});
+        core.load(doc,{startAt:0});core.stopAuto();applySettings();enter(rows[cursor]);
+        let count=0;const expected=Math.ceil((benchmark?Math.min(1,total-sampleStart):total)*fps-1e-8),animationClock=new WeakMap(),videoClock=new WeakMap();
         const settle=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
         async function renderAt(t){
           guard();let i=cursor;while(i<rows.length-1&&t>=ends[i]-1e-8)i++;
           const changed=i!==cursor;let phase=performance.now();if(changed){previous=rows[cursor];cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
           // Allow deferred DOM mounting, then freeze native animations at export time.
-          if(changed||t===0)await settle();guard();perf.settle+=performance.now()-phase;phase=performance.now();
+          if(changed||t===sampleStart)await settle();guard();perf.settle+=performance.now()-phase;phase=performance.now();
           for(const anim of frame.getAnimations({subtree:true})){
             let base=animationClock.get(anim);if(base===undefined){base=t;animationClock.set(anim,base);}
             anim.pause();anim.currentTime=Math.max(0,(t-base)*1000);
@@ -10947,7 +10950,7 @@ async function makeStoreZip(entries,onProgress=null){
           await awaitVideoFrames();guard();perf.seek+=performance.now()-phase;phase=performance.now();await snapshot();perf.snapshot+=performance.now()-phase;
         }
         for(;count<expected;count++){
-          const t=count/fps;await renderAt(t);guard();
+          const t=sampleStart+count/fps;await renderAt(t);guard();
           const encStart=performance.now();const stamp=Math.round(count*1e6/fps),next=Math.round(Math.min(total,(count+1)/fps)*1e6);
           const vf=new VideoFrame(canvas,{timestamp:stamp,duration:Math.max(1,next-stamp)});
           try{encoder.encode(vf,{keyFrame:count%fps===0});}finally{vf.close();}
@@ -10955,6 +10958,11 @@ async function makeStoreZip(entries,onProgress=null){
           perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);status.textContent='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((performance.now()-begin)/1000)+'秒';await wait(0);
         }
         dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
+        if(benchmark){
+          const elapsed=(performance.now()-begin)/1000;
+          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms（SVG生成時間は描画に含む）\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\n不採用理由（最初の条件）: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
+          status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
+        }
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
