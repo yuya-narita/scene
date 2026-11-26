@@ -7067,8 +7067,57 @@ async function makeStoreZip(entries,onProgress=null){
     if(!changes.length)throw Error('No explicit background');
     for(const bg of changes)bg.video={...bg.video,start:interval[0]-d.trim.offset,end:interval[1]-d.trim.offset};
   }
+  // 3.3.0d: idle structural optimization, sharing the encoder slot.
+  let trimScanSignature='', trimScanDone='', trimScanSince=0, trimScanBusy=false, trimProgress='', trimReadyUntil=0;
+  let trimController=null;
+  function trimSnapshot(){return clone(workingDocument||buildSceneDocument());}
+  function trimSignature(doc){
+    const refs=[];walkAssetRefs(doc,r=>{if(isPublishVideoRef(r))refs.push(r.src);});
+    return JSON.stringify([refs,doc.scenes?.map(x=>x.presentation),doc.cover,doc.ending]);
+  }
+  function trimIndicator(message){
+    let el=document.getElementById('videoOptimizationIndicator');
+    if(!el){el=document.createElement('div');el.id='videoOptimizationIndicator';el.setAttribute('role','status');el.style.cssText='position:fixed;bottom:12px;left:12px;z-index:90;max-width:calc(100vw - 24px);padding:7px 12px;border-radius:12px;background:Canvas;color:CanvasText;border:1px solid #8885;font-size:12px;pointer-events:none';document.body.append(el);}
+    el.textContent=message;el.hidden=!message;
+  }
+  async function scanIdleTrim(){
+    if(trimScanBusy||deliveryForeground||manualDeliveryBusy||autoDeliveryRunning||deliveryBlocked()||!autoDeliveryEnabled)return;
+    if(performance.now()-lastDeliveryActivity<30000)return;
+    let doc,sig;try{doc=trimSnapshot();sig=trimSignature(doc);}catch(_){return;}
+    if(sig!==trimScanSignature){trimScanSignature=sig;trimScanSince=performance.now();trimScanDone='';}
+    if(sig===trimScanDone||performance.now()-trimScanSince<1000||autoDeliveryQueue.size)return;
+    trimScanBusy=true;manualDeliveryBusy=true;trimController=new AbortController();const signal=trimController.signal;
+    const current=()=>!signal.aborted&&!deliveryForeground&&trimSignature(trimSnapshot())===sig;
+    try{
+      const rows=await inspectVideoStructure(doc);let i=0;
+      for(const r of rows){i++;if(!current())return;const interval=structuralInterval(r),master=assetRegistry.get(r.src);if(!interval||!master||deliveryCacheSuppressed.has(r.src))continue;
+        try{
+          const baseline=(await restoreDeliveryVideo(r.src))?.blob||master.blob;
+          let d=(await deliveryCacheOp(await structuralKey(master,interval),'get'))?.result;
+          if(!current())return;
+          if(!validStructural(d,interval,baseline)){
+            let candidate;const out=await optimizeDeliveryVideoIsolated(master,'ahako',n=>{trimProgress=u('動画を最適化中 ','Optimizing video ')+i+'/'+rows.length+' · '+n+'%';},signal,c=>candidate=c,()=>{},true,{start:interval[0],end:interval[1]});
+            d={blob:out.blob,trim:out.trim,pass:candidate?.pass===true,name:(master.name||'video').replace(/\.[^.]+$/,'')+'.webm'};
+            if(!current()||assetRegistry.get(r.src)!==master)return;
+            if(!validStructural(d,interval,baseline))continue;
+            applyStructuralPositions(clone(doc),r,d);await rememberStructural(master,interval,d);
+          }
+        }catch(e){if(signal.aborted)return;console.warn('Idle trim fallback',e);}
+      }
+      if(current()){trimScanDone=sig;trimReadyUntil=performance.now()+5000;}
+    }catch(e){console.warn('Idle trim scan',e);}finally{trimProgress='';trimController=null;trimScanBusy=false;manualDeliveryBusy=false;scheduleAutoDelivery();}
+  }
+  setInterval(()=>{
+    if(trimScanBusy&&(document.hidden||deliveryForeground||performance.now()-lastDeliveryActivity<1000)){trimController?.abort();}
+    if(document.hidden||deliveryForeground||(!playerScreen.hidden&&!liveEditEnabled)){trimIndicator('');return;}
+    if(!autoDeliveryEnabled){trimIndicator('');return;}
+    if(trimScanBusy){trimIndicator(trimProgress||u('動画の最適化準備中','Preparing video'));return;}
+    if(autoDeliveryRunning||autoDeliveryQueue.size){trimIndicator(u('動画を最適化中','Optimizing video')+(autoDeliveryRunning?' · '+(autoDeliveryStatus.get(autoDeliveryRunning.src)||'') : ''));return;}
+    if(performance.now()<trimReadyUntil){trimIndicator(u('動画の最適化処理完了','Video optimization finished'));}else trimIndicator('');
+    void scanIdleTrim();
+  },1000);
   async function prepareStructuralDeliveries(doc){
-    const selected=new Map();deliveryForeground=true;clearTimeout(autoDeliveryTimer);
+    const selected=new Map();deliveryForeground=true;clearTimeout(autoDeliveryTimer);trimController?.abort();
     try{
       while(autoDeliveryRunning||manualDeliveryBusy)await new Promise(r=>setTimeout(r,100));
       const rows=await inspectVideoStructure(doc);
@@ -7181,7 +7230,7 @@ async function makeStoreZip(entries,onProgress=null){
   }
 
   async function optimizeBeforePublish(doc){
-    deliveryForeground=true;clearTimeout(autoDeliveryTimer);
+    deliveryForeground=true;clearTimeout(autoDeliveryTimer);trimController?.abort();
     try{
       if(deliveryWorker)deliveryWorker.postMessage({type:'slow',ms:0});
       while(autoDeliveryRunning||manualDeliveryBusy)await new Promise(r=>setTimeout(r,100));
