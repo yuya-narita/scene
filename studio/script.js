@@ -10822,7 +10822,7 @@ async function makeStoreZip(entries,onProgress=null){
       const width=w===h?540:w<h?540:960,height=w===h?540:w<h?960:540;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
       const cache=new Map(),packets=[];
-      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0,styleMs:0,xmlMs:0,decodeMs:0,pruned:0,rasterHits:0,spriteFrames:0,spriteBuilds:0,spriteHits:0,spriteMs:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
+      const perf={settle:0,seek:0,snapshot:0,encode:0,hits:0,misses:0,split:0,legacy:0,bgMs:0,overlayMs:0,styleMs:0,xmlMs:0,decodeMs:0,pruned:0,rasterHits:0,spriteFrames:0,spriteBuilds:0,spriteHits:0,spriteMs:0,veilFrames:0,pseudoSkipped:0},begin=performance.now();const reasons=new Map();const reject=(reason)=>{reasons.set(reason,(reasons.get(reason)||0)+1);return null;};let lastSVG=null,lastImage=null;const mediaCache=new WeakMap();let encoder,failure,bytesUsed=0;
       const guard=()=>{if(job.cancelled||!dialog.open||document.hidden)throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});cache.set(url,data);}return cache.get(url);}
@@ -10905,6 +10905,18 @@ async function makeStoreZip(entries,onProgress=null){
       spriteObserver.observe(frame,{subtree:true,attributes:true,childList:true,characterData:true});
       const spriteCanvas=document.createElement('canvas');spriteCanvas.width=width;spriteCanvas.height=height;
       const spriteCtx=spriteCanvas.getContext('2d');
+      // b7: only flatten a plain, full-frame veil below all visible foreground.
+      function directVeil(split){
+        const n=host.querySelector('.sp-veil');if(!n||n.parentElement!==host||n.children.length)return null;
+        const c=getComputedStyle(n),r=n.getBoundingClientRect(),f=frame.getBoundingClientRect();
+        if(c.display==='none'||c.visibility==='hidden'||c.backgroundImage!=='none'||c.filter!=='none'||c.mixBlendMode!=='normal'||c.transform!=='none'||c.clipPath!=='none'||c.maskImage!=='none'||c.backdropFilter!=='none'||c.boxShadow!=='none'||parseFloat(c.borderRadius)||parseFloat(c.borderWidth)||c.position!=='absolute'||Number(c.zIndex)!==1||!CSS.supports('color',c.backgroundColor))return null;
+        if(Math.abs(r.left-f.left)>.1||Math.abs(r.top-f.top)>.1||Math.abs(r.width-f.width)>.1||Math.abs(r.height-f.height)>.1)return null;
+        for(const q of ['::before','::after']){const pc=getComputedStyle(n,q);if(!['none','normal'].includes(pc.content))return null;}
+        for(const x of host.children){if(x===n||x===split.bg)continue;const a=getComputedStyle(x);if(a.display==='none'||a.visibility==='hidden'||Number(a.opacity)===0)continue;if(!Number.isFinite(Number(a.zIndex))||Number(a.zIndex)<=1)return null;}
+        return {n,color:c.backgroundColor,alpha:Number(c.opacity)};
+      }
+      function paintVeil(split){if(!split.veil)return;ctx.save();ctx.globalAlpha=split.veil.alpha;ctx.fillStyle=split.veil.color;ctx.fillRect(0,0,width,height);ctx.restore();perf.veilFrames++;}
+      function invisiblePseudo(n,pseudo){const c=getComputedStyle(n,pseudo);return c.display==='none'||c.visibility==='hidden'||Number(c.opacity)===0||['none','normal'].includes(c.content);}
       function spriteCandidate(split){
         const targets=new Set();
         const visible=n=>{for(let x=n;x&&x!==frame.parentElement;x=x.parentElement){const c=getComputedStyle(x);if(x.hidden||c.display==='none'||c.visibility==='hidden')return false;}return true;};
@@ -10912,8 +10924,14 @@ async function makeStoreZip(entries,onProgress=null){
         for(const a of frame.getAnimations({subtree:true})){
           const e=a.effect,n=e?.target;if(!n||!e.getKeyframes)return spriteReject('演出対象不明');
           if(split.bg.contains(n)||!visible(n))continue;
-          if(e.pseudoElement)return spriteReject('疑似要素演出');
           const keys=[...new Set(e.getKeyframes().flatMap(k=>Object.keys(k)).filter(k=>!['offset','computedOffset','easing','composite'].includes(k)))];
+          if(e.pseudoElement){
+            // Grain animation exists even at zero intensity. Only skip when opacity
+            // cannot be changed by this animation; visible pseudo effects stay legacy.
+            if(invisiblePseudo(n,e.pseudoElement)&&!keys.some(k=>['opacity','visibility','display','content'].includes(k))){perf.pseudoSkipped++;continue;}
+            return spriteReject('疑似要素演出: '+n.className+e.pseudoElement+' / '+keys.join(','));
+          }
+          if(split.veil?.n===n&&keys.every(k=>k==='backgroundColor'||k==='opacity'))continue;
           if(!keys.length||keys.some(k=>k!=='opacity'))return spriteReject('非対応演出: '+n.className+' / '+keys.join(','));
           if(!n.matches('.sp-scene,.sp-text,.sp-subtext,.sp-handdrawn-frame,.sp-scene-image-object'))return spriteReject('対象外: '+n.className);
           targets.add(n);
@@ -10933,6 +10951,7 @@ async function makeStoreZip(entries,onProgress=null){
           if(skipped.has(src.parentElement)){skipped.add(src);continue;}
           const cs=getComputedStyle(src);
           if(split&&src!==frame&&src!==host&&cs.display==='none'){skipped.add(src);dst.remove();perf.pruned++;continue;}
+          if(split?.veil?.n===src){skipped.add(src);dst.remove();continue;}
           if(split&&src.classList.contains('sp-bg-textures')&&Number(cs.opacity)===0){dst.remove();continue;}
           if(split&&(src===split.bg||split.bg.contains(src))){if(src===split.bg){dst.remove();skipped.add(src);}continue;}
           if(src instanceof HTMLVideoElement||src instanceof HTMLCanvasElement){
@@ -10973,7 +10992,7 @@ async function makeStoreZip(entries,onProgress=null){
         const targets=spriteCandidate(split);if(!targets){spriteState=null;return false;}
         const alphas=targets.map(n=>Number(getComputedStyle(n).opacity));
         if(alphas.some(a=>!Number.isFinite(a)||a<0||a>1))return spriteReject('透明度不正');
-        const same=spriteState&&spriteState.row===cursor&&spriteState.fw===fw&&spriteState.fh===fh&&targets.length===spriteState.targets.length&&targets.every((n,i)=>n===spriteState.targets[i]);
+        const same=spriteState&&spriteState.row===cursor&&spriteState.fw===fw&&spriteState.fh===fh&&spriteState.veil===split.veil?.n&&targets.length===spriteState.targets.length&&targets.every((n,i)=>n===spriteState.targets[i]);
         if(!same){
           spriteState=null;
           if(width*height*4*(targets.length+2)>32*1024*1024)return spriteReject('スプライトメモリ上限');
@@ -10996,7 +11015,7 @@ async function makeStoreZip(entries,onProgress=null){
           // Rectangles must also be disjoint, because each includes static pixels.
           for(let i=0;i<layers.length;i++)for(let j=0;j<i;j++){const a=layers[i],b=layers[j];if(a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h)return spriteReject('独立領域の矩形重複');}
           if(spriteObserver.takeRecords().some(spriteRelevant))return spriteReject('生成中のDOM更新');
-          spriteState={targets,row:cursor,fw,fh,base,layers};perf.spriteBuilds+=1+layers.length;
+          spriteState={targets,row:cursor,fw,fh,base,layers,veil:split.veil?.n};perf.spriteBuilds+=1+layers.length;
         }else perf.spriteHits++;
         const st=spriteState;if(!st)return spriteReject('生成中の状態変更');
         spriteCtx.clearRect(0,0,width,height);spriteCtx.drawImage(st.base,0,0);
@@ -11006,12 +11025,13 @@ async function makeStoreZip(entries,onProgress=null){
         }finally{spriteCtx.restore();}}
         ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
         const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;
-        ctx.drawImage(spriteCanvas,0,0);perf.spriteFrames++;perf.spriteMs+=performance.now()-t;return true;
+        paintVeil(split);ctx.drawImage(spriteCanvas,0,0);perf.spriteFrames++;perf.spriteMs+=performance.now()-t;return true;
       }
       async function snapshot(){
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
         const split=splitBackground(fw,fh);
         if(split){
+          split.veil=directVeil(split);
           if(await paintSprite(split,fw,fh)){perf.split++;return;}
         }else{spriteState=null;spriteReject('背景分離不可');}
         const svg=await makeSVG(fw,fh,split);
@@ -11023,7 +11043,7 @@ async function makeStoreZip(entries,onProgress=null){
         }else perf.hits++;guard();ctx.fillStyle='#000';ctx.fillRect(0,0,width,height);
         if(split){
           const overlayStart=performance.now();if(overlaySVG!==svg){overlayCtx.clearRect(0,0,width,height);overlayCtx.drawImage(img,0,0,width,height);overlaySVG=svg;}
-          perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;ctx.drawImage(overlayCanvas,0,0);perf.split++;
+          perf.overlayMs+=performance.now()-overlayStart;const bgStart=performance.now();await paintFadeBase(split,fw,fh);guard();ctx.save();try{ctx.globalAlpha=split.alpha;ctx.drawImage(split.v,split.x,split.y,split.w,split.h);}finally{ctx.restore();}perf.bgMs+=performance.now()-bgStart;paintVeil(split);ctx.drawImage(overlayCanvas,0,0);perf.split++;
         }else{ctx.drawImage(img,0,0,width,height);perf.legacy++;}
       }
       try{
@@ -11080,7 +11100,7 @@ async function makeStoreZip(entries,onProgress=null){
         dispose();guard();await encoder.flush();guard();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');
         if(benchmark){
           const elapsed=(performance.now()-begin)/1000;
-          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
+          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\nベール直接合成 '+perf.veilFrames+'フレーム / 非表示疑似要素省略 '+perf.pseudoSkipped+'回\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
