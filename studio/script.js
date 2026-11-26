@@ -7049,8 +7049,49 @@ async function makeStoreZip(entries,onProgress=null){
     button(u('閉じる','Close'),()=>dialog.close());
     dialog.addEventListener('close',()=>{closed=true;for(const v of videos){v.pause();v.removeAttribute('src');v.load();}urls.forEach(url=>URL.revokeObjectURL(url));dialog.remove();},{once:true});document.body.append(dialog);dialog.showModal();
   }
+  // 3.3.0c: trim cache is separate from full-length DELIVERY cache.
+  function structuralInterval(r){
+    const interval=r.intervals[0];
+    return r.status==='candidate'&&r.intervals.length===1&&interval&&r.uses.length&&r.uses.every(x=>!x.full&&x.mode==='loop'&&['carry','restart'].includes(x.continuity)&&Math.abs(x.start-interval[0])<.00001&&Math.abs(x.end-interval[1])<.00001)?interval:null;
+  }
+  async function structuralKey(master,interval){return (await deliveryCacheKey(master.blob))+':trim330c:'+JSON.stringify(interval);}
+  function validStructural(d,interval,baseline){return d?.pass===true&&d.blob instanceof Blob&&/^video\/webm/i.test(d.blob.type)&&d.blob.size>0&&d.blob.size<baseline.size&&Number.isFinite(d.trim?.offset)&&Number.isFinite(d.trim?.duration)&&d.trim.offset>=0&&d.trim.offset<=interval[0]&&d.trim.duration>=interval[1]-d.trim.offset;}
+  async function rememberStructural(master,interval,d){try{await deliveryCacheOp(await structuralKey(master,interval),'put',{result:d,savedAt:Date.now()});}catch(e){console.warn('Trim cache write',e);}}
+  function applyStructuralPositions(doc,r,d){
+    const interval=structuralInterval(r);if(!interval)throw Error('Unsafe interval');
+    const changes=[];
+    for(const use of r.uses){const i=Number(use.label.slice(6))-1;if(!Number.isInteger(i)||!doc.scenes[i])throw Error('Scene mapping failed');const bg=doc.scenes[i]?.presentation?.background;if(!bg)continue;
+      if(bg.src&&bg.src!==r.src)throw Error('Background mapping mismatch');
+      if(bg.src===r.src||bg.video?.start!=null||bg.video?.end!=null)changes.push(bg);
+    }
+    if(!changes.length)throw Error('No explicit background');
+    for(const bg of changes)bg.video={...bg.video,start:interval[0]-d.trim.offset,end:interval[1]-d.trim.offset};
+  }
+  async function prepareStructuralDeliveries(doc){
+    const selected=new Map();deliveryForeground=true;clearTimeout(autoDeliveryTimer);
+    try{
+      while(autoDeliveryRunning||manualDeliveryBusy)await new Promise(r=>setTimeout(r,100));
+      const rows=await inspectVideoStructure(doc);
+      for(const r of rows){const interval=structuralInterval(r),master=assetRegistry.get(r.src);if(!interval||!master||!/^blob:/i.test(r.src)||deliveryCacheSuppressed.has(r.src))continue;
+        try{
+          const baseline=(await restoreDeliveryVideo(r.src))?.blob||master.blob;
+          let d;try{d=(await deliveryCacheOp(await structuralKey(master,interval),'get'))?.result;}catch(e){console.warn(e);}
+          if(!validStructural(d,interval,baseline)){
+            let candidate;const controller=new AbortController();const out=await optimizeDeliveryVideoIsolated(master,'ahako',n=>{const status=$('#publishStateWorking p');if(status)status.textContent=u('構造的圧縮 ','Structural optimization ')+n+'%';},controller.signal,c=>candidate=c,()=>{},true,{start:interval[0],end:interval[1]});
+            d={blob:out.blob,trim:out.trim,pass:candidate?.pass===true,name:(master.name||'video').replace(/\.[^.]+$/,'')+'.webm'};
+            if(!validStructural(d,interval,baseline))continue;
+            await rememberStructural(master,interval,d);
+          }
+          if(assetRegistry.get(r.src)!==master||deliveryCacheSuppressed.has(r.src))continue;
+          // Validate mapping on a disposable copy before committing selection.
+          applyStructuralPositions(clone(doc),r,d);selected.set(r.src,{r,d});
+        }catch(e){console.warn('Structural optimization fallback',e);}
+      }
+    }catch(e){console.warn('Structural analysis fallback',e);}finally{deliveryForeground=false;scheduleAutoDelivery();}
+    return selected;
+  }
   async function trialStructuralTrim(doc,r,button,section){
-    const status=document.createElement('p');section.append(status);
+    let status=section.querySelector('[data-trim-status]');if(!status){status=document.createElement('p');status.dataset.trimStatus='1';section.append(status);}
     const master=assetRegistry.get(r.src), interval=r.intervals[0];
     if(!master||r.intervals.length!==1||!interval||r.uses.some(x=>x.full||x.mode!=='loop'||!['carry','restart'].includes(x.continuity)||Math.abs(x.start-interval[0])>.00001||Math.abs(x.end-interval[1])>.00001)){status.textContent='安全条件外：従来版を保持';return;}
     if(autoDeliveryRunning||manualDeliveryBusy||deliveryForeground){status.textContent='別の圧縮処理中です。完了後に再試行してください。';return;}
@@ -7061,6 +7102,7 @@ async function makeStoreZip(entries,onProgress=null){
       if(controller.signal.aborted||!panel.open)return;
       if(!candidate?.pass||!out.trim||!Number.isFinite(out.trim.offset)||!Number.isFinite(out.trim.duration))throw Error('Verification failed');
       const baseline=deliveryVideos.get(r.src)?.blob||master.blob;if(out.blob.size>=baseline.size)throw Error('従来版より小さくならないため不採用');
+      await rememberStructural(master,interval,{blob:out.blob,trim:out.trim,pass:true,name:(master.name||'video').replace(/\.[^.]+$/,'')+'.webm'});
       const copy=clone(doc), url=URL.createObjectURL(out.blob);let opened=false;
       try{
         for(const use of r.uses){const i=Number(use.label.slice(6))-1;if(!Number.isInteger(i)||!copy.scenes[i])throw Error('Scene mapping failed');const bg=copy.scenes[i]?.presentation?.background;if(!bg)continue;if(bg.src===r.src||bg.video?.start!=null||bg.video?.end!=null){bg.video={...bg.video,start:interval[0]-out.trim.offset,end:interval[1]-out.trim.offset};}}
@@ -7156,8 +7198,9 @@ async function makeStoreZip(entries,onProgress=null){
       }
     }finally{deliveryForeground=false;scheduleAutoDelivery();}
   }
-  async function prepareDocumentForPublish(sceneDocument){
+  async function prepareDocumentForPublish(sceneDocument,structural=new Map()){
     const hosted=stripPrivateMasterIdentity(sceneDocument);
+    for(const {r,d} of structural.values())applyStructuralPositions(hosted,r,d);
     const cache=new Map();
     const videoUploads=new Map();
     const refs=[];
@@ -7167,7 +7210,7 @@ async function makeStoreZip(entries,onProgress=null){
       if(!/^blob:/i.test(ref.src))continue;
       let hostedUrl=cache.get(ref.src);
       if(!hostedUrl){
-        const delivery=isPublishVideoRef(ref)?await restoreDeliveryVideo(ref.src):null;
+        const delivery=isPublishVideoRef(ref)?(structural.get(ref.src)?.d||await restoreDeliveryVideo(ref.src)):null;
         const blob=delivery?.blob||assetRegistry.get(ref.src)?.blob;
         if(blob&&isPublishVideoRef(ref)){
           const key=blob.size+':'+blob.type;
@@ -7238,7 +7281,8 @@ async function makeStoreZip(entries,onProgress=null){
       // Hosting v3 master identity: local assets become permanent Worker URLs,
       // while ownerKey stays only inside the author's .scene.
       await optimizeBeforePublish(sourceDocument);
-      const hostedDocument=await prepareDocumentForPublish(sourceDocument);
+      const structural=await prepareStructuralDeliveries(sourceDocument);
+      const hostedDocument=await prepareDocumentForPublish(sourceDocument,structural);
       const baseEndpoint=id?`${SCENE_STUDIO_API_BASE}/publish?id=${encodeURIComponent(id)}`:`${SCENE_STUDIO_API_BASE}/publish`;
       const request={
         method:'POST',
