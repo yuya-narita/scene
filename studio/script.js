@@ -7077,8 +7077,8 @@ async function makeStoreZip(entries,onProgress=null){
   }
   function trimIndicator(message){
     let el=document.getElementById('videoOptimizationIndicator');
-    if(!el){el=document.createElement('div');el.id='videoOptimizationIndicator';el.setAttribute('role','status');el.style.cssText='position:fixed;bottom:82px;left:12px;z-index:1200;max-width:calc(100vw - 24px);padding:7px 12px;border-radius:12px;background:Canvas;color:CanvasText;border:1px solid #8885;font-size:12px;pointer-events:none';document.body.append(el);}
-    el.textContent=message;el.hidden=!message;
+    if(!el){el=document.createElement('div');el.id='videoOptimizationIndicator';el.setAttribute('role','status');el.style.cssText='position:fixed;bottom:calc(88px + env(safe-area-inset-bottom));left:12px;z-index:2147483006;max-width:calc(100vw - 24px);padding:7px 12px;border-radius:12px;background:Canvas;color:CanvasText;border:1px solid #8885;font-size:12px;pointer-events:none';document.body.append(el);}
+    if(el.textContent!==message)el.textContent=message;el.hidden=!message;el.style.setProperty('display',message?'block':'none','important');if(message){const cage=document.getElementById('cageHome');const rect=cage&&!cage.hidden?cage.getBoundingClientRect():null;el.style.bottom=rect&&rect.height?Math.max(12,window.innerHeight-rect.top+8)+'px':'calc(88px + env(safe-area-inset-bottom))';}
   }
   async function scanIdleTrim(){
     if(trimScanBusy||deliveryForeground||manualDeliveryBusy||autoDeliveryRunning||deliveryBlocked()||!autoDeliveryEnabled)return;
