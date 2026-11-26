@@ -10716,6 +10716,44 @@ async function makeStoreZip(entries,onProgress=null){
   easyMenuPanel?.addEventListener('click',(e)=>e.stopPropagation());
   easyMenuBackdrop?.addEventListener('click',closeEasyMenu);
 
+  // Phase 4.0.1: isolated, session-only short video planning workspace.
+  let shortVideoPlan=null;
+  function openShortVideoPlan(){
+    closeEasyMenu();
+    if(!workingDocument?.scenes?.length){appAlert('作品を開いてから動画制作を始めてください。');return;}
+    const source=workingDocument;
+    const signature=JSON.stringify(source.scenes.map(s=>[s.id,s.pause,scenePreviewText(s)]));
+    if(!shortVideoPlan||shortVideoPlan.source!==source||shortVideoPlan.signature!==signature){
+      shortVideoPlan={source,signature,ratio:'9:16',rows:source.scenes.map((s,i)=>({index:i,label:scenePreviewText(s),seconds:liveTimingSeconds(s),included:true}))};
+    }
+    const plan=shortVideoPlan;
+    const dialog=document.createElement('dialog');
+    dialog.setAttribute('aria-label','ショート動画制作');
+    dialog.style.cssText='width:min(720px,94vw);max-height:88dvh;padding:20px;border:1px solid #ccc;border-radius:16px;background:#fff;color:#191919;overflow:auto;box-sizing:border-box';
+    const el=(tag,value,parent)=>{const n=document.createElement(tag);if(value!==null)n.textContent=value;if(parent)parent.append(n);return n;};
+    const head=el('div',null,dialog);head.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px';
+    el('h2','ショート動画制作',head);const close=el('button','閉じる',head);close.type='button';close.onclick=()=>dialog.close();
+    el('p','制作プラン（試験）｜元作品は変更しません。設定はこの編集セッションのみ有効です。',dialog);
+    const controls=el('div',null,dialog);controls.style.cssText='display:flex;gap:12px;align-items:center;flex-wrap:wrap';
+    const label=el('label','画面比率 ',controls);const select=el('select',null,label);
+    for(const [ratio,desc] of [['9:16','9:16 縦型'],['16:9','16:9 横型'],['1:1','1:1 正方形']]){const o=el('option',desc,select);o.value=ratio;}
+    select.value=plan.ratio;
+    const frame=el('div',null,dialog);frame.style.cssText='margin:16px auto;background:#24272a;color:white;display:grid;place-items:center;border-radius:8px;max-width:100%;max-height:240px';
+    function updateFrame(){plan.ratio=select.value;const [w,h]=plan.ratio.split(':').map(Number);frame.style.width=Math.min(320,240*w/h)+'px';frame.style.aspectRatio=w+'/'+h;frame.textContent=plan.ratio+' ｜ 構図ガイド';}
+    select.onchange=updateFrame;updateFrame();
+    const summary=el('strong','',dialog);summary.style.display='block';
+    el('p','本編Sceneのみ。表示尺はAUTO設定を初期値とする予定尺です。表紙・読了・音声同期・演出時間はまだ反映しません。',dialog);
+    const actions=el('div',null,dialog);actions.style.cssText='display:flex;gap:8px;margin:12px 0';
+    const all=el('button','すべて選択',actions),none=el('button','すべて解除',actions);all.type=none.type='button';
+    const list=el('div',null,dialog);const inputs=[];
+    function refresh(){let total=0,count=0;for(const r of plan.rows){if(r.included){total+=r.seconds;count++;}}summary.textContent=`${count} / ${plan.rows.length} Scene ｜ 予定尺 ${total.toFixed(2)} 秒`;}
+    for(const r of plan.rows){const row=el('label',null,list);row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #ddd';const cb=el('input',null,row);cb.type='checkbox';cb.checked=r.included;inputs.push(cb);const title=el('span',`Scene ${r.index+1} ｜ ${r.label}`,row);title.style.flex='1';el('small',r.seconds.toFixed(2)+'秒',row);cb.onchange=()=>{r.included=cb.checked;refresh();};}
+    function setAll(value){plan.rows.forEach((r,i)=>{r.included=value;inputs[i].checked=value;});refresh();}
+    all.onclick=()=>setAll(true);none.onclick=()=>setAll(false);refresh();
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();
+  }
+  document.querySelector('#menuShortVideoButton')?.addEventListener('click',openShortVideoPlan);
+
   // v0.2.94: menu is a top-right popover; no drag-to-dismiss gesture.
   document.addEventListener('click',closeEasyMenu);
   document.addEventListener('keydown',(e)=>{if(e.key==='Escape')closeEasyMenu();});
