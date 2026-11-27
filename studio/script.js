@@ -11379,8 +11379,12 @@ async function makeStoreZip(entries,onProgress=null){
     if(advanced!==true&&!pvOptions){
       const d=document.createElement('dialog');d.style.cssText='width:min(440px,92vw);max-height:85vh;overflow:auto;padding:20px;border:1px solid #555;border-radius:14px;background:#20252a;color:#fff;box-sizing:border-box';
       const heading=document.createElement('h2');heading.textContent='作品のPVを作る';heading.style.cssText='font-size:20px;margin:0 0 6px';
-      const sub=document.createElement('p');sub.textContent='冒頭チラ見せ · 作品から宣伝動画を自動構成';sub.style.cssText='font-size:13px;color:#bbb;margin:0 0 18px';d.append(heading,sub);
-      const options={duration:30,ratio:'9:16',text:'続きは、あ箱で。'};
+      const sub=document.createElement('p');sub.textContent='作品から宣伝動画を自動構成';sub.style.cssText='font-size:13px;color:#bbb;margin:0 0 18px';d.append(heading,sub);
+      const options={duration:30,ratio:'9:16',text:'続きは、あ箱で。',style:'auto'};
+      const styles=[['auto','おまかせ','作品の特徴から構成を選びます'],['intro','冒頭チラ見せ','冒頭から順番に見せます'],['digest','ダイジェスト','離れた場面を順番につなぎます'],['hook','続きが気になる','疑問や異変のある場面で切ります'],['visual','映像・演出重視','動画・手書き・音・特殊演出を優先します']];
+      const styleLabel=document.createElement('label');styleLabel.style.cssText='display:grid;gap:6px;font-size:13px;color:#ddd';styleLabel.textContent='PVスタイル';
+      const styleSelect=document.createElement('select');styleSelect.style.cssText='width:100%;color:#fff;background:#343a40;padding:8px';for(const [id,name] of styles)styleSelect.add(new Option(name,id));styleSelect.value=options.style;
+      const styleHint=document.createElement('small');styleHint.style.cssText='color:#bbb';styleSelect.onchange=()=>{options.style=styleSelect.value;styleHint.textContent=styles.find(x=>x[0]===options.style)[2];};styleSelect.onchange();styleLabel.append(styleSelect,styleHint);d.append(styleLabel);
       function choices(label,key,values){const title=document.createElement('div');title.textContent=label;title.style.cssText='font-size:13px;margin:14px 0 6px;color:#ddd';const group=document.createElement('div');group.style.cssText='display:flex;gap:6px;flex-wrap:wrap';const buttons=[];for(const [value,text] of values){const b=document.createElement('button');b.type='button';b.textContent=text;b.style.cssText='flex:1;min-width:65px;padding:9px 6px;border:0;border-radius:7px;color:#fff';b.onclick=()=>{options[key]=value;refresh();};buttons.push([b,value]);group.append(b);}function refresh(){for(const [b,v] of buttons){b.setAttribute('aria-pressed',String(options[key]===v));b.style.background=options[key]===v?'#386da8':'#343a40';}}refresh();d.append(title,group);}
       choices('動画の長さ','duration',[[15,'15秒'],[30,'30秒'],[60,'60秒']]);
       choices('画面比率','ratio',[['9:16','9:16 縦'],['16:9','16:9 横'],['1:1','1:1 正方形']]);
@@ -11426,16 +11430,63 @@ async function makeStoreZip(entries,onProgress=null){
     for(const r of ordered){const p=source.scenes[r.index]?.presentation;if(p?.view==='credits'||(p?.credits?.mode==='roll'&&p.credits.enabled===true))break;eligible.push({r,t:pvTiming(source.scenes[r.index])});}
     function windowAt(start){let remaining=bodyBudget;const items=[];for(let i=start;i<eligible.length;i++){const {r,t}=eligible[i];if(t.minimum>remaining)break;const ms=Math.min(remaining,t.preferred);items.push({r,ms});remaining-=ms;}if(items.length&&start+items.length<eligible.length&&remaining>0&&remaining<=200)items.at(-1).ms+=remaining;if(!items.length&&eligible[start])items.push({r:eligible[start].r,ms:bodyBudget});return items;}
     if(!eligible.length){appAlert('PVに使用できる冒頭Sceneがありません。');return;}
-    const opening=windowAt(0), candidates=[{label:'冒頭',items:opening}];
-    const seen=new Set([opening.map(x=>x.r.index).join(',')]);
-    // Prefer early, contiguous excerpts; avoid the final quarter and never reorder dialogue.
-    const limit=Math.min(eligible.length-1,Math.max(1,Math.floor(eligible.length*.6)),60);
+    // Phase 5.3.2: deterministic, spoiler-limited style candidates.
+    const opening=windowAt(0), candidates=[];
+    const seen=new Set();
+    const limit=Math.min(eligible.length-1,Math.max(0,Math.floor(eligible.length*.6)),60);
+    const info=eligible.map(({r,t})=>{
+      const scene=source.scenes[r.index],p=scene.presentation||{},bg=p.background||{};
+      const text=[scene.text,scene.subText].filter(Boolean).join(' ');
+      const visual=(bg.video?.src?5:0)+(p.draw?.strokes?.length?5:0)+(!['none','auto','fade','blur','whisper',undefined].includes(p.effect)?3:0)+(bg.motion?.type&&bg.motion.type!=='none'?2:0)+(p.typing?.enabled?1:0)+(Array.isArray(scene.audio)?scene.audio.filter(a=>a.src&&a.action!=='stop').length*2:0)+(bg.src?1:0);
+      const hook=(/[？?]/.test(text)?4:0)+(/(?:まさか|しかし|その時|その瞬間|突然|なぜ|どうして|何者|一体|いったい|おかしい|異変|正体|秘密)/.test(text)?3:0)+(/[！!…]\s*$/.test(text)?1:0);
+      return {r,t,visual,hook};
+    });
+    const byIndex=new Map(info.map(e=>[e.r.index,e]));
+    const key=c=>c.items.map(x=>x.r.index).join(',');
+    const addCandidate=(label,c)=>{if(!c?.items?.length||seen.has(key(c)))return;seen.add(key(c));candidates.push({label,items:c.items});};
     const pool=[];
-    for(let i=1;i<=limit;i++){const items=windowAt(i);if(!items.length||items.some(x=>x.ms<eligible.find(e=>e.r===x.r).t.minimum))continue;const score=items.reduce((n,x)=>{const p=source.scenes[x.r.index]?.presentation||{};return n+(p.draw?.strokes?.length?3:0)+(p.effect&&p.effect!=='none'?1:0)+(p.background?.video?2:0);},0);pool.push({i,items,score});}
-    const addCandidate=(label,c)=>{if(!c)return;const key=c.items.map(x=>x.r.index).join(',');if(seen.has(key))return;seen.add(key);candidates.push({label,items:c.items});};
-    addCandidate('別の導入',pool.find(c=>c.i>=Math.max(1,Math.floor(opening.length/2)))||pool[0]);
-    addCandidate('演出重視',pool.slice().sort((a,b)=>b.score-a.score||a.i-b.i).find(c=>!seen.has(c.items.map(x=>x.r.index).join(','))));
-    addCandidate('別の場面',pool.find(c=>c.i>=opening.length&&!seen.has(c.items.map(x=>x.r.index).join(',')))||pool.find(c=>!seen.has(c.items.map(x=>x.r.index).join(','))));
+    for(let i=0;i<=limit;i++){
+      const items=windowAt(i);if(!items.length||items.some(x=>x.ms<byIndex.get(x.r.index).t.minimum))continue;
+      // Do not reveal the final portion when selecting non-opening excerpts.
+      if(i>0&&items.at(-1).r.index>Math.max(limit,opening.at(-1).r.index))continue;
+      const score=items.reduce((n,x)=>n+byIndex.get(x.r.index).visual,0)/items.length;
+      pool.push({i,items,score});
+    }
+    const visual=pool.slice().sort((a,b)=>b.score-a.score||a.i-b.i);
+    const hooks=[];
+    for(const c of pool){for(let j=0;j<c.items.length;j++){
+      const e=byIndex.get(c.items[j].r.index);if(!e.hook||e.r.index>=eligible.length-1)continue;
+      const items=c.items.slice(0,j+1),used=items.reduce((n,x)=>n+x.ms,0);
+      if(used<bodyBudget*.45)continue;
+      hooks.push({items,score:e.hook*3+used/bodyBudget-c.i*.015});
+    }}
+    hooks.sort((a,b)=>b.score-a.score);
+    // Digest: two short chronological excerpts, never reverse the story.
+    const digests=[];
+    for(let i=0;i<=limit;i++){
+      const first=[];let used=0;
+      for(let j=i;j<=limit;j++){const e=info[j];if(used+e.t.minimum>bodyBudget*.48)break;const ms=Math.min(e.t.preferred,Math.floor(bodyBudget*.48)-used);first.push({r:e.r,ms});used+=ms;}
+      if(!first.length)continue;
+      for(let k=i+first.length+1;k<=limit;k++){
+        const second=[];let left=bodyBudget-used;
+        for(let j=k;j<=limit;j++){const e=info[j];if(e.t.minimum>left)break;const ms=Math.min(left,e.t.preferred);second.push({r:e.r,ms});left-=ms;}
+        if(!second.length)continue;
+        const items=[...first,...second],score=items.reduce((n,x)=>n+byIndex.get(x.r.index).visual+byIndex.get(x.r.index).hook*.5,0)/items.length+(bodyBudget-left)/bodyBudget-i*.01;
+        digests.push({items,score});
+      }
+    }
+    digests.sort((a,b)=>b.score-a.score);
+    const requested=['intro','digest','hook','visual','auto'].includes(pvOptions.style)?pvOptions.style:'auto';
+    let style=requested;
+    if(style==='auto')style=hooks.length&&hooks[0].score>=12?'hook':visual[0]?.score>=3?'visual':'intro';
+    const addRanked=(label,list)=>{for(const c of list){addCandidate(label,c);if(candidates.length>=4)break;}};
+    if(style==='intro'){addCandidate('冒頭チラ見せ',{items:opening});addRanked('別の導入',pool.filter(c=>c.i>0));}
+    if(style==='digest')addRanked('ダイジェスト',digests);
+    if(style==='hook')addRanked('続きが気になる',hooks);
+    if(style==='visual')addRanked('映像・演出重視',visual);
+    if(!candidates.length)addCandidate('冒頭（候補不足）',{items:opening});
+    if(candidates.length<4)addCandidate('冒頭チラ見せ',{items:opening});
+    plan.pvStyle=requested;
     let variantIndex=0;
     function applyVariant(v){for(const r of plan.rows){r.included=false;if(r.kind==='scene')r.seconds=duration(videoSceneSeconds(source.scenes[r.index]));}resetOrder();cover.included=true;cover.seconds=coverSeconds;const end=plan.rows.find(r=>r.kind==='pv');end.included=true;end.seconds=endSeconds;for(const {r,ms} of v.items){r.included=true;r.seconds=ms/100;}plan.pvPattern=v.label;}
     applyVariant(candidates[0]);
