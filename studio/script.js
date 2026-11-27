@@ -10739,7 +10739,16 @@ async function makeStoreZip(entries,onProgress=null){
     function paintPV(c,W,H,t,d){const u=Math.max(0,Math.min(1,t/Math.max(.15,d))),fade=Math.min(1,u*8),unit=Math.min(W,H);c.save();c.fillStyle='#080808';c.fillRect(0,0,W,H);c.globalAlpha=fade;c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.font='600 '+Math.round(unit*.065)+'px sans-serif';c.fillText(plan.pvText||'続きは、あ箱で。',W/2,H*.37,W*.88);c.globalAlpha=fade*Math.min(1,Math.max(0,(u-.18)*5));c.font='700 '+Math.round(unit*.15)+'px sans-serif';c.fillText('あ□',W/2,H*.53);c.font='500 '+Math.round(unit*.038)+'px sans-serif';c.fillText('AHAKO',W/2,H*.63);c.fillStyle='#aaa';c.font=Math.round(unit*.032)+'px sans-serif';c.fillText('作品リンクは投稿文へ',W/2,H*.79);c.restore();}
     function showPV(t,d){mark.hidden=true;pvCard.style.display='block';const W=Math.max(1,frame.clientWidth),H=Math.max(1,frame.clientHeight);if(pvCard.width!==W||pvCard.height!==H){pvCard.width=W;pvCard.height=H;}paintPV(pvCard.getContext('2d'),W,H,t,d);}
 
-    function fit(){const width=Math.max(1,Math.floor(Math.min(stage.clientWidth,stage.clientHeight*w/h)));frame.style.width=width+'px';frame.style.height=Math.floor(width*h/w)+'px';}
+    function fit(){
+      const width=Math.max(1,Math.floor(Math.min(stage.clientWidth,stage.clientHeight*w/h)));
+      frame.style.width=width+'px';
+      frame.style.height=Math.floor(width*h/w)+'px';
+      const surface=frame.parentElement;
+      if(surface?.hasAttribute('data-pv-surface')){
+        surface.style.width=frame.style.width;
+        surface.style.height=frame.style.height;
+      }
+    }
     const observer=new ResizeObserver(fit);observer.observe(stage);
     let settings=plan.renderSettings||(plan.renderSettings={title:false,watermark:true,guide:false});settings.title=false;
     function applySettings(){host.classList.add('sv-hide-title');mark.hidden=!settings.watermark||pvCard.style.display==='block';guide.hidden=!settings.guide;}
@@ -11150,6 +11159,85 @@ async function makeStoreZip(entries,onProgress=null){
       const diagnostics=new URLSearchParams(location.search).has('pvDiagnostics');
       const reuseCanvas=!new URLSearchParams(location.search).has('pvBaseline');
       let lastLegacyComposite=null;
+      let directPaint=false,directFrames=0,directError='',restoreStage=null;
+      const useDirectPaint=job.hybrid&&reuseCanvas&&typeof ctx.drawElementImage==='function'&&typeof canvas.requestPaint==='function';
+
+      function detachPaintSurface(){
+        directPaint=false;
+        if(canvas.parentElement===stage){
+          if(frame.parentElement===canvas)canvas.replaceWith(frame);
+          else canvas.remove();
+        }
+        frame.removeAttribute('drawable');
+        restoreStage?.();
+        restoreStage=null;
+        // Reset a potentially tainted surface before the SVG fallback draws.
+        canvas.width=width;
+      }
+
+      function drawPlayerElement(element){
+        return new Promise((resolve,reject)=>{
+          const timeout=setTimeout(()=>{
+            canvas.removeEventListener('paint',paint);
+            reject(Error('Playerの直接描画がタイムアウトしました'));
+          },3000);
+          function paint(){
+            clearTimeout(timeout);
+            try{
+              guard();
+              ctx.fillStyle='#000';
+              ctx.fillRect(0,0,width,height);
+              ctx.drawElementImage(element,0,0,width,height);
+              resolve();
+            }catch(error){reject(error);}
+          }
+          canvas.addEventListener('paint',paint,{once:true});
+          try{canvas.requestPaint();}
+          catch(error){
+            clearTimeout(timeout);
+            canvas.removeEventListener('paint',paint);
+            reject(error);
+          }
+        });
+      }
+
+      async function preparePaintSurface(){
+        if(!useDirectPaint)return;
+        canvas.setAttribute('content','drawable');
+        canvas.setAttribute('layoutsubtree','');
+        canvas.setAttribute('data-pv-surface','');
+        canvas.style.cssText='display:block;flex:none;pointer-events:none;width:'+frame.style.width+';height:'+frame.style.height;
+        const probe=document.createElement('div');
+        probe.setAttribute('drawable','');
+        probe.style.cssText='width:32px;height:32px;background:#ff0080';
+        canvas.append(probe);
+        if(plan.autoRender){
+          // Keep the compact dialog clear, but leave a paintable surface on screen.
+          const properties=['clip-path','transform','transform-origin'];
+          const original=properties.map(key=>[key,stage.style.getPropertyValue(key),stage.style.getPropertyPriority(key)]);
+          restoreStage=()=>{for(const [key,value,priority] of original)stage.style.setProperty(key,value,priority);};
+          stage.style.setProperty('clip-path','none','important');
+          stage.style.setProperty('transform','scale(.015625)','important');
+          stage.style.setProperty('transform-origin','top left','important');
+        }
+        frame.after(canvas);
+        try{
+          await drawPlayerElement(probe);
+          const [r,g,b]=ctx.getImageData(width>>1,height>>1,1,1).data;
+          if(r<230||g>20||b<100)throw Error('直接描画の画素を確認できません');
+          const testFrame=new VideoFrame(canvas,{timestamp:0});
+          testFrame.close();
+          frame.setAttribute('drawable','');
+          canvas.append(frame);
+          directPaint=true;
+          fit();
+        }catch(error){
+          detachPaintSurface();
+          await checkpoint();
+          directError=String(error.message||error);
+        }finally{probe.remove();}
+      }
+
       const guard=()=>{if(job.cancelled||!dialog.open )throw Error('中止しました');if(failure)throw failure;};
       const wait=ms=>new Promise(r=>setTimeout(r,ms));
       let hiddenSince=document.hidden?performance.now():null,hiddenMs=0;
@@ -11417,6 +11505,17 @@ async function makeStoreZip(entries,onProgress=null){
         paintVeil(split);ctx.drawImage(spriteCanvas,0,0);perf.spriteFrames++;perf.spriteMs+=performance.now()-t;return true;
       }
       async function snapshot(){
+        if(directPaint){
+          try{
+            await drawPlayerElement(frame);
+            directFrames++;
+            return;
+          }catch(error){
+            detachPaintSurface();
+            await checkpoint();
+            directError=String(error.message||error);
+          }
+        }
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
         const split=splitBackground(fw,fh);
         if(split){
@@ -11448,6 +11547,7 @@ async function makeStoreZip(entries,onProgress=null){
         const bitrate=quality===1080?8000000:quality===720?4000000:1800000;const config=mp4?{codec:'avc1.420028',width,height,bitrate,framerate:fps,avc:{format:'avc'},latencyMode:'realtime'}:{codec:'vp09.00.40.08',width,height,bitrate,framerate:fps};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error(mp4?'H.264非対応：WebMを選択してください':'VP9エンコーダー非対応');if(mp4&&(!window.AudioEncoder||!(await AudioEncoder.isConfigSupported({codec:'mp4a.40.2',sampleRate:48000,numberOfChannels:2,bitrate:128000,aac:{format:'aac'}})).supported))throw Error('AAC非対応：WebMを選択してください');
         encoder=new VideoEncoder({output:(c,m)=>{if(mp4&&m?.decoderConfig?.description){const d=m.decoderConfig.description;const next=new Uint8Array(d.buffer||d,d.byteOffset||0,d.byteLength).slice();if(avcc&&(avcc.length!==next.length||avcc.some((v,i)=>v!==next[i])))failure=Error("AVC configuration changed");avcc=next;}const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>80*1024*1024)failure=Error('映像容量上限（80 MiB）：解像度を下げるか区間を短くしてください');},error:e=>failure=e});encoder.configure(config);
         await document.fonts.ready;await checkpoint();
+        await preparePaintSurface();await checkpoint();
         // Export clock: no live preview tick. Each frame has a unique fixed timestamp.
         cursor=sampleRow;previous=null;fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});
         core._ahFixedDraw=job.hybrid;if(job.hybrid&&typeof core.renderFixedDrawing!=='function')throw Error('draw-layer.js の更新が必要です');core.load(doc,{startAt:0});core.stopAuto();applySettings();enter(rows[cursor]);
@@ -11496,7 +11596,18 @@ async function makeStoreZip(entries,onProgress=null){
         for(;count<expected;count++){
           const t=sampleStart+count/fps;await renderAt(t);await checkpoint();
           const encStart=performance.now();const stamp=Math.round(count*1e6/fps),next=Math.round(Math.min(total,(count+1)/fps)*1e6);
-          const vf=new VideoFrame(canvas,{timestamp:stamp,duration:Math.max(1,next-stamp)});
+          const frameOptions={timestamp:stamp,duration:Math.max(1,next-stamp)};
+          let vf;
+          try{vf=new VideoFrame(canvas,frameOptions);}
+          catch(error){
+            if(!directPaint||error.name!=='SecurityError')throw error;
+            directFrames--;
+            detachPaintSurface();
+            directError=String(error.message||error);
+            await checkpoint();
+            await snapshot();
+            vf=new VideoFrame(canvas,frameOptions);
+          }
           const submitStart=performance.now();
           perf.frameMs+=submitStart-encStart;
           try{encoder.encode(vf,{keyFrame:count%fps===0});}finally{vf.close();}
@@ -11508,11 +11619,11 @@ async function makeStoreZip(entries,onProgress=null){
           }
           perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);progressText=(job.hybrid?'ハイブリッド描画 ':'固定時間描画 ')+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒'+(count>=29?' ｜ 残り約 '+formatTime((activeNow()-begin)/1000/(count+1)*(expected-count-1))+'（描画）':'');showProgress();await wait(0);
         }
-        dispose();spriteObserver.disconnect();spriteState=null;rasterCache.clear();cache.clear();lastSVG=null;lastImage=null;lastLegacyComposite=null;overlaySVG=null;baseImage=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;await checkpoint();progressText='映像エンコード仕上げ中…';showProgress(true);const flushStart=performance.now();await encoder.flush();perf.flushMs=performance.now()-flushStart;await checkpoint();encoder.close();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');if(!packets[0]?.key||packets.some(p=>!p.b.length))throw Error('映像データが不完全です');
+        dispose();detachPaintSurface();spriteObserver.disconnect();spriteState=null;rasterCache.clear();cache.clear();lastSVG=null;lastImage=null;lastLegacyComposite=null;overlaySVG=null;baseImage=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;await checkpoint();progressText='映像エンコード仕上げ中…';showProgress(true);const flushStart=performance.now();await encoder.flush();perf.flushMs=performance.now()-flushStart;await checkpoint();encoder.close();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');if(!packets[0]?.key||packets.some(p=>!p.b.length))throw Error('映像データが不完全です');
         if(benchmark){
           const elapsed=(activeNow()-begin)/1000;
-          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\nベール直接合成 '+perf.veilFrames+'フレーム / 非表示疑似要素省略 '+perf.pseudoSkipped+'回 / Transform直接合成 '+perf.transformFrames+'フレーム / 階層合成 '+perf.hierarchyFrames+'フレーム\n演出更新 '+(perf.animationMs/1000).toFixed(2)+'秒 / 動画準備・シーク '+(perf.videoMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
-          status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
+          const report='診断 '+name(rows[sampleRow])+' ｜ '+count+'フレーム / '+elapsed.toFixed(1)+'秒 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+' / 直接描画 '+directFrames+'\n描画 '+(perf.snapshot/1000).toFixed(1)+'秒 / 動画・演出 '+(perf.seek/1000).toFixed(1)+'秒 / エンコード '+(perf.encode/1000).toFixed(1)+'秒 / キャッシュ '+perf.hits+'\n分離時の直接背景描画 '+perf.bgMs.toFixed(1)+'ms / 透過画像転写 '+perf.overlayMs.toFixed(1)+'ms\n前景・全体共通：スタイル/素材 '+(perf.styleMs/1000).toFixed(2)+'秒 / XML '+(perf.xmlMs/1000).toFixed(2)+'秒 / SVG画像化 '+(perf.decodeMs/1000).toFixed(2)+'秒 / 非表示省略 '+perf.pruned+' / 再利用 '+perf.rasterHits+'\nスプライト '+perf.spriteFrames+'フレーム / 生成 '+perf.spriteBuilds+' / 再利用 '+perf.spriteHits+' / '+(perf.spriteMs/1000).toFixed(2)+'秒\nベール直接合成 '+perf.veilFrames+'フレーム / 非表示疑似要素省略 '+perf.pseudoSkipped+'回 / Transform直接合成 '+perf.transformFrames+'フレーム / 階層合成 '+perf.hierarchyFrames+'フレーム\n演出更新 '+(perf.animationMs/1000).toFixed(2)+'秒 / 動画準備・シーク '+(perf.videoMs/1000).toFixed(2)+'秒\n全体換算（参考・単純比例） '+Math.round(elapsed/count*Math.ceil(total*fps))+'秒\nスプライト不採用理由: '+(Array.from(spriteReasons,([k,v])=>v+'回 '+k).join('\n')||'なし')+'\n背景分離不採用理由: '+(Array.from(reasons,([k,v])=>v+'回 '+k).join('\n')||'なし');
+          status.style.whiteSpace='pre-wrap';status.textContent=report+(directError?'\n直接描画の切替理由: '+directError:'');progress.value=total;return;
         }
         progressText='音声合成・エンコード中…';showProgress(true);let audio=null,audioWarning='';try{audio=await mixExportAudio(videoSpans,checkpoint,mp4,perf);}catch(e){await checkpoint();audioWarning='音声処理失敗・無音で保存：'+String(e.message||e);audioSaveSuffix='_silent';console.warn(audioWarning);}await checkpoint();
         if(mp4){if(!avcc||packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error("AVC frame order/configuration unsupported");const muxStart=performance.now();
@@ -11521,11 +11632,11 @@ async function makeStoreZip(entries,onProgress=null){
           const size=blob.size;
           if(diagnostics)console.info('[Ahako PV Rendering Report]',{
             width,height,fps,durationSeconds:total,outputFrames:count,renderedFrames:count-perf.reusedFrames,
-            activeMs:activeNow()-begin,wallMs:performance.now()-begin,outputBytes:size,audioWarning,
+            activeMs:activeNow()-begin,wallMs:performance.now()-begin,outputBytes:size,audioWarning,directFrames,directError,
             estimatedCanvasBytes:width*height*4*3,videoPacketBytes:bytesUsed,
             rasterHitRate:perf.hits+perf.misses?perf.hits/(perf.hits+perf.misses):null,
             splitFallbackReasons:Object.fromEntries(reasons),spriteFallbackReasons:Object.fromEntries(spriteReasons),...perf
-          });packets.length=0;if(audio)audio.packets.length=0;saveBlob(blob,"mp4");diagnosticLog.textContent=(job.hybrid?"ハイブリッド ｜ ":"")+"MP4書き出し完了 ｜ "+width+"×"+height+" ｜ "+count+"フレーム ｜ "+Math.round((activeNow()-begin)/1000)+"秒 ｜ "+(audio?"AAC音声 "+audio.events+"区間":"音声素材なし")+" ｜ "+(size/1048576).toFixed(1)+" MiB";status.textContent="書き出し完了 ｜ "+filename("mp4")+" ｜ "+total.toFixed(2)+"秒 ｜ "+(size/1048576).toFixed(1)+" MiB";if(audioWarning){status.textContent=audioWarning;diagnosticLog.textContent+="\n"+audioWarning;}return;}
+          });packets.length=0;if(audio)audio.packets.length=0;saveBlob(blob,"mp4");diagnosticLog.textContent=(directFrames?"直接描画 "+directFrames+"フレーム ｜ ":job.hybrid?"ハイブリッド ｜ ":"")+"MP4書き出し完了 ｜ "+width+"×"+height+" ｜ "+count+"フレーム ｜ "+Math.round((activeNow()-begin)/1000)+"秒 ｜ "+(audio?"AAC音声 "+audio.events+"区間":"音声素材なし")+" ｜ "+(size/1048576).toFixed(1)+" MiB";status.textContent="書き出し完了 ｜ "+filename("mp4")+" ｜ "+total.toFixed(2)+"秒 ｜ "+(size/1048576).toFixed(1)+" MiB"+(directFrames?" ｜ 直接描画 "+directFrames+"フレーム":"");if(audioWarning){status.textContent=audioWarning;diagnosticLog.textContent+="\n"+audioWarning;}return;}
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
@@ -11540,7 +11651,7 @@ async function makeStoreZip(entries,onProgress=null){
         for(const p of [...packets,...(audio?.packets||[])].sort((a,b)=>a.t-b.t||Number(!!a.audio)-Number(!!b.audio))){const t=Math.round(p.t/1000);if(!blocks.length||(!p.audio&&p.key)||t-base>30000){finish();base=t;}const rel=t-base,block=bytes(p.audio?0x82:0x81,(rel>>8)&255,rel&255,p.key?128:0);if(p.padding){const pad=new Uint8Array(8);new DataView(pad.buffer).setBigInt64(0,BigInt(p.padding));block[3]=0;blocks.push(el(0xa0,el(0xa1,block,p.b),el(0x75a2,pad)));}else blocks.push(el(0xa3,block,p.b));}finish();packets.length=0;if(audio)audio.packets.length=0;
         const parts=[info,track,...clusters],blob=new Blob([header,num(0x18538067),vint(parts.reduce((n,p)=>n+p.length,0)),...parts],{type:'video/webm'});
         saveBlob(blob,'webm');diagnosticLog.textContent='内部描画完了 '+(audio?'音声 '+audio.events+'区間 / 48kHz Opus ｜ ':'音声素材なし ｜ ')+count+'フレーム ｜ '+Math.round((activeNow()-begin)/1000)+'秒 ｜ 描画 '+Math.round(perf.snapshot/1000)+'秒 / 動画・演出 '+Math.round(perf.seek/1000)+'秒 / 待機 '+Math.round(perf.settle/1000)+'秒 / エンコード '+Math.round(perf.encode/1000)+'秒 ｜ キャッシュ '+perf.hits+'回 ｜ 分離 '+perf.split+' / 従来 '+perf.legacy+'フレーム';status.textContent='書き出し完了 ｜ '+filename('webm')+' ｜ '+total.toFixed(2)+'秒 ｜ '+(blob.size/1048576).toFixed(1)+' MiB';if(audioWarning){status.textContent=audioWarning;diagnosticLog.textContent+='\n'+audioWarning;}
-      }catch(e){queuedYT=null;promoReady?.();dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();easyBar.inert=false;controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';document.removeEventListener('visibilitychange',visibility);spriteObserver.disconnect();spriteState=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;baseImage=null;overlaySVG=null;videoSpans.length=0;cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;promoReady?.();if(dialog.open)fit();}
+      }catch(e){queuedYT=null;promoReady?.();dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(canvas.parentElement===stage)detachPaintSurface();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();easyBar.inert=false;controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';document.removeEventListener('visibilitychange',visibility);spriteObserver.disconnect();spriteState=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;baseImage=null;overlaySVG=null;videoSpans.length=0;cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;promoReady?.();if(dialog.open)fit();}
     }
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。固定時間描画は60秒、リアルタイム録画は600秒まで。演出・音声は出力動画で確認してください。';
