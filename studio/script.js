@@ -10733,7 +10733,11 @@ async function makeStoreZip(entries,onProgress=null){
     let [w,h]=plan.ratio.split(':').map(Number);
     const mark=document.createElement('div');mark.className='sv-watermark';mark.textContent='あ□';
     const guide=document.createElement('div');guide.className='sv-safe-guide';guide.hidden=true;
-    frame.append(host,mark,guide);stage.append(frame);
+    const pvCard=document.createElement('canvas');pvCard.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:100;pointer-events:none;display:none';
+    frame.append(host,mark,pvCard,guide);stage.append(frame);
+    function paintPV(c,W,H,t,d){const u=Math.max(0,Math.min(1,t/Math.max(.15,d))),fade=Math.min(1,u*8),unit=Math.min(W,H);c.save();c.fillStyle='#080808';c.fillRect(0,0,W,H);c.globalAlpha=fade;c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.font='600 '+Math.round(unit*.065)+'px sans-serif';c.fillText(plan.pvText||'続きは、あ箱で。',W/2,H*.37,W*.88);c.globalAlpha=fade*Math.min(1,Math.max(0,(u-.18)*5));c.font='700 '+Math.round(unit*.15)+'px sans-serif';c.fillText('あ□',W/2,H*.53);c.font='500 '+Math.round(unit*.038)+'px sans-serif';c.fillText('AHAKO',W/2,H*.63);c.fillStyle='#aaa';c.font=Math.round(unit*.032)+'px sans-serif';c.fillText('作品リンクは投稿文へ',W/2,H*.79);c.restore();}
+    function showPV(t,d){pvCard.style.display='block';const W=Math.max(1,frame.clientWidth),H=Math.max(1,frame.clientHeight);if(pvCard.width!==W||pvCard.height!==H){pvCard.width=W;pvCard.height=H;}paintPV(pvCard.getContext('2d'),W,H,t,d);}
+
     function fit(){const width=Math.max(1,Math.floor(Math.min(stage.clientWidth,stage.clientHeight*w/h)));frame.style.width=width+'px';frame.style.height=Math.floor(width*h/w)+'px';}
     const observer=new ResizeObserver(fit);observer.observe(stage);
     let settings=plan.renderSettings||(plan.renderSettings={title:false,watermark:true,guide:false});settings.title=false;
@@ -10744,10 +10748,11 @@ async function makeStoreZip(entries,onProgress=null){
     
     const pauseButton=document.createElement('button');pauseButton.type='button';setIcon(pauseButton,'play','選択区間から再生');
     const ends=[];rows.reduce((n,r)=>{ends.push(n+r.seconds);return n+r.seconds;},0);
-    function dispose(){cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();}}
+    function dispose(){pvCard.style.display='none';cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();host.style.visibility='visible';}}
     function stop(message='停止'){if(exportJob?.recorder?.state==='recording'){exportJob.complete=message==='再生完了';exportJob.recorder.stop();if(exportJob.realtime){cancelAnimationFrame(timer);running=false;status.textContent='録画仕上げ中…';return;}}dispose();setIcon(pauseButton,'play','選択区間から再生');status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
     function enter(r){
-      if(previous && (previous.kind==='ending' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();if(!exportJob||exportJob.realtime)core.unlockAudio(true);applySettings();}
+      if(r.kind==='pv'){host.style.visibility='hidden';showPV(0,r.seconds);return;}pvCard.style.display='none';host.style.visibility='visible';
+      if(previous && (previous.kind==='ending' || previous.kind==='pv' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();if(!exportJob||exportJob.realtime)core.unlockAudio(true);applySettings();}
       if(r.kind==='cover'){core.showCover();return;}
       if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}
       const contiguous=previous?.kind==='scene'&&r.index===previous.index+1;
@@ -10755,11 +10760,11 @@ async function makeStoreZip(entries,onProgress=null){
       else {core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.goTo(r.index);core._queueInitialOneShots(doc.scenes[r.index]);}
     }
     function tick(){if(!running)return;try{const elapsed=(performance.now()-started)/1000;progress.value=Math.min(total,elapsed);
-      if(elapsed>=total){stop('再生完了');progress.value=total;return;}
+      if(elapsed>=total){const last=rows.at(-1);stop('再生完了');if(last?.kind==='pv')showPV(last.seconds,last.seconds);progress.value=total;return;}
       // Never fire skipped interval audio in a burst after a stalled frame.
       let i=cursor;while(i<rows.length-1&&elapsed>=ends[i])i++;
       if(i!==cursor){previous=i===cursor+1?rows[cursor]:null;cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
-      const r=rows[i];status.textContent=(r.kind==='scene'?'Scene '+(r.index+1):r.label)+' ｜ '+elapsed.toFixed(2)+' / '+total.toFixed(2)+'秒';
+      const r=rows[i];if(r.kind==='pv')showPV(elapsed-(i?ends[i-1]:0),r.seconds);status.textContent=(r.kind==='scene'?'Scene '+(r.index+1):r.label)+' ｜ '+elapsed.toFixed(2)+' / '+total.toFixed(2)+'秒';
       timer=requestAnimationFrame(tick);
     }catch(e){stop('再生エラー：'+String(e));}}
     function start(at=0){if(!rows.length)return;dispose();interruptAutoDelivery();cursor=Math.max(0,Math.min(rows.length-1,at));jump.value=String(cursor);selectRow(rows[cursor]);const offset=cursor?ends[cursor-1]:0;progress.value=offset;previous=null;try{fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();core.unlockAudio(true);if(core._iosStableMediaBank)core._primeIOSMediaBank();applySettings();enter(rows[cursor]);started=performance.now()-offset*1000;running=true;setIcon(pauseButton,'stop','区間停止');tick();}catch(e){stop('再生エラー：'+String(e));}}
@@ -10826,7 +10831,7 @@ async function makeStoreZip(entries,onProgress=null){
     ratio.onchange=()=>{plan.ratio=ratio.value;[w,h]=plan.ratio.split(':').map(Number);rebuild();fit();};
     const planActions=document.createElement('div');planActions.style.cssText='display:flex;flex-wrap:wrap;gap:6px;width:100%';
     for(const [label,action] of [['すべて選択',()=>plan.rows.forEach(r=>r.included=true)],['すべて解除',()=>plan.rows.forEach(r=>r.included=false)],['秒数を初期化',resetSeconds],['元の順番に戻す',resetOrder]]){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=()=>{action();rebuild();};planActions.append(b);}
-    settingsPanel.append(planActions);
+    settingsPanel.append(planActions);if(plan.easyPV){const l=document.createElement('label'),inp=document.createElement('input');inp.type='text';inp.maxLength=40;inp.value=plan.pvText||'続きは、あ箱で。';inp.onchange=()=>{plan.pvText=inp.value.trim()||'続きは、あ箱で。';rebuild();};l.append(document.createTextNode('PV終了テキスト'),inp);settingsPanel.append(l);}
     // Phase 5.0.3: fixed-frame visual export trial.
     const exportFps=document.createElement('select');exportFps.setAttribute('aria-label','書き出しfps');exportFps.add(new Option('24 fps','24'));exportFps.add(new Option('30 fps','30'));exportFps.value='30';const fpsLabel=document.createElement('label');fpsLabel.style.cssText='display:flex;align-items:center;gap:6px;flex-wrap:wrap;white-space:nowrap';fpsLabel.append(document.createTextNode('書き出し'),exportFps);settingsPanel.append(fpsLabel);
     const exportFormat=document.createElement('select'),exportQuality=document.createElement('select');exportFormat.setAttribute('aria-label','動画形式');exportQuality.setAttribute('aria-label','解像度');exportFormat.add(new Option('MP4','mp4'));exportFormat.add(new Option('WebM','webm'));for(const q of [540,720,1080])exportQuality.add(new Option(q+'p',String(q)));exportQuality.value='720';fpsLabel.append(exportFormat,exportQuality);
@@ -10922,7 +10927,7 @@ async function makeStoreZip(entries,onProgress=null){
           }else for(const c of scene?.audio||[])if(c.channel in active)await persistent(c,t);
           for(const c of scene?.audio||[])if(c.channel==='oneshot'){const n=shots.length;await oneshot(c,t,total);for(const rec of shots.slice(n))rec.oneshot=true;}
         }else{
-          for(const ch of Object.keys(active)){stopRec(active[ch],t);active[ch]=null;}
+          for(const ch of Object.keys(active)){stopRec(active[ch],t,r.kind==='pv'?Math.min(1.5,r.seconds):0);active[ch]=null;}
           for(const rec of shots)if(rec.oneshot)stopRec(rec,t);
           if(r.kind==='ending')for(const c of doc.ending?.audio||[])if(c.channel==='oneshot')await oneshot(c,t,limit);
         }prev=r;
@@ -10941,6 +10946,7 @@ async function makeStoreZip(entries,onProgress=null){
     // Phase 5.1.1: native tab capture, cropped to the existing live Player.
     function recordRealtime(){
       if(exportJob||!rows.length)return;
+      if(rows.some(r=>r.kind==='pv')){appAlert('PV終了演出付きの動画は固定時間描画を選択してください。');return;}
       if(total>600){appAlert('リアルタイム録画はメモリ保護のため600秒以内です。');return;}
       stop();interruptAutoDelivery();
       const token=crypto.randomUUID();
@@ -11275,6 +11281,7 @@ async function makeStoreZip(entries,onProgress=null){
         async function renderAt(t){
           await checkpoint();let i=cursor;while(i<rows.length-1&&t>=ends[i]-1e-8)i++;
           const changed=i!==cursor;let phase=performance.now();if(changed){spriteState=null;rasterCache.clear();lastSVG=null;lastImage=null;overlaySVG=null;baseKey=null;baseImage=null;previous=rows[cursor];cursor=i;jump.value=String(i);selectRow(rows[i]);enter(rows[i]);}
+          if(rows[i].kind==='pv'){paintPV(ctx,width,height,t-(i?ends[i-1]:0),rows[i].seconds);return;}
           // Allow deferred DOM mounting, then freeze native animations at export time.
           if(changed||t===sampleStart)await settle();await checkpoint();perf.settle+=performance.now()-phase;phase=performance.now();
           for(const anim of frame.getAnimations({subtree:true})){
@@ -11364,7 +11371,8 @@ async function makeStoreZip(entries,onProgress=null){
     const ordered=plan.rows.filter(r=>r.kind==='scene').sort((a,b)=>a.index-b.index);
     plan.rows.sort((a,b)=>(a.kind==='cover'?-1:a.kind==='ending'?Infinity:a.index)-(b.kind==='cover'?-1:b.kind==='ending'?Infinity:b.index));
     const cover=plan.rows.find(r=>r.kind==='cover');cover.included=true;cover.seconds=3;
-    let remaining=2700;
+    plan.rows.push({kind:'pv',label:'PV終了演出',seconds:4,included:true});
+    let remaining=2300;
     for(const r of ordered){
       const scene=source.scenes[r.index],c=scene?.presentation?.credits;
       if(scene?.presentation?.view==='credits'||(c?.mode==='roll'&&c.enabled===true))break;
@@ -11379,19 +11387,19 @@ async function makeStoreZip(entries,onProgress=null){
 
     const rowKey=r=>r.kind==='scene'?'scene:'+r.index:r.kind;
     // Explicit portable plan files, no media or original document mutation.
-    const snapshot=()=>({format:'ahako-short-video-plan',version:1,signature,ratio:plan.ratio,renderSettings:plan.renderSettings||{title:false,watermark:true,guide:false},rows:plan.rows.map(r=>({key:rowKey(r),seconds:r.seconds,included:r.included}))});
+    const snapshot=()=>({format:'ahako-short-video-plan',version:1,signature,ratio:plan.ratio,pvText:plan.pvText,renderSettings:plan.renderSettings||{title:false,watermark:true,guide:false},rows:plan.rows.map(r=>({key:rowKey(r),seconds:r.seconds,included:r.included}))});
     function restore(data){
       if(data?.format!=='ahako-short-video-plan'||data.version!==1||data.signature!==signature||!['9:16','16:9','1:1'].includes(data.ratio)||!Array.isArray(data.rows)||data.rows.length!==plan.rows.length)throw Error('作品または制作プランの形式が一致しません。');
       const byKey=new Map(plan.rows.map(r=>[rowKey(r),r]));const seen=new Set();
       const next=data.rows.map(v=>{const r=byKey.get(v?.key);if(!r||seen.has(v.key)||typeof v.included!=='boolean'||!Number.isFinite(v.seconds)||v.seconds<.15||v.seconds>600)throw Error('区間設定が不正です。');seen.add(v.key);return {r,v};});
       for(const {r,v} of next){r.seconds=Math.round(v.seconds*100)/100;r.included=v.included;}
-      plan.rows.splice(0,plan.rows.length,...next.map(x=>x.r));plan.ratio=data.ratio;
+      plan.rows.splice(0,plan.rows.length,...next.map(x=>x.r));plan.ratio=data.ratio;plan.pvText=typeof data.pvText==='string'?data.pvText.slice(0,40):undefined;
       const rs=data.renderSettings;plan.renderSettings={title:false,watermark:rs?.watermark!==false,guide:rs?.guide===true};
     }
     function savePlan(){const url=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ahako-short-video-plan.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
     async function loadPlan(f){if(f.size>5000000)throw Error('制作プランが大きすぎます。');restore(JSON.parse(await f.text()));}
-    function resetSeconds(){for(const r of plan.rows)r.seconds=r.kind==='scene'?duration(videoSceneSeconds(source.scenes[r.index])):2.6;}
-    function resetOrder(){const key=r=>r.kind==='cover'?-1:r.kind==='ending'?Infinity:r.index;plan.rows.sort((a,b)=>key(a)-key(b));}
+    function resetSeconds(){for(const r of plan.rows)r.seconds=r.kind==='scene'?duration(videoSceneSeconds(source.scenes[r.index])):r.kind==='pv'?4:2.6;}
+    function resetOrder(){const key=r=>r.kind==='cover'?-1:r.kind==='pv'?Infinity:r.kind==='ending'?Number.MAX_SAFE_INTEGER:r.index;plan.rows.sort((a,b)=>key(a)-key(b));}
     previewShortVideoPlan(plan,savePlan,loadPlan,resetSeconds,resetOrder);
   }
   document.querySelector('#menuShortVideoButton')?.addEventListener('click',()=>openShortVideoPlan());
