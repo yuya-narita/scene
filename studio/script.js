@@ -10978,7 +10978,10 @@ async function makeStoreZip(entries,onProgress=null){
       window.addEventListener('message',receive);dialog.addEventListener('close',cancelJob,{once:true});cancel.onclick=cancelJob;poll=setInterval(()=>{if(popup.closed){status.textContent='録画専用タブを閉じました';finish();}},500);status.textContent='録画専用Playerで録画開始を押してください。';
     }
     // Phase 5.3.3: lightweight promotion drafts, independent of the render surface.
-    let promoPanel=null, promoDrafts=null, promoBusyUntil=0, promoComposing=false;
+    let promoPanel=null, promoDrafts=null, promoBusyUntil=0, promoComposing=false, promoVideo=null, promoVideoName='', promoReady=null;
+    const promoKey=doc.studio?.identity?.workId?'ahako.promo.v1.'+doc.studio.identity.workId:'';
+    function persistPromo(){if(!promoKey||!promoDrafts)return;try{localStorage.setItem(promoKey,JSON.stringify(promoDrafts));}catch{}}
+    function retainPromoVideo(blob,name){if(!plan.easyPV)return;promoVideo=blob;promoVideoName=name;promoReady?.();}
     function openPromotionPrep(){
       if(promoPanel){promoPanel.hidden=false;promoPanel.style.display='flex';return;}
       const title=String(doc.title||'あ箱作品'), author=typeof doc.author==='string'?doc.author:'', description=String(doc.metadata?.description||'').trim();
@@ -10986,6 +10989,7 @@ async function makeStoreZip(entries,onProgress=null){
       const intro=Array.from(description).slice(0,85).join('')+(Array.from(description).length>85?'…':'');
       const ending=plan.pvText||'続きは、あ箱で。';
       promoDrafts ||= {X:[credit,intro,ending,'#あ箱'].filter(Boolean).join('\n\n'),YouTube:[credit,description,ending,'#あ箱'+(plan.ratio==='9:16'?' #Shorts':'')].filter(Boolean).join('\n\n'),TikTok:[credit,intro,ending,'#あ箱'].filter(Boolean).join('\n\n'),Instagram:[credit,description,ending,'#あ箱'].filter(Boolean).join('\n\n'),ytTitle:title+'｜あ箱',url:'',includeUrl:true,platform:'X'};
+      if(promoKey){try{const saved=JSON.parse(localStorage.getItem(promoKey)||'null');if(saved){for(const k of ['X','YouTube','TikTok','Instagram','ytTitle','url'])if(typeof saved[k]==='string')promoDrafts[k]=saved[k];if(typeof saved.includeUrl==='boolean')promoDrafts.includeUrl=saved.includeUrl;}}catch{}}
       const d=promoDrafts, panel=document.createElement('section');promoPanel=panel;
       stage.style.position='relative';panel.style.cssText='position:absolute;inset:0;z-index:200;display:flex;flex-direction:column;gap:9px;overflow:auto;overscroll-behavior:contain;background:#20252a;color:#fff;padding:14px;box-sizing:border-box;text-align:left';
       const make=(tag,text)=>{const e=document.createElement(tag);if(text)e.textContent=text;return e;};
@@ -10994,15 +10998,15 @@ async function makeStoreZip(entries,onProgress=null){
       const tabs=make('div');tabs.style.cssText='display:flex;gap:5px;flex-wrap:wrap';
       const btn=(text,fn)=>{const b=make('button',text);b.type='button';b.style.cssText='padding:7px 10px;border:0;border-radius:6px;background:#343a40;color:white;cursor:pointer';b.onclick=fn;return b;};
       const field=e=>{e.style.cssText='box-sizing:border-box;width:100%;min-width:0;padding:8px;border:1px solid #666;border-radius:6px;background:#30363c;color:#fff;font:inherit';return e;};
-      const yt=field(make('input'));yt.type='text';yt.value=d.ytTitle;yt.setAttribute('aria-label','YouTube動画タイトル');yt.oninput=()=>d.ytTitle=yt.value;
+      const yt=field(make('input'));yt.type='text';yt.value=d.ytTitle;yt.setAttribute('aria-label','YouTube動画タイトル');yt.oninput=()=>{d.ytTitle=yt.value;persistPromo();};
       const ytLabel=make('label','動画タイトル');ytLabel.append(yt);
       const text=field(make('textarea'));text.rows=6;text.style.minHeight='110px';text.style.resize='vertical';text.setAttribute('aria-label','SNS投稿文');
       const textLabel=make('label');const label=make('span');textLabel.append(label,text);
       const url=field(make('input'));url.type='url';url.placeholder='公開作品URLを貼り付け';url.value=d.url;url.oninput=()=>d.url=url.value;const urlLabel=make('label','作品公開URL（任意）');urlLabel.append(url);
       const feedback=make('small');feedback.setAttribute('role','status');const count=make('small');
       const urlState=make('small','公開状態を確認しています…');urlState.style.color='#bbb';urlState.setAttribute('role','status');
-      const include=make('input');include.type='checkbox';include.checked=d.includeUrl;const includeLabel=make('label','投稿文に作品URLを含める');includeLabel.prepend(include);
-      let urlEdited=false;url.addEventListener('input',()=>{urlEdited=true;urlState.textContent='手動入力';});
+      const include=make('input');include.type='checkbox';include.checked=d.includeUrl;const includeLabel=make('label','投稿文に作品URLを含める');includeLabel.prepend(include);includeLabel.style.cssText='display:flex;align-items:center;gap:8px;flex-direction:row;justify-content:flex-start';for(const [k,v] of Object.entries({width:'18px',height:'18px',minWidth:'18px',minHeight:'18px',maxWidth:'18px',maxHeight:'18px',margin:'0',padding:'0',flex:'0 0 18px',appearance:'auto'}))include.style.setProperty(k.replace(/[A-Z]/g,m=>'-'+m.toLowerCase()),v,'important');
+      let urlEdited=!!d.url;url.addEventListener('input',()=>{urlEdited=true;urlState.textContent='手動入力';});
       include.onchange=()=>{d.includeUrl=include.checked;refreshCount();};
       const touch=()=>{promoBusyUntil=performance.now()+500;};
       for(const event of ['pointerdown','keydown','input','wheel','scroll'])panel.addEventListener(event,touch,{capture:true,passive:true});
@@ -11020,13 +11024,19 @@ async function makeStoreZip(entries,onProgress=null){
       function xLength(value){let n=0;const parts=value.normalize('NFC').split(/(https?:\/\/[^\s<>]+)/giu);for(let i=0;i<parts.length;i++){if(i%2){n+=23;continue;}for(const ch of parts[i]){const c=ch.codePointAt(0);n+=(c<=0x10ff||(c>=0x2000&&c<=0x200d)||(c>=0x2010&&c<=0x201f)||(c>=0x2032&&c<=0x2037))?1:2;}}return n;}
 
       function output(){return [d[d.platform],d.includeUrl?d.url.trim():''].filter(Boolean).join('\n\n');}
-      function refreshCount(){const n=d.platform==='X'?xLength(output()):Array.from(output()).length;count.textContent=d.platform==='X'?`${n} / 280（X換算・目安）${n>280?' · 通常投稿の上限超過':''}`:n+'文字（目安）';count.style.color=d.platform==='X'&&n>280?'#ffb080':'#bbb';}
+      function refreshCount(){persistPromo();const n=d.platform==='X'?xLength(output()):Array.from(output()).length;count.textContent=d.platform==='X'?`${n} / 280（X換算・目安）${n>280?' · 通常投稿の上限超過':''}`:n+'文字（目安）';count.style.color=d.platform==='X'&&n>280?'#ffb080':'#bbb';}
       text.oninput=()=>{d[d.platform]=text.value;refreshCount();};url.addEventListener('input',refreshCount);
       const buttons=[];function refresh(){for(const [key,b] of buttons){b.style.background=key===d.platform?'#386da8':'#343a40';b.setAttribute('aria-pressed',String(key===d.platform));}ytLabel.style.display=d.platform==='YouTube'?'block':'none';label.textContent=d.platform==='YouTube'?'概要欄':'投稿文';text.value=d[d.platform];feedback.textContent='';refreshCount();}
       for(const key of ['X','YouTube','TikTok','Instagram']){const b=btn(key,()=>{d.platform=key;refresh();});buttons.push([key,b]);tabs.append(b);}
       async function copy(value){try{await navigator.clipboard.writeText(value);feedback.textContent='コピーしました';}catch{feedback.textContent='コピーできませんでした。文章を選択してコピーしてください。';}}
       const actions=make('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap';actions.append(btn('投稿文をコピー',()=>copy(output())),btn('YouTubeタイトルをコピー',()=>copy(d.ytTitle)),btn('URLをコピー',()=>{if(d.url.trim())copy(d.url.trim());else feedback.textContent='URLを入力してください';}),btn('映像表示に戻る',()=>{promoComposing=false;promoBusyUntil=0;panel.style.display='none';}));
-      panel.append(heading,hint,tabs,ytLabel,textLabel,urlLabel,urlState,includeLabel,count,actions,feedback);stage.append(panel);refresh();void lookupURL();const reopen=btn('宣伝準備',()=>{panel.style.display='flex';});dialog.insertBefore(reopen,stage);
+      const downloads=make('div');downloads.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
+      const downloadVideo=btn('動画を再保存',()=>{if(promoVideo)downloadBlobFile(promoVideoName,promoVideo);});
+      async function coverFile(){const src=doc.cover?.src;if(!src)return null;const r=await fetch(src);if(!r.ok)throw Error('表紙取得失敗');const blob=await r.blob();const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/avif':'avif','image/svg+xml':'svg'})[blob.type];if(!ext)throw Error('表紙形式非対応');return {name:'cover.'+ext,blob};}
+      const coverButton=btn('表紙画像を保存',async()=>{try{const c=await coverFile();if(c)downloadBlobFile(c.name,c.blob);else feedback.textContent='表紙画像がありません';}catch(e){feedback.textContent=String(e.message||e);}});
+      const packButton=btn('宣伝パックを保存（ZIP）',async()=>{if(!promoVideo||exportJob)return;packButton.disabled=true;try{const entries=[], enc=new TextEncoder();const add=(name,value)=>entries.push({name,bytes:enc.encode(value)});const video=promoVideo;entries.push({name:promoVideoName,bytes:new Uint8Array(await video.arrayBuffer())});for(const key of ['X','YouTube','TikTok','Instagram'])add(key+'.txt',[key==='YouTube'?d.ytTitle:'',d[key],d.includeUrl?d.url.trim():''].filter(Boolean).join('\n\n'));if(d.url.trim())add('URL.txt',d.url.trim());let warning='';try{const c=await coverFile();if(c)entries.push({name:c.name,bytes:new Uint8Array(await c.blob.arrayBuffer())});}catch{warning='（表紙画像なし）';}const zip=await makeStoreZip(entries);downloadBlobFile('宣伝パック.zip',zip);feedback.textContent='宣伝パックを保存しました'+warning;}catch(e){feedback.textContent='ZIP作成失敗：'+String(e.message||e);}finally{packButton.disabled=false;}});
+      downloads.append(downloadVideo,coverButton,packButton);promoReady=()=>{downloads.hidden=!promoVideo;downloads.style.display=promoVideo?'flex':'none';coverButton.disabled=!doc.cover?.src;};promoReady();
+      panel.append(heading,hint,tabs,ytLabel,textLabel,urlLabel,urlState,includeLabel,count,actions,downloads,feedback);stage.append(panel);refresh();void lookupURL();const reopen=btn('宣伝準備',()=>{panel.style.display='flex';});dialog.insertBefore(reopen,stage);
     }
     async function exportVideo(benchmark=false){
       if(exportJob||!rows.length)return;
@@ -11038,11 +11048,12 @@ async function makeStoreZip(entries,onProgress=null){
       const sampleRow=benchmark?Math.max(0,rows.indexOf(selected)):0;
       const sampleStart=sampleRow?ends[sampleRow-1]:0;
       stop();interruptAutoDelivery();
+      if(!benchmark){promoVideo=null;promoVideoName='';promoReady?.();}
       const job={cancelled:false,hybrid:exportMode.value==='hybrid'};exportJob=job;
       const exportName=String(doc.title||'あ箱作品').normalize('NFC').replace(/[\x00-\x1f<>:"/\\|?*]/g,'_').replace(/[. ]+$/g,'').trim().slice(0,100)||'あ箱作品';
       const filename=ext=>exportName+'_'+plan.ratio.replace(':','x')+'_'+quality+'p_'+fps+'fps.'+ext;
       let audioSaveSuffix='';
-      function saveBlob(blob,ext){const url=URL.createObjectURL(blob),link=document.createElement('a');try{link.href=url;link.download=filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1');document.body.append(link);link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}}
+      function saveBlob(blob,ext){retainPromoVideo(blob,filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1'));const url=URL.createObjectURL(blob),link=document.createElement('a');try{link.href=url;link.download=filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1');document.body.append(link);link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}}
       const formatTime=seconds=>{const n=Math.max(0,Math.ceil(seconds));return Math.floor(n/60)+'分'+String(n%60).padStart(2,'0')+'秒';};
       const oldGuide=settings.guide,oldPanel=settingsPanel.hidden;
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';cancel.onclick=()=>{job.cancelled=true;};
