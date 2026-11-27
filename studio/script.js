@@ -11308,6 +11308,15 @@ async function makeStoreZip(entries,onProgress=null){
       }
       // Phase 5.0.4b: conservative direct background composition.
       // Keep the old snapshot for crossfades, unsupported geometry and effects.
+      const appleMobile=/iPad|iPhone|iPod/.test(navigator.userAgent)||
+        (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+      function wrapFrameSVG(fw,fh,xml){
+        // On iOS keep the SVG viewport and its HTML in the same coordinate
+        // space. The output canvas handles the final scale for every layer.
+        const rasterWidth=appleMobile?fw:width,rasterHeight=appleMobile?fh:height;
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="'+rasterWidth+'" height="'+rasterHeight+
+          '" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
+      }
       function splitBackground(fw,fh){
         const videos=Array.from(frame.querySelectorAll('video')).filter(visibleVideo);
         if(videos.length!==1)return reject('表示動画数: '+videos.length);
@@ -11357,7 +11366,7 @@ async function makeStoreZip(entries,onProgress=null){
         if(key!==baseKey){
           const root=document.createElement('div');root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');root.style.cssText='position:relative;width:'+fw+'px;height:'+fh+'px';
           for(const props of split.bases){const n=document.createElement('div');n.style.cssText='position:absolute;inset:0';for(const [k,v] of props)n.style.setProperty(k,v);root.append(n);}
-          const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+new XMLSerializer().serializeToString(root)+'</foreignObject></svg>';
+          const svg=wrapFrameSVG(fw,fh,new XMLSerializer().serializeToString(root));
           const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();baseImage=img;baseKey=key;
         }
         ctx.drawImage(baseImage,0,0,width,height);
@@ -11442,7 +11451,7 @@ async function makeStoreZip(entries,onProgress=null){
         root.style.cssText+=';position:relative!important;inset:auto!important;margin:0!important;transform:none!important;width:'+fw+'px!important;height:'+fh+'px!important;overflow:hidden!important;';
         root.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
         const xml=new XMLSerializer().serializeToString(root);
-        const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'" viewBox="0 0 '+fw+' '+fh+'"><foreignObject width="'+fw+'" height="'+fh+'">'+xml+'</foreignObject></svg>';
+        const svg=wrapFrameSVG(fw,fh,xml);
         perf.xmlMs+=performance.now()-xmlStart;
         return svg;
       }
