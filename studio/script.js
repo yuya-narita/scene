@@ -10718,7 +10718,7 @@ async function makeStoreZip(entries,onProgress=null){
 
   // Phase 4.0.2: isolated timeline plan; never writes to workingDocument.
   // Phase 4.0.3: preview against the complete original scene graph.
-  function previewShortVideoPlan(plan,savePlan,loadPlan,resetSeconds,resetOrder){
+  function previewShortVideoPlan(plan,savePlan,loadPlan,resetSeconds,resetOrder,nextPV){
     let rows=plan.rows.filter(r=>r.included);
     const doc=clone(plan.source); let total=rows.reduce((n,r)=>n+r.seconds,0);
     const dialog=document.createElement('dialog');dialog.className='sv-preview404';
@@ -10789,7 +10789,10 @@ async function makeStoreZip(entries,onProgress=null){
       const label=document.createElement('strong');label.textContent='Easy PV';
       const detail=document.createElement('button');detail.type='button';detail.textContent='詳細編集';detail.onclick=()=>{const show=editor.hidden;editor.hidden=!show;editor.style.display=show?'grid':'none';detail.textContent=show?'詳細編集を閉じる':'詳細編集';};
       const manual=document.createElement('button');manual.type='button';manual.textContent='従来の制作プラン';manual.onclick=()=>{if(exportJob)return;dialog.close();openShortVideoPlan(true);};
-      easyBar.append(label,detail,manual);
+      const variant=document.createElement('button');variant.type='button';variant.textContent='別パターン';variant.style.cssText='color:#fff;background:#343a40;border:1px solid #666;border-radius:5px;padding:5px 10px';
+      const variantLabel=document.createElement('span');variantLabel.style.cssText='font-size:12px;color:#bbb';variantLabel.textContent=plan.pvPattern||'冒頭';
+      variant.onclick=()=>{if(exportJob)return;if(!nextPV?.()){status.textContent='別の構成候補がありません ｜ '+total.toFixed(2)+'秒';return;}variantLabel.textContent=plan.pvPattern;selected=plan.rows.find(r=>r.included);rebuild();start(0);};
+      easyBar.append(label,variant,variantLabel,detail,manual);
     }else{const easy=document.createElement('button');easy.type='button';easy.textContent='Easy PV';easy.onclick=()=>{if(exportJob)return;dialog.close();openShortVideoPlan();};easyBar.append(easy);}
 
     const name=r=>r.kind==='scene'?'Scene '+(r.index+1):r.label;
@@ -11367,6 +11370,7 @@ async function makeStoreZip(entries,onProgress=null){
     }
     // Easy PV is a fresh, isolated plan; keep the existing Advanced plan intact.
     const plan=advanced===true?shortVideoPlan:{...shortVideoPlan,ratio:'9:16',easyPV:true,renderSettings:{title:false,watermark:false,guide:false},rows:shortVideoPlan.rows.map(r=>({...r,included:false}))};
+    let nextPV=null;
     if(advanced!==true){
     const ordered=plan.rows.filter(r=>r.kind==='scene').sort((a,b)=>a.index-b.index);
     plan.rows.sort((a,b)=>(a.kind==='cover'?-1:a.kind==='ending'?Infinity:a.index)-(b.kind==='cover'?-1:b.kind==='ending'?Infinity:b.index));
@@ -11390,24 +11394,24 @@ async function makeStoreZip(entries,onProgress=null){
       const minimum=Math.ceil(Math.max(reading,delay+Math.max(entrance,typing)+(chars?.45:0),ink)*100);
       return {minimum,preferred:Math.max(minimum,Math.round(duration(videoSceneSeconds(scene))*100))};
     };
-    let remaining=2300;const chosen=[];
-    for(const r of ordered){
-      const scene=source.scenes[r.index],c=scene?.presentation?.credits;
-      if(scene?.presentation?.view==='credits'||(c?.mode==='roll'&&c.enabled===true))break;
-      const timing=pvTiming(scene);
-      if(timing.minimum>remaining)break;
-      const ms=Math.min(remaining,timing.preferred);
-      r.included=true;r.seconds=ms/100;remaining-=ms;chosen.push(r);
-    }
-    // Use a small remainder as breathing room only when another scene was excluded.
-    const next=ordered[chosen.length];
-    if(chosen.length&&next&&remaining>0&&remaining<=200&&next.kind==='scene'&&source.scenes[next.index]?.presentation?.view!=='credits'&&!(source.scenes[next.index]?.presentation?.credits?.mode==='roll'&&source.scenes[next.index]?.presentation?.credits?.enabled===true)){
-      chosen.at(-1).seconds=Math.round(chosen.at(-1).seconds*100+remaining)/100;
-    }
-    // A long opening scene cannot fit: preserve a usable teaser rather than block PV creation.
-    if(!chosen.length&&ordered.length){const r=ordered[0],p=source.scenes[r.index]?.presentation;if(p?.view!=='credits'&&!(p?.credits?.mode==='roll'&&p.credits.enabled===true)){r.included=true;r.seconds=23;}}
-    // Short works stay short rather than freezing the last scene artificially.
-    if(!ordered.some(r=>r.included)){appAlert('PVに使用できる冒頭Sceneがありません。');return;}
+    const eligible=[];
+    for(const r of ordered){const p=source.scenes[r.index]?.presentation;if(p?.view==='credits'||(p?.credits?.mode==='roll'&&p.credits.enabled===true))break;eligible.push({r,t:pvTiming(source.scenes[r.index])});}
+    function windowAt(start){let remaining=2300;const items=[];for(let i=start;i<eligible.length;i++){const {r,t}=eligible[i];if(t.minimum>remaining)break;const ms=Math.min(remaining,t.preferred);items.push({r,ms});remaining-=ms;}if(items.length&&start+items.length<eligible.length&&remaining>0&&remaining<=200)items.at(-1).ms+=remaining;if(!items.length&&eligible[start])items.push({r:eligible[start].r,ms:2300});return items;}
+    if(!eligible.length){appAlert('PVに使用できる冒頭Sceneがありません。');return;}
+    const opening=windowAt(0), candidates=[{label:'冒頭',items:opening}];
+    const seen=new Set([opening.map(x=>x.r.index).join(',')]);
+    // Prefer early, contiguous excerpts; avoid the final quarter and never reorder dialogue.
+    const limit=Math.min(eligible.length-1,Math.max(1,Math.floor(eligible.length*.6)),60);
+    const pool=[];
+    for(let i=1;i<=limit;i++){const items=windowAt(i);if(!items.length||items.some(x=>x.ms<eligible.find(e=>e.r===x.r).t.minimum))continue;const score=items.reduce((n,x)=>{const p=source.scenes[x.r.index]?.presentation||{};return n+(p.draw?.strokes?.length?3:0)+(p.effect&&p.effect!=='none'?1:0)+(p.background?.video?2:0);},0);pool.push({i,items,score});}
+    const addCandidate=(label,c)=>{if(!c)return;const key=c.items.map(x=>x.r.index).join(',');if(seen.has(key))return;seen.add(key);candidates.push({label,items:c.items});};
+    addCandidate('別の導入',pool.find(c=>c.i>=Math.max(1,Math.floor(opening.length/2)))||pool[0]);
+    addCandidate('演出重視',pool.slice().sort((a,b)=>b.score-a.score||a.i-b.i).find(c=>!seen.has(c.items.map(x=>x.r.index).join(','))));
+    addCandidate('別の場面',pool.find(c=>c.i>=opening.length&&!seen.has(c.items.map(x=>x.r.index).join(',')))||pool.find(c=>!seen.has(c.items.map(x=>x.r.index).join(','))));
+    let variantIndex=0;
+    function applyVariant(v){for(const r of plan.rows){r.included=false;if(r.kind==='scene')r.seconds=duration(videoSceneSeconds(source.scenes[r.index]));}resetOrder();cover.included=true;cover.seconds=3;const end=plan.rows.find(r=>r.kind==='pv');end.included=true;end.seconds=4;for(const {r,ms} of v.items){r.included=true;r.seconds=ms/100;}plan.pvPattern=v.label;}
+    applyVariant(candidates[0]);
+    nextPV=()=>{if(candidates.length<2)return false;variantIndex=(variantIndex+1)%candidates.length;applyVariant(candidates[variantIndex]);return true;};
     }
     // Preserve manual plans separately; expose them via the Advanced entry.
 
@@ -11426,7 +11430,7 @@ async function makeStoreZip(entries,onProgress=null){
     async function loadPlan(f){if(f.size>5000000)throw Error('制作プランが大きすぎます。');restore(JSON.parse(await f.text()));}
     function resetSeconds(){for(const r of plan.rows)r.seconds=r.kind==='scene'?duration(videoSceneSeconds(source.scenes[r.index])):r.kind==='pv'?4:2.6;}
     function resetOrder(){const key=r=>r.kind==='cover'?-1:r.kind==='pv'?Infinity:r.kind==='ending'?Number.MAX_SAFE_INTEGER:r.index;plan.rows.sort((a,b)=>key(a)-key(b));}
-    previewShortVideoPlan(plan,savePlan,loadPlan,resetSeconds,resetOrder);
+    previewShortVideoPlan(plan,savePlan,loadPlan,resetSeconds,resetOrder,nextPV);
   }
   document.querySelector('#menuShortVideoButton')?.addEventListener('click',()=>openShortVideoPlan());
 
