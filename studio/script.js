@@ -11218,11 +11218,15 @@ async function makeStoreZip(entries,onProgress=null){
         canvas.setAttribute('data-pv-surface','');
         canvas.style.cssText='display:block;flex:none;pointer-events:none;width:'+frame.style.width+';height:'+frame.style.height;
         if(plan.autoRender){
-          // Match the standalone prototype: keep a small, unclipped paint surface
-          // in the viewport while retaining Studio's logical layout dimensions.
+          // Keep the export surface laid out and paintable inside the modal.
+          // A separate opaque sibling shields it without clipping the capture.
           const original=stage.style.cssText;
-          restoreStage=()=>{stage.style.cssText=original;};
-          stage.style.cssText='position:fixed!important;inset:auto 0 0 auto!important;width:640px!important;height:640px!important;min-height:0!important;flex:none!important;clip-path:none!important;transform:scale(.16)!important;transform-origin:right bottom!important;pointer-events:none!important';
+          const shield=document.createElement('div');
+          shield.setAttribute('aria-hidden','true');
+          shield.style.cssText='position:absolute;inset:0;z-index:1;background:#20252a;pointer-events:none';
+          stage.append(shield);
+          restoreStage=()=>{shield.remove();stage.style.cssText=original;};
+          stage.style.cssText='position:absolute!important;inset:0 auto auto 0!important;width:640px!important;height:640px!important;min-height:0!important;flex:none!important;clip-path:none!important;transform:scale(.16)!important;transform-origin:left top!important;pointer-events:none!important;z-index:-1!important';
         }
         frame.after(canvas);
         frame.setAttribute('drawable','');
