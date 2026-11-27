@@ -10824,7 +10824,7 @@ async function makeStoreZip(entries,onProgress=null){
     const preset=document.createElement('select');preset.setAttribute('aria-label','書き出しプリセット');for(const [v,t] of [['custom','カスタム'],['light','軽量確認'],['sns','SNS標準'],['hd','高画質']])preset.add(new Option(t,v));fpsLabel.prepend(preset);
     const exportMode=document.createElement('select');exportMode.setAttribute('aria-label','書き出し方式');exportMode.add(new Option('リアルタイム録画（推奨）','realtime'));exportMode.add(new Option('固定時間描画','fixed'));fpsLabel.prepend(exportMode);
     const realtimeNote=document.createElement('small');realtimeNote.style.cssText='width:100%;opacity:.85';settingsPanel.append(realtimeNote);
-    function updateExportMode(){const live=exportMode.value==='realtime';exportQuality.disabled=preset.disabled=exportFormat.disabled=live;realtimeNote.textContent=live?'録画専用Player：WebMのみの試験版。専用タブ全体を音声付きで共有します。余白が入る場合があります。':'固定時間描画：指定解像度で生成します。特殊演出は未対応の場合があります。';}
+    function updateExportMode(){const live=exportMode.value==='realtime';exportQuality.disabled=false;preset.disabled=exportFormat.disabled=live;realtimeNote.textContent=live?'録画専用Player：WebMのみの試験版。専用タブを音声付きで共有。録画中は他の操作を避けてください。解像度は取得映像から調整します。':'固定時間描画：指定解像度で生成します。特殊演出は未対応の場合があります。';}
     exportMode.onchange=()=>{updateExportMode();rememberExport();};
     const prefKey='ahako.shortVideo.export.v1';
     function rememberExport(){try{localStorage.setItem(prefKey,JSON.stringify({fps:exportFps.value,format:exportFormat.value,quality:exportQuality.value,mode:exportMode.value}));}catch{}}
@@ -10931,7 +10931,7 @@ async function makeStoreZip(entries,onProgress=null){
     // Phase 5.1.1: native tab capture, cropped to the existing live Player.
     function recordRealtime(){
       if(exportJob||!rows.length)return;
-      if(total>60){appAlert('現在の動画書き出しは60秒以内です。');return;}
+      if(total>600){appAlert('リアルタイム録画はメモリ保護のため600秒以内です。');return;}
       stop();interruptAutoDelivery();
       const token=crypto.randomUUID();
       const popup=window.open(new URL('record-player.html',location.href).href,'_blank');
@@ -10943,7 +10943,7 @@ async function makeStoreZip(entries,onProgress=null){
       let poll=0,ready=false;
       function finish(){clearInterval(poll);window.removeEventListener('message',receive);dialog.removeEventListener('close',cancelJob);cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;if(exportJob===job)exportJob=null;scheduleAutoDelivery();}
       function cancelJob(){popup.close();status.textContent='録画中止';finish();}
-      function receive(e){if(e.origin!==location.origin||e.source!==popup)return;if(e.data?.type==='ahako-record-ready'&&!ready){ready=true;popup.postMessage({type:'ahako-record-init',token,doc,rows,ratio:plan.ratio,watermark:settings.watermark,fps:Number(exportFps.value),uiLanguage,filename:title+'_'+plan.ratio.replace(':','x')+'_realtime.webm'},location.origin);}else if(e.data?.type==='ahako-record-status'&&e.data.token===token){status.textContent=e.data.message;diagnosticLog.textContent=e.data.message;if(!e.data.message.startsWith('録画中 ｜'))finish();}}
+      function receive(e){if(e.origin!==location.origin||e.source!==popup)return;if(e.data?.type==='ahako-record-ready'&&!ready){ready=true;popup.postMessage({type:'ahako-record-init',token,doc,rows,ratio:plan.ratio,watermark:settings.watermark,fps:Number(exportFps.value),quality:Number(exportQuality.value),uiLanguage,filename:title+'_'+plan.ratio.replace(':','x')+'_realtime.webm'},location.origin);}else if(e.data?.type==='ahako-record-status'&&e.data.token===token){status.textContent=e.data.message;diagnosticLog.textContent=e.data.message;if(!e.data.message.startsWith('録画中 ｜'))finish();}}
       window.addEventListener('message',receive);dialog.addEventListener('close',cancelJob,{once:true});cancel.onclick=cancelJob;poll=setInterval(()=>{if(popup.closed){status.textContent='録画専用タブを閉じました';finish();}},500);status.textContent='録画専用Playerで録画開始を押してください。';
     }
     async function exportVideo(benchmark=false){
@@ -11333,7 +11333,7 @@ async function makeStoreZip(entries,onProgress=null){
       }catch(e){dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';document.removeEventListener('visibilitychange',visibility);spriteObserver.disconnect();spriteState=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;baseImage=null;overlaySVG=null;videoSpans.length=0;cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;if(dialog.open)fit();}
     }
     rebuild(true);
-    const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。書き出し上限60秒。演出・音声は出力動画で確認してください。';
+    const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。固定時間描画は60秒、リアルタイム録画は600秒まで。演出・音声は出力動画で確認してください。';
     function onVisibility(){if(document.hidden&&running&&!exportJob?.realtime)stop('タブ非表示のため停止');}
     settingsPanel.append(note);dialog.append(controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
   }
@@ -11344,8 +11344,9 @@ async function makeStoreZip(entries,onProgress=null){
     const source=workingDocument;
     const signature=JSON.stringify(source.scenes.map(s=>[s.id,s.pause,scenePreviewText(s)]));
     const duration=s=>Math.max(.15,Math.min(600,Number(s)||DEFAULT_AUTO_SECONDS));
+    const videoSceneSeconds=s=>{const c=s?.presentation?.credits;return c?.mode==='roll'&&(c.enabled===true||(s.presentation.view==='credits'&&c.enabled!==false))?Math.max(liveTimingSeconds(s),(Number(c.duration)||30)+(Number(c.startDelay)||0)):liveTimingSeconds(s);};
     if(!shortVideoPlan||shortVideoPlan.source!==source||shortVideoPlan.signature!==signature){
-      shortVideoPlan={source,signature,ratio:'9:16',rows:[{kind:'cover',label:'表紙',seconds:2.6,included:false},...source.scenes.map((s,i)=>({kind:'scene',index:i,label:scenePreviewText(s),seconds:duration(liveTimingSeconds(s)),included:true})),{kind:'ending',label:'読了',seconds:2.6,included:false}]};
+      shortVideoPlan={source,signature,ratio:'9:16',rows:[{kind:'cover',label:'表紙',seconds:2.6,included:false},...source.scenes.map((s,i)=>({kind:'scene',index:i,label:scenePreviewText(s),seconds:duration(videoSceneSeconds(s)),included:true})),{kind:'ending',label:'読了',seconds:2.6,included:false}]};
     }
     const plan=shortVideoPlan;
     const rowKey=r=>r.kind==='scene'?'scene:'+r.index:r.kind;
@@ -11361,7 +11362,7 @@ async function makeStoreZip(entries,onProgress=null){
     }
     function savePlan(){const url=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ahako-short-video-plan.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
     async function loadPlan(f){if(f.size>5000000)throw Error('制作プランが大きすぎます。');restore(JSON.parse(await f.text()));}
-    function resetSeconds(){for(const r of plan.rows)r.seconds=r.kind==='scene'?duration(liveTimingSeconds(source.scenes[r.index])):2.6;}
+    function resetSeconds(){for(const r of plan.rows)r.seconds=r.kind==='scene'?duration(videoSceneSeconds(source.scenes[r.index])):2.6;}
     function resetOrder(){const key=r=>r.kind==='cover'?-1:r.kind==='ending'?Infinity:r.index;plan.rows.sort((a,b)=>key(a)-key(b));}
     previewShortVideoPlan(plan,savePlan,loadPlan,resetSeconds,resetOrder);
   }
