@@ -10978,14 +10978,14 @@ async function makeStoreZip(entries,onProgress=null){
       window.addEventListener('message',receive);dialog.addEventListener('close',cancelJob,{once:true});cancel.onclick=cancelJob;poll=setInterval(()=>{if(popup.closed){status.textContent='録画専用タブを閉じました';finish();}},500);status.textContent='録画専用Playerで録画開始を押してください。';
     }
     // Phase 5.3.3: lightweight promotion drafts, independent of the render surface.
-    let promoPanel=null, promoDrafts=null;
+    let promoPanel=null, promoDrafts=null, promoBusyUntil=0, promoComposing=false;
     function openPromotionPrep(){
       if(promoPanel){promoPanel.hidden=false;promoPanel.style.display='flex';return;}
       const title=String(doc.title||'あ箱作品'), author=typeof doc.author==='string'?doc.author:'', description=String(doc.metadata?.description||'').trim();
       const credit='『'+title+'』'+(author?' ／ '+author:'');
       const intro=Array.from(description).slice(0,85).join('')+(Array.from(description).length>85?'…':'');
       const ending=plan.pvText||'続きは、あ箱で。';
-      promoDrafts ||= {X:[credit,intro,ending,'#あ箱'].filter(Boolean).join('\n\n'),YouTube:[credit,description,ending,'#あ箱'+(plan.ratio==='9:16'?' #Shorts':'')].filter(Boolean).join('\n\n'),TikTok:[credit,intro,ending,'#あ箱'].filter(Boolean).join('\n\n'),Instagram:[credit,description,ending,'#あ箱'].filter(Boolean).join('\n\n'),ytTitle:title+'｜あ箱',url:'',platform:'X'};
+      promoDrafts ||= {X:[credit,intro,ending,'#あ箱'].filter(Boolean).join('\n\n'),YouTube:[credit,description,ending,'#あ箱'+(plan.ratio==='9:16'?' #Shorts':'')].filter(Boolean).join('\n\n'),TikTok:[credit,intro,ending,'#あ箱'].filter(Boolean).join('\n\n'),Instagram:[credit,description,ending,'#あ箱'].filter(Boolean).join('\n\n'),ytTitle:title+'｜あ箱',url:'',includeUrl:true,platform:'X'};
       const d=promoDrafts, panel=document.createElement('section');promoPanel=panel;
       stage.style.position='relative';panel.style.cssText='position:absolute;inset:0;z-index:200;display:flex;flex-direction:column;gap:9px;overflow:auto;overscroll-behavior:contain;background:#20252a;color:#fff;padding:14px;box-sizing:border-box;text-align:left';
       const make=(tag,text)=>{const e=document.createElement(tag);if(text)e.textContent=text;return e;};
@@ -10998,16 +10998,23 @@ async function makeStoreZip(entries,onProgress=null){
       const ytLabel=make('label','動画タイトル');ytLabel.append(yt);
       const text=field(make('textarea'));text.rows=6;text.style.minHeight='110px';text.style.resize='vertical';text.setAttribute('aria-label','SNS投稿文');
       const textLabel=make('label');const label=make('span');textLabel.append(label,text);
-      const url=field(make('input'));url.type='url';url.placeholder='公開作品URLを貼り付け';url.value=d.url;url.oninput=()=>d.url=url.value;const urlLabel=make('label','作品公開URL（任意）');urlLabel.append(url);
+      const url=field(make('input'));url.type='url';url.placeholder='公開作品URLを貼り付け';url.value=d.url;const urlLabel=make('label','作品公開URL（任意）');urlLabel.append(url);
+      const urlState=make('small','公開状態を確認しています…');urlState.style.color='#bbb';
+      const include=make('input');include.type='checkbox';include.checked=d.includeUrl;const includeLabel=make('label');includeLabel.append(include,document.createTextNode(' 投稿文に作品URLを含める'));
       const feedback=make('small');feedback.setAttribute('role','status');const count=make('small');
-      function output(){return [d[d.platform],d.url.trim()].filter(Boolean).join('\n\n');}
-      function refreshCount(){count.textContent=Array.from(output()).length+'文字（目安）';}
-      text.oninput=()=>{d[d.platform]=text.value;refreshCount();};url.addEventListener('input',refreshCount);
+      let urlEdited=false;
+      function output(){const body=d[d.platform],link=d.includeUrl?d.url.trim():'';return [body,link&&!body.includes(link)?link:''].filter(Boolean).join('\n\n');}
+      // X weighted length estimate: URLs 23, common Latin ranges 1, other code points 2.
+      function xLength(value){let n=0;const parts=value.normalize('NFC').split(/(https?:\/\/[^\s<>]+)/giu);for(let i=0;i<parts.length;i++){if(i%2){n+=23;continue;}for(const c of parts[i]){const k=c.codePointAt(0);n+=(k<=0x10ff||(k>=0x2000&&k<=0x200d)||(k>=0x2010&&k<=0x201f)||(k>=0x2032&&k<=0x2037))?1:2;}}return n;}
+      function refreshCount(){const n=d.platform==='X'?xLength(output()):Array.from(output()).length;count.textContent=d.platform==='X'?n+' / 280（目安）'+(n>280?'・通常投稿の上限超過の可能性':''):n+'文字（目安）';count.style.color=d.platform==='X'&&n>280?'#ffad85':'';}
+      text.oninput=()=>{d[d.platform]=text.value;refreshCount();};url.oninput=()=>{urlEdited=true;d.url=url.value;urlState.textContent='手動入力';refreshCount();};include.onchange=()=>{d.includeUrl=include.checked;refreshCount();};
+      async function lookupPublication(){const id=String(doc.studio?.identity?.workId||'').trim();if(!id){urlState.textContent='公開IDなし・手動入力できます';return;}try{const result=await fetchMasterPublicationStatus(doc);if(!dialog.open||urlEdited)return;if(result?.exists&&result.state!=='stopped'&&result.state!=='suspended'&&result.url){const parsed=new URL(result.url);if(parsed.protocol!=='https:'&&parsed.protocol!=='http:')throw Error('invalid URL');d.url=url.value=parsed.href;urlState.textContent='公開中の作品・URL自動取得済み';refreshCount();}else{urlState.textContent=result?.exists?'公開停止中・手動入力できます':'未公開・公開後のURLを入力できます';}}catch{if(!urlEdited)urlState.textContent='公開状態を確認できません・手動入力できます';}}
+      const touch=()=>{promoBusyUntil=performance.now()+500;};for(const event of ['pointerdown','keydown','input','wheel','scroll'])panel.addEventListener(event,touch,{capture:true,passive:true});panel.addEventListener('compositionstart',()=>{promoComposing=true;touch();});panel.addEventListener('compositionend',()=>{promoComposing=false;touch();});panel.addEventListener('focusout',()=>{promoComposing=false;touch();});
       const buttons=[];function refresh(){for(const [key,b] of buttons){b.style.background=key===d.platform?'#386da8':'#343a40';b.setAttribute('aria-pressed',String(key===d.platform));}ytLabel.style.display=d.platform==='YouTube'?'block':'none';label.textContent=d.platform==='YouTube'?'概要欄':'投稿文';text.value=d[d.platform];feedback.textContent='';refreshCount();}
       for(const key of ['X','YouTube','TikTok','Instagram']){const b=btn(key,()=>{d.platform=key;refresh();});buttons.push([key,b]);tabs.append(b);}
       async function copy(value){try{await navigator.clipboard.writeText(value);feedback.textContent='コピーしました';}catch{feedback.textContent='コピーできませんでした。文章を選択してコピーしてください。';}}
-      const actions=make('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap';actions.append(btn('投稿文をコピー',()=>copy(output())),btn('YouTubeタイトルをコピー',()=>copy(d.ytTitle)),btn('映像表示に戻る',()=>{panel.style.display='none';}));
-      panel.append(heading,hint,tabs,ytLabel,textLabel,urlLabel,count,actions,feedback);stage.append(panel);refresh();const reopen=btn('宣伝準備',()=>{panel.style.display='flex';});dialog.insertBefore(reopen,stage);
+      const actions=make('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap';actions.append(btn('投稿文をコピー',()=>copy(output())),btn('YouTubeタイトルをコピー',()=>copy(d.ytTitle)),btn('URLをコピー',()=>{if(d.url.trim())copy(d.url.trim());else feedback.textContent='URLを入力してください';}),btn('映像表示に戻る',()=>{promoComposing=false;promoBusyUntil=0;panel.style.display='none';}));
+      panel.append(heading,hint,tabs,ytLabel,textLabel,urlLabel,urlState,includeLabel,count,actions,feedback);stage.append(panel);refresh();void lookupURL();const reopen=btn('宣伝準備',()=>{panel.style.display='flex';});dialog.insertBefore(reopen,stage);
     }
     async function exportVideo(benchmark=false){
       if(exportJob||!rows.length)return;
@@ -11038,7 +11045,7 @@ async function makeStoreZip(entries,onProgress=null){
       let progressText='書き出し準備中…',lastStatusAt=-Infinity;
       const showProgress=(force=false,suffix='')=>{if(document.hidden)return;const now=activeNow();if(!force&&now-lastStatusAt<250)return;const text=progressText+suffix;if(status.textContent!==text)status.textContent=text;lastStatusAt=now;};
       const visibility=()=>{if(document.hidden){if(hiddenSince===null)hiddenSince=performance.now();status.textContent='書き出し一時停止：タブに戻ると自動再開します';}else if(hiddenSince!==null){hiddenMs+=performance.now()-hiddenSince;hiddenSince=null;showProgress(true);}};
-      async function checkpoint(){guard();while(document.hidden){await wait(100);guard();}guard();}
+      async function checkpoint(){guard();while(document.hidden||(!benchmark&&promoPanel?.style.display==='flex'&&(promoComposing||performance.now()<promoBusyUntil))){await wait(50);guard();}guard();}
       document.addEventListener('visibilitychange',visibility);
 
       async function inlineURL(url){if(!url||url.startsWith('data:'))return url;if(!cache.has(url)){const response=await fetch(url);if(!response.ok)throw Error('素材を取得できません');const blob=await response.blob();const data=await new Promise((ok,no)=>{const reader=new FileReader();reader.onload=()=>ok(reader.result);reader.onerror=no;reader.readAsDataURL(blob);});if(data.length<=4000000){while(cache.size>=8||Array.from(cache.values()).reduce((n,v)=>n+v.length,0)+data.length>8000000)cache.delete(cache.keys().next().value);cache.set(url,data);}return data;}return cache.get(url);}
