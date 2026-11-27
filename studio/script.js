@@ -10773,7 +10773,9 @@ async function makeStoreZip(entries,onProgress=null){
     const spacer=document.createElement('span');spacer.style.flex='1';controls.append(spacer);
     const settingsButton=button('settings','表示設定',()=>{settingsPanel.hidden=!settingsPanel.hidden;settingsPanel.style.display=settingsPanel.hidden?'none':'flex';settingsButton.setAttribute('aria-expanded',String(!settingsPanel.hidden));fit();});settingsButton.setAttribute('aria-expanded','false');
     const closeButton=button('close','閉じる',()=>dialog.close());
+    if(plan.easyPV){settingsButton.title='詳細設定';settingsButton.setAttribute('aria-label','詳細設定');}
     const exportButton=button('export','動画を書き出す（音声付き）',()=>exportMode.value==='realtime'?recordRealtime():exportVideo());controls.insertBefore(exportButton,closeButton);
+    if(plan.easyPV){exportButton.textContent='動画を作る';exportButton.style.cssText='padding:8px 12px;border:0!important;border-radius:7px;background:#386da8!important;color:white;font-weight:bold;flex:none';}
     const settingsPanel=document.createElement('div');settingsPanel.className='sv-preview-controls';settingsPanel.hidden=true;settingsPanel.style.cssText='display:none;padding:6px 0;gap:12px;flex-wrap:wrap';
     toggle('あ箱ロゴ','watermark');toggle('安全ガイド','guide');for(const l of Array.from(controls.querySelectorAll('label')))settingsPanel.append(l);applySettings();
     status.textContent='再生ボタンを押してください ｜ '+total.toFixed(2)+'秒';
@@ -10786,13 +10788,14 @@ async function makeStoreZip(entries,onProgress=null){
     const easyBar=document.createElement('div');easyBar.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:none';
     if(plan.easyPV){
       editor.hidden=true;editor.style.display='none';
-      const label=document.createElement('strong');label.textContent='Easy PV';
+      const label=document.createElement('strong');label.textContent='作品のPV';
       const detail=document.createElement('button');detail.type='button';detail.textContent='詳細編集';detail.onclick=()=>{const show=editor.hidden;editor.hidden=!show;editor.style.display=show?'grid':'none';detail.textContent=show?'詳細編集を閉じる':'詳細編集';};
       const manual=document.createElement('button');manual.type='button';manual.textContent='従来の制作プラン';manual.onclick=()=>{if(exportJob)return;dialog.close();openShortVideoPlan(true);};
       const variant=document.createElement('button');variant.type='button';variant.textContent='別パターン';variant.style.cssText='color:#fff;background:#343a40;border:1px solid #666;border-radius:5px;padding:5px 10px';
       const variantLabel=document.createElement('span');variantLabel.style.cssText='font-size:12px;color:#bbb';variantLabel.textContent=plan.pvPattern||'冒頭';
       variant.onclick=()=>{if(exportJob)return;if(!nextPV?.()){status.textContent='別の構成候補がありません ｜ '+total.toFixed(2)+'秒';return;}variantLabel.textContent=plan.pvPattern;selected=plan.rows.find(r=>r.included);rebuild();start(0);};
-      easyBar.append(label,variant,variantLabel,detail,manual);
+      const back=document.createElement('button');back.type='button';back.textContent='構成を選び直す';back.onclick=()=>{if(exportJob)return;dialog.close();openShortVideoPlan();};
+      easyBar.append(label,variant,variantLabel,back,detail,manual);
     }else{const easy=document.createElement('button');easy.type='button';easy.textContent='Easy PV';easy.onclick=()=>{if(exportJob)return;dialog.close();openShortVideoPlan();};easyBar.append(easy);}
 
     const name=r=>r.kind==='scene'?'Scene '+(r.index+1):r.label;
@@ -10848,7 +10851,7 @@ async function makeStoreZip(entries,onProgress=null){
     try{const pref=JSON.parse(localStorage.getItem(prefKey)||'null');if(pref){if(['realtime','fixed','hybrid'].includes(pref.mode))exportMode.value=pref.mode;if(['24','30'].includes(pref.fps))exportFps.value=pref.fps;if(['mp4','webm'].includes(pref.format))exportFormat.value=pref.format;if(['540','720','1080'].includes(pref.quality))exportQuality.value=pref.quality;}}catch{}
     if(plan.easyPV){exportMode.value='hybrid';exportFps.value='24';exportFormat.value='mp4';exportQuality.value='720';preset.value='sns';}
     updateExportMode();
-    preset.onchange=()=>{const v={light:['webm','540'],sns:['mp4','720'],hd:['mp4','1080']}[preset.value];if(v){exportFormat.value=v[0];exportQuality.value=v[1];exportFps.value='30';rememberExport();}};
+    preset.onchange=()=>{const v={light:['webm','540'],sns:['mp4','720'],hd:['mp4','1080']}[preset.value];if(v){exportFormat.value=v[0];exportQuality.value=v[1];exportFps.value=plan.easyPV&&preset.value==='sns'?'24':'30';rememberExport();}};
     for(const c of [exportFps,exportFormat,exportQuality])c.onchange=()=>{preset.value='custom';rememberExport();};
     const diagnostics=document.createElement('details');diagnostics.style.cssText='width:100%';const diagnosticTitle=document.createElement('summary');diagnosticTitle.textContent='詳細診断';const diagnosticLog=document.createElement('pre');diagnosticLog.style.cssText='white-space:pre-wrap;max-height:100px;overflow:auto;margin:6px 0';const benchButton=document.createElement('button');benchButton.type='button';benchButton.textContent='選択Sceneを1秒診断';benchButton.onclick=()=>exportVideo(true);diagnostics.append(diagnosticTitle,benchButton,diagnosticLog);settingsPanel.append(diagnostics);
     // Phase 5.0.5: offline audio clock, independent of render wall time.
@@ -11369,10 +11372,23 @@ async function makeStoreZip(entries,onProgress=null){
     settingsPanel.append(note);dialog.append(easyBar,controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
   }
   let shortVideoPlan=null;
-  function openShortVideoPlan(advanced=false){
+  function openShortVideoPlan(advanced=false,pvOptions=null){
     closeEasyMenu();
     if(!workingDocument?.scenes?.length){appAlert('作品を開いてから動画制作を始めてください。');return;}
     const source=workingDocument;
+    if(advanced!==true&&!pvOptions){
+      const d=document.createElement('dialog');d.style.cssText='width:min(440px,92vw);max-height:85vh;overflow:auto;padding:20px;border:1px solid #555;border-radius:14px;background:#20252a;color:#fff;box-sizing:border-box';
+      const heading=document.createElement('h2');heading.textContent='作品のPVを作る';heading.style.cssText='font-size:20px;margin:0 0 6px';
+      const sub=document.createElement('p');sub.textContent='冒頭チラ見せ · 作品から宣伝動画を自動構成';sub.style.cssText='font-size:13px;color:#bbb;margin:0 0 18px';d.append(heading,sub);
+      const options={duration:30,ratio:'9:16',text:'続きは、あ箱で。'};
+      function choices(label,key,values){const title=document.createElement('div');title.textContent=label;title.style.cssText='font-size:13px;margin:14px 0 6px;color:#ddd';const group=document.createElement('div');group.style.cssText='display:flex;gap:6px;flex-wrap:wrap';const buttons=[];for(const [value,text] of values){const b=document.createElement('button');b.type='button';b.textContent=text;b.style.cssText='flex:1;min-width:65px;padding:9px 6px;border:0;border-radius:7px;color:#fff';b.onclick=()=>{options[key]=value;refresh();};buttons.push([b,value]);group.append(b);}function refresh(){for(const [b,v] of buttons){b.setAttribute('aria-pressed',String(options[key]===v));b.style.background=options[key]===v?'#386da8':'#343a40';}}refresh();d.append(title,group);}
+      choices('動画の長さ','duration',[[15,'15秒'],[30,'30秒'],[60,'60秒']]);
+      choices('画面比率','ratio',[['9:16','9:16 縦'],['16:9','16:9 横'],['1:1','1:1 正方形']]);
+      const label=document.createElement('label');label.style.cssText='display:grid;gap:6px;margin:16px 0';label.textContent='終了メッセージ';const end=document.createElement('select');end.style.cssText='width:100%;color:#fff;background:#343a40;padding:8px';for(const v of ['続きは、あ箱で。','この物語を、あ箱で。','読むだけじゃない。物語を体験する。','作者オリジナル'])end.add(new Option(v,v));const custom=document.createElement('input');custom.type='text';custom.maxLength=40;custom.placeholder='終了メッセージ';custom.style.cssText='display:none;width:100%;box-sizing:border-box';end.onchange=()=>{custom.style.display=end.value==='作者オリジナル'?'block':'none';};label.append(end,custom);d.append(label);
+      const note=document.createElement('small');note.textContent='MP4 / 720p / 24fps · 読みやすさに合わせて尺を調整します。';note.style.cssText='display:block;color:#bbb;margin:10px 0';d.append(note);
+      const go=document.createElement('button');go.type='button';go.textContent='PVをプレビュー';go.style.cssText='width:100%;padding:12px;border:0;border-radius:9px;background:#386da8;color:white;font-weight:bold';go.onclick=()=>{options.text=end.value==='作者オリジナル'?custom.value.trim()||'続きは、あ箱で。':end.value;d.close();openShortVideoPlan(false,options);};d.append(go);
+      const actions=document.createElement('div');actions.style.cssText='display:flex;justify-content:space-between;margin-top:12px';for(const [text,fn] of [['従来の詳細編集',()=>{d.close();openShortVideoPlan(true);}],['閉じる',()=>d.close()]]){const b=document.createElement('button');b.type='button';b.textContent=text;b.style.cssText='border:0;background:transparent;color:#ddd;padding:8px';b.onclick=fn;actions.append(b);}d.append(actions);document.body.append(d);d.addEventListener('close',()=>d.remove(),{once:true});d.showModal();return;
+    }
     const signature=JSON.stringify(source.scenes.map(s=>[s.id,s.pause,scenePreviewText(s)]));
     const duration=s=>Math.max(.15,Math.min(600,Number(s)||DEFAULT_AUTO_SECONDS));
     const videoSceneSeconds=s=>{const c=s?.presentation?.credits;return c?.mode==='roll'&&(c.enabled===true||(s.presentation.view==='credits'&&c.enabled!==false))?Math.max(liveTimingSeconds(s),(Number(c.duration)||30)+(Number(c.startDelay)||0)):liveTimingSeconds(s);};
@@ -11380,13 +11396,14 @@ async function makeStoreZip(entries,onProgress=null){
       shortVideoPlan={source,signature,ratio:'9:16',rows:[{kind:'cover',label:'表紙',seconds:2.6,included:false},...source.scenes.map((s,i)=>({kind:'scene',index:i,label:scenePreviewText(s),seconds:duration(videoSceneSeconds(s)),included:true})),{kind:'ending',label:'読了',seconds:2.6,included:false}]};
     }
     // Easy PV is a fresh, isolated plan; keep the existing Advanced plan intact.
-    const plan=advanced===true?shortVideoPlan:{...shortVideoPlan,ratio:'9:16',easyPV:true,renderSettings:{title:false,watermark:false,guide:false},rows:shortVideoPlan.rows.map(r=>({...r,included:false}))};
+    const plan=advanced===true?shortVideoPlan:{...shortVideoPlan,ratio:pvOptions.ratio,pvText:pvOptions.text,easyPV:true,renderSettings:{title:false,watermark:false,guide:false},rows:shortVideoPlan.rows.map(r=>({...r,included:false}))};
     let nextPV=null;
     if(advanced!==true){
     const ordered=plan.rows.filter(r=>r.kind==='scene').sort((a,b)=>a.index-b.index);
     plan.rows.sort((a,b)=>(a.kind==='cover'?-1:a.kind==='ending'?Infinity:a.index)-(b.kind==='cover'?-1:b.kind==='ending'?Infinity:b.index));
-    const cover=plan.rows.find(r=>r.kind==='cover');cover.included=true;cover.seconds=3;
-    plan.rows.push({kind:'pv',label:'PV終了演出',seconds:4,included:true});
+    const coverSeconds=pvOptions.duration===15?2:3,endSeconds=pvOptions.duration===15?3:4,bodyBudget=(pvOptions.duration-coverSeconds-endSeconds)*100;
+    const cover=plan.rows.find(r=>r.kind==='cover');cover.included=true;cover.seconds=coverSeconds;
+    plan.rows.push({kind:'pv',label:'PV終了演出',seconds:endSeconds,included:true});
     // Estimate minimum readable/visible time, without mutating source scenes.
     const pvTiming=scene=>{
       const p=scene.presentation||{}, raw=[scene.text,scene.subText].map(v=>String(v||'').trim()).filter(Boolean).join(' ');
@@ -11407,7 +11424,7 @@ async function makeStoreZip(entries,onProgress=null){
     };
     const eligible=[];
     for(const r of ordered){const p=source.scenes[r.index]?.presentation;if(p?.view==='credits'||(p?.credits?.mode==='roll'&&p.credits.enabled===true))break;eligible.push({r,t:pvTiming(source.scenes[r.index])});}
-    function windowAt(start){let remaining=2300;const items=[];for(let i=start;i<eligible.length;i++){const {r,t}=eligible[i];if(t.minimum>remaining)break;const ms=Math.min(remaining,t.preferred);items.push({r,ms});remaining-=ms;}if(items.length&&start+items.length<eligible.length&&remaining>0&&remaining<=200)items.at(-1).ms+=remaining;if(!items.length&&eligible[start])items.push({r:eligible[start].r,ms:2300});return items;}
+    function windowAt(start){let remaining=bodyBudget;const items=[];for(let i=start;i<eligible.length;i++){const {r,t}=eligible[i];if(t.minimum>remaining)break;const ms=Math.min(remaining,t.preferred);items.push({r,ms});remaining-=ms;}if(items.length&&start+items.length<eligible.length&&remaining>0&&remaining<=200)items.at(-1).ms+=remaining;if(!items.length&&eligible[start])items.push({r:eligible[start].r,ms:bodyBudget});return items;}
     if(!eligible.length){appAlert('PVに使用できる冒頭Sceneがありません。');return;}
     const opening=windowAt(0), candidates=[{label:'冒頭',items:opening}];
     const seen=new Set([opening.map(x=>x.r.index).join(',')]);
@@ -11420,7 +11437,7 @@ async function makeStoreZip(entries,onProgress=null){
     addCandidate('演出重視',pool.slice().sort((a,b)=>b.score-a.score||a.i-b.i).find(c=>!seen.has(c.items.map(x=>x.r.index).join(','))));
     addCandidate('別の場面',pool.find(c=>c.i>=opening.length&&!seen.has(c.items.map(x=>x.r.index).join(',')))||pool.find(c=>!seen.has(c.items.map(x=>x.r.index).join(','))));
     let variantIndex=0;
-    function applyVariant(v){for(const r of plan.rows){r.included=false;if(r.kind==='scene')r.seconds=duration(videoSceneSeconds(source.scenes[r.index]));}resetOrder();cover.included=true;cover.seconds=3;const end=plan.rows.find(r=>r.kind==='pv');end.included=true;end.seconds=4;for(const {r,ms} of v.items){r.included=true;r.seconds=ms/100;}plan.pvPattern=v.label;}
+    function applyVariant(v){for(const r of plan.rows){r.included=false;if(r.kind==='scene')r.seconds=duration(videoSceneSeconds(source.scenes[r.index]));}resetOrder();cover.included=true;cover.seconds=coverSeconds;const end=plan.rows.find(r=>r.kind==='pv');end.included=true;end.seconds=endSeconds;for(const {r,ms} of v.items){r.included=true;r.seconds=ms/100;}plan.pvPattern=v.label;}
     applyVariant(candidates[0]);
     nextPV=()=>{if(candidates.length<2)return false;variantIndex=(variantIndex+1)%candidates.length;applyVariant(candidates[variantIndex]);return true;};
     }
