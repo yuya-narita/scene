@@ -10778,6 +10778,15 @@ async function makeStoreZip(entries,onProgress=null){
     const strip=document.createElement('div');strip.style.cssText='display:flex;gap:4px;overflow-x:auto;min-width:0;padding:3px 0';
     const tools=document.createElement('div');tools.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:6px';tools.className='sv-preview-controls';
     editor.append(strip,tools);let selected=rows[0],dragged=null;
+    const easyBar=document.createElement('div');easyBar.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:none';
+    if(plan.easyPV){
+      editor.hidden=true;editor.style.display='none';
+      const label=document.createElement('strong');label.textContent='Easy PV';
+      const detail=document.createElement('button');detail.type='button';detail.textContent='詳細編集';detail.onclick=()=>{const show=editor.hidden;editor.hidden=!show;editor.style.display=show?'grid':'none';detail.textContent=show?'詳細編集を閉じる':'詳細編集';};
+      const manual=document.createElement('button');manual.type='button';manual.textContent='従来の制作プラン';manual.onclick=()=>{if(exportJob)return;dialog.close();openShortVideoPlan(true);};
+      easyBar.append(label,detail,manual);
+    }else{const easy=document.createElement('button');easy.type='button';easy.textContent='Easy PV';easy.onclick=()=>{if(exportJob)return;dialog.close();openShortVideoPlan();};easyBar.append(easy);}
+
     const name=r=>r.kind==='scene'?'Scene '+(r.index+1):r.label;
     const add=(label,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;tools.append(b);return b;};
     jump.hidden=true;jump.style.display='none';tools.append(jump);const selectedLabel=document.createElement('span');selectedLabel.style.cssText='min-width:65px;font-weight:600';tools.append(selectedLabel);
@@ -10829,6 +10838,7 @@ async function makeStoreZip(entries,onProgress=null){
     const prefKey='ahako.shortVideo.export.v1';
     function rememberExport(){try{localStorage.setItem(prefKey,JSON.stringify({fps:exportFps.value,format:exportFormat.value,quality:exportQuality.value,mode:exportMode.value}));}catch{}}
     try{const pref=JSON.parse(localStorage.getItem(prefKey)||'null');if(pref){if(['realtime','fixed'].includes(pref.mode))exportMode.value=pref.mode;if(['24','30'].includes(pref.fps))exportFps.value=pref.fps;if(['mp4','webm'].includes(pref.format))exportFormat.value=pref.format;if(['540','720','1080'].includes(pref.quality))exportQuality.value=pref.quality;}}catch{}
+    if(plan.easyPV){exportMode.value='fixed';exportFps.value='24';exportFormat.value='mp4';exportQuality.value='720';preset.value='sns';}
     updateExportMode();
     preset.onchange=()=>{const v={light:['webm','540'],sns:['mp4','720'],hd:['mp4','1080']}[preset.value];if(v){exportFormat.value=v[0];exportQuality.value=v[1];exportFps.value='30';rememberExport();}};
     for(const c of [exportFps,exportFormat,exportQuality])c.onchange=()=>{preset.value='custom';rememberExport();};
@@ -11335,10 +11345,10 @@ async function makeStoreZip(entries,onProgress=null){
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。固定時間描画は60秒、リアルタイム録画は600秒まで。演出・音声は出力動画で確認してください。';
     function onVisibility(){if(document.hidden&&running&&!exportJob?.realtime)stop('タブ非表示のため停止');}
-    settingsPanel.append(note);dialog.append(controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
+    settingsPanel.append(note);dialog.append(easyBar,controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
   }
   let shortVideoPlan=null;
-  function openShortVideoPlan(){
+  function openShortVideoPlan(advanced=false){
     closeEasyMenu();
     if(!workingDocument?.scenes?.length){appAlert('作品を開いてから動画制作を始めてください。');return;}
     const source=workingDocument;
@@ -11348,7 +11358,25 @@ async function makeStoreZip(entries,onProgress=null){
     if(!shortVideoPlan||shortVideoPlan.source!==source||shortVideoPlan.signature!==signature){
       shortVideoPlan={source,signature,ratio:'9:16',rows:[{kind:'cover',label:'表紙',seconds:2.6,included:false},...source.scenes.map((s,i)=>({kind:'scene',index:i,label:scenePreviewText(s),seconds:duration(videoSceneSeconds(s)),included:true})),{kind:'ending',label:'読了',seconds:2.6,included:false}]};
     }
-    const plan=shortVideoPlan;
+    // Easy PV is a fresh, isolated plan; keep the existing Advanced plan intact.
+    const plan=advanced===true?shortVideoPlan:{...shortVideoPlan,ratio:'9:16',easyPV:true,renderSettings:{title:false,watermark:true,guide:false},rows:shortVideoPlan.rows.map(r=>({...r,included:false}))};
+    if(advanced!==true){
+    const ordered=plan.rows.filter(r=>r.kind==='scene').sort((a,b)=>a.index-b.index);
+    plan.rows.sort((a,b)=>(a.kind==='cover'?-1:a.kind==='ending'?Infinity:a.index)-(b.kind==='cover'?-1:b.kind==='ending'?Infinity:b.index));
+    const cover=plan.rows.find(r=>r.kind==='cover');cover.included=true;cover.seconds=3;
+    let remaining=2700;
+    for(const r of ordered){
+      const scene=source.scenes[r.index],c=scene?.presentation?.credits;
+      if(scene?.presentation?.view==='credits'||(c?.mode==='roll'&&c.enabled===true))break;
+      if(remaining<15)break;
+      const ms=Math.min(remaining,Math.max(15,Math.round(duration(videoSceneSeconds(scene))*100)));
+      r.included=true;r.seconds=ms/100;remaining-=ms;
+    }
+    // Short works stay short rather than freezing the last scene artificially.
+    if(!ordered.some(r=>r.included)){appAlert('PVに使用できる冒頭Sceneがありません。');return;}
+    }
+    // Preserve manual plans separately; expose them via the Advanced entry.
+
     const rowKey=r=>r.kind==='scene'?'scene:'+r.index:r.kind;
     // Explicit portable plan files, no media or original document mutation.
     const snapshot=()=>({format:'ahako-short-video-plan',version:1,signature,ratio:plan.ratio,renderSettings:plan.renderSettings||{title:false,watermark:true,guide:false},rows:plan.rows.map(r=>({key:rowKey(r),seconds:r.seconds,included:r.included}))});
@@ -11366,7 +11394,7 @@ async function makeStoreZip(entries,onProgress=null){
     function resetOrder(){const key=r=>r.kind==='cover'?-1:r.kind==='ending'?Infinity:r.index;plan.rows.sort((a,b)=>key(a)-key(b));}
     previewShortVideoPlan(plan,savePlan,loadPlan,resetSeconds,resetOrder);
   }
-  document.querySelector('#menuShortVideoButton')?.addEventListener('click',openShortVideoPlan);
+  document.querySelector('#menuShortVideoButton')?.addEventListener('click',()=>openShortVideoPlan());
 
   // v0.2.94: menu is a top-right popover; no drag-to-dismiss gesture.
   document.addEventListener('click',closeEasyMenu);
