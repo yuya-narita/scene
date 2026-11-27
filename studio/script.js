@@ -10736,12 +10736,12 @@ async function makeStoreZip(entries,onProgress=null){
     const pvCard=document.createElement('canvas');pvCard.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:100;pointer-events:none;display:none';
     frame.append(host,mark,pvCard,guide);stage.append(frame);
     function paintPV(c,W,H,t,d){const u=Math.max(0,Math.min(1,t/Math.max(.15,d))),fade=Math.min(1,u*8),unit=Math.min(W,H);c.save();c.fillStyle='#080808';c.fillRect(0,0,W,H);c.globalAlpha=fade;c.fillStyle='#fff';c.textAlign='center';c.textBaseline='middle';c.font='600 '+Math.round(unit*.065)+'px sans-serif';c.fillText(plan.pvText||'続きは、あ箱で。',W/2,H*.37,W*.88);c.globalAlpha=fade*Math.min(1,Math.max(0,(u-.18)*5));c.font='700 '+Math.round(unit*.15)+'px sans-serif';c.fillText('あ□',W/2,H*.53);c.font='500 '+Math.round(unit*.038)+'px sans-serif';c.fillText('AHAKO',W/2,H*.63);c.fillStyle='#aaa';c.font=Math.round(unit*.032)+'px sans-serif';c.fillText('作品リンクは投稿文へ',W/2,H*.79);c.restore();}
-    function showPV(t,d){pvCard.style.display='block';const W=Math.max(1,frame.clientWidth),H=Math.max(1,frame.clientHeight);if(pvCard.width!==W||pvCard.height!==H){pvCard.width=W;pvCard.height=H;}paintPV(pvCard.getContext('2d'),W,H,t,d);}
+    function showPV(t,d){mark.hidden=true;pvCard.style.display='block';const W=Math.max(1,frame.clientWidth),H=Math.max(1,frame.clientHeight);if(pvCard.width!==W||pvCard.height!==H){pvCard.width=W;pvCard.height=H;}paintPV(pvCard.getContext('2d'),W,H,t,d);}
 
     function fit(){const width=Math.max(1,Math.floor(Math.min(stage.clientWidth,stage.clientHeight*w/h)));frame.style.width=width+'px';frame.style.height=Math.floor(width*h/w)+'px';}
     const observer=new ResizeObserver(fit);observer.observe(stage);
     let settings=plan.renderSettings||(plan.renderSettings={title:false,watermark:true,guide:false});settings.title=false;
-    function applySettings(){host.classList.add('sv-hide-title');mark.hidden=!settings.watermark;guide.hidden=!settings.guide;}
+    function applySettings(){host.classList.add('sv-hide-title');mark.hidden=!settings.watermark||pvCard.style.display==='block';guide.hidden=!settings.guide;}
     function toggle(label,key){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.dataset.renderKey=key;c.checked=settings[key];c.onchange=()=>{settings[key]=c.checked;applySettings();};l.append(c,document.createTextNode(label));controls.append(l);}
     let core=null, timer=0, running=false, cursor=0, started=0, previous=null, exportJob=null;
     const jump=document.createElement('select');jump.setAttribute('aria-label','再生開始区間');
@@ -10751,7 +10751,7 @@ async function makeStoreZip(entries,onProgress=null){
     function dispose(){pvCard.style.display='none';cancelAnimationFrame(timer);timer=0;running=false;try{core?.destroy();}finally{core=null;host.replaceChildren();host.style.visibility='visible';}}
     function stop(message='停止'){if(exportJob?.recorder?.state==='recording'){exportJob.complete=message==='再生完了';exportJob.recorder.stop();if(exportJob.realtime){cancelAnimationFrame(timer);running=false;status.textContent='録画仕上げ中…';return;}}dispose();setIcon(pauseButton,'play','選択区間から再生');status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
     function enter(r){
-      if(r.kind==='pv'){host.style.visibility='hidden';showPV(0,r.seconds);return;}pvCard.style.display='none';host.style.visibility='visible';
+      if(r.kind==='pv'){host.style.visibility='hidden';showPV(0,r.seconds);return;}pvCard.style.display='none';host.style.visibility='visible';applySettings();
       if(previous && (previous.kind==='ending' || previous.kind==='pv' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();if(!exportJob||exportJob.realtime)core.unlockAudio(true);applySettings();}
       if(r.kind==='cover'){core.showCover();return;}
       if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}
@@ -11366,20 +11366,46 @@ async function makeStoreZip(entries,onProgress=null){
       shortVideoPlan={source,signature,ratio:'9:16',rows:[{kind:'cover',label:'表紙',seconds:2.6,included:false},...source.scenes.map((s,i)=>({kind:'scene',index:i,label:scenePreviewText(s),seconds:duration(videoSceneSeconds(s)),included:true})),{kind:'ending',label:'読了',seconds:2.6,included:false}]};
     }
     // Easy PV is a fresh, isolated plan; keep the existing Advanced plan intact.
-    const plan=advanced===true?shortVideoPlan:{...shortVideoPlan,ratio:'9:16',easyPV:true,renderSettings:{title:false,watermark:true,guide:false},rows:shortVideoPlan.rows.map(r=>({...r,included:false}))};
+    const plan=advanced===true?shortVideoPlan:{...shortVideoPlan,ratio:'9:16',easyPV:true,renderSettings:{title:false,watermark:false,guide:false},rows:shortVideoPlan.rows.map(r=>({...r,included:false}))};
     if(advanced!==true){
     const ordered=plan.rows.filter(r=>r.kind==='scene').sort((a,b)=>a.index-b.index);
     plan.rows.sort((a,b)=>(a.kind==='cover'?-1:a.kind==='ending'?Infinity:a.index)-(b.kind==='cover'?-1:b.kind==='ending'?Infinity:b.index));
     const cover=plan.rows.find(r=>r.kind==='cover');cover.included=true;cover.seconds=3;
     plan.rows.push({kind:'pv',label:'PV終了演出',seconds:4,included:true});
-    let remaining=2300;
+    // Estimate minimum readable/visible time, without mutating source scenes.
+    const pvTiming=scene=>{
+      const p=scene.presentation||{}, raw=[scene.text,scene.subText].map(v=>String(v||'').trim()).filter(Boolean).join(' ');
+      const chars=Array.from(raw.replace(/\s/g,'')).length;
+      const reading=chars?Math.max(1.2,.45+chars/7):1.2;
+      const delay=Math.max(0,Number(p.effectTiming?.delay)||0);
+      const entrance=p.effect==='none'?0:Math.max(0,Number(p.effectTiming?.duration)||.8);
+      const typing=p.typing?.enabled?chars*(Number(p.typing.speed)||55)/1000:0;
+      let ink=0;
+      const d=p.draw;
+      if(d?.strokes?.length){
+        let last=0;
+        if(d.display!=='still'&&!(Number(d.seconds)>0))for(const stroke of d.strokes)for(const point of stroke.points||[])last=Math.max(last,Number(point[2])||0);
+        ink=Math.max(0,Number(d.delay)||0)+(d.display==='still'?0:Number(d.seconds)>0?Number(d.seconds):last/1000/Math.max(.5,Number(d.rate)||1))+.25;
+      }
+      const minimum=Math.ceil(Math.max(reading,delay+Math.max(entrance,typing)+(chars?.45:0),ink)*100);
+      return {minimum,preferred:Math.max(minimum,Math.round(duration(videoSceneSeconds(scene))*100))};
+    };
+    let remaining=2300;const chosen=[];
     for(const r of ordered){
       const scene=source.scenes[r.index],c=scene?.presentation?.credits;
       if(scene?.presentation?.view==='credits'||(c?.mode==='roll'&&c.enabled===true))break;
-      if(remaining<15)break;
-      const ms=Math.min(remaining,Math.max(15,Math.round(duration(videoSceneSeconds(scene))*100)));
-      r.included=true;r.seconds=ms/100;remaining-=ms;
+      const timing=pvTiming(scene);
+      if(timing.minimum>remaining)break;
+      const ms=Math.min(remaining,timing.preferred);
+      r.included=true;r.seconds=ms/100;remaining-=ms;chosen.push(r);
     }
+    // Use a small remainder as breathing room only when another scene was excluded.
+    const next=ordered[chosen.length];
+    if(chosen.length&&next&&remaining>0&&remaining<=200&&next.kind==='scene'&&source.scenes[next.index]?.presentation?.view!=='credits'&&!(source.scenes[next.index]?.presentation?.credits?.mode==='roll'&&source.scenes[next.index]?.presentation?.credits?.enabled===true)){
+      chosen.at(-1).seconds=Math.round(chosen.at(-1).seconds*100+remaining)/100;
+    }
+    // A long opening scene cannot fit: preserve a usable teaser rather than block PV creation.
+    if(!chosen.length&&ordered.length){const r=ordered[0],p=source.scenes[r.index]?.presentation;if(p?.view!=='credits'&&!(p?.credits?.mode==='roll'&&p.credits.enabled===true)){r.included=true;r.seconds=23;}}
     // Short works stay short rather than freezing the last scene artificially.
     if(!ordered.some(r=>r.included)){appAlert('PVに使用できる冒頭Sceneがありません。');return;}
     }
