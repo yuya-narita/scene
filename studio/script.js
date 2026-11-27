@@ -10824,7 +10824,7 @@ async function makeStoreZip(entries,onProgress=null){
     const preset=document.createElement('select');preset.setAttribute('aria-label','書き出しプリセット');for(const [v,t] of [['custom','カスタム'],['light','軽量確認'],['sns','SNS標準'],['hd','高画質']])preset.add(new Option(t,v));fpsLabel.prepend(preset);
     const exportMode=document.createElement('select');exportMode.setAttribute('aria-label','書き出し方式');exportMode.add(new Option('リアルタイム録画（推奨）','realtime'));exportMode.add(new Option('固定時間描画','fixed'));fpsLabel.prepend(exportMode);
     const realtimeNote=document.createElement('small');realtimeNote.style.cssText='width:100%;opacity:.85';settingsPanel.append(realtimeNote);
-    function updateExportMode(){const live=exportMode.value==='realtime';exportQuality.disabled=preset.disabled=live;realtimeNote.textContent=live?'PC版Chrome/Edge：このタブを音声付きで共有。映像部分だけ録画します。解像度はプレビューサイズに依存します。MP4非対応時はWebMを選択してください。':'固定時間描画：指定解像度で生成します。特殊演出は未対応の場合があります。';}
+    function updateExportMode(){const live=exportMode.value==='realtime';exportQuality.disabled=preset.disabled=exportFormat.disabled=live;realtimeNote.textContent=live?'録画専用Player：WebMのみの試験版。専用タブ全体を音声付きで共有します。余白が入る場合があります。':'固定時間描画：指定解像度で生成します。特殊演出は未対応の場合があります。';}
     exportMode.onchange=()=>{updateExportMode();rememberExport();};
     const prefKey='ahako.shortVideo.export.v1';
     function rememberExport(){try{localStorage.setItem(prefKey,JSON.stringify({fps:exportFps.value,format:exportFormat.value,quality:exportQuality.value,mode:exportMode.value}));}catch{}}
@@ -10929,48 +10929,22 @@ async function makeStoreZip(entries,onProgress=null){
       if(!head||head.length<19||String.fromCharCode(...head.slice(0,8))!=='OpusHead')throw Error('Opus metadata unavailable');const skip=new DataView(head.buffer,head.byteOffset,head.byteLength).getUint16(10,true),padding=packets.length*960-skip-length;if(padding<0||padding>=960)throw Error('Opus padding mismatch');packets.forEach((p,i)=>{p.t=i*20000;p.padding=i===packets.length-1?Math.round(padding*1e9/rate):0;});return {head,delay:Math.round(skip*1e9/rate),packets,events,peak};
     }
     // Phase 5.1.1: native tab capture, cropped to the existing live Player.
-    async function recordRealtime(){
+    function recordRealtime(){
       if(exportJob||!rows.length)return;
       if(total>60){appAlert('現在の動画書き出しは60秒以内です。');return;}
-      if(!navigator.mediaDevices?.getDisplayMedia||!window.CropTarget||!window.MediaRecorder){appAlert('リアルタイム録画には領域キャプチャ対応のPC版Chrome/Edge（HTTPS）が必要です。');return;}
-      const mp4=exportFormat.value==='mp4',fps=Number(exportFps.value);
-      const candidates=mp4?['video/mp4;codecs=avc1.420028,mp4a.40.2','video/mp4']:['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];
-      const mime=candidates.find(t=>MediaRecorder.isTypeSupported(t));
-      if(!mime){appAlert('このブラウザでは選択した録画形式に対応していません。WebMを選択してください。');return;}
       stop();interruptAutoDelivery();
-      const job={realtime:true,cancelled:false,complete:false,stream:null,recorder:null};exportJob=job;
-      const oldGuide=settings.guide,oldPanel=settingsPanel.hidden,oldCursor=frame.style.cursor;
-      const cancel=document.createElement('button');cancel.type='button';cancel.textContent='録画中止';
-      const chunks=[];let size=0,recordError=null;
-      const guard=()=>{if(job.cancelled||!dialog.open)throw Error('中止しました');};
-      const abort=()=>{job.cancelled=true;job.complete=false;if(job.recorder?.state==='recording')job.recorder.stop();job.stream?.getTracks().forEach(t=>t.stop());};
-      cancel.onclick=abort;
-      const visibility=()=>{if(document.hidden)abort();};
-      try{
-        controls.inert=editor.inert=settingsPanel.inert=true;settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';frame.style.cursor='none';status.after(cancel);fit();
-        status.textContent='共有画面でこのタブを選択し、タブの音声を共有してください。';
-        // Invoke directly from the export click, before any asynchronous work.
-        job.stream=await navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser',frameRate:{ideal:fps,max:fps},cursor:'never'},audio:true,preferCurrentTab:true,selfBrowserSurface:'include',surfaceSwitching:'exclude',systemAudio:'exclude'});
-        guard();const track=job.stream.getVideoTracks()[0];
-        if(!track||track.getSettings().displaySurface!=='browser'||typeof track.cropTo!=='function')throw Error('このタブを選択してください（画面全体・ウィンドウは非対応）');
-        if(!job.stream.getAudioTracks().length)throw Error('タブの音声共有を有効にしてください');
-        await track.cropTo(await CropTarget.fromElement(frame));guard();
-        if(document.hidden)throw Error('録画中はこのタブを表示してください');
-        document.addEventListener('visibilitychange',visibility);track.addEventListener('ended',abort,{once:true});
-        const recorder=new MediaRecorder(job.stream,{mimeType:mime,videoBitsPerSecond:4000000,audioBitsPerSecond:128000});job.recorder=recorder;
-        const finished=new Promise(resolve=>{recorder.onstop=resolve;recorder.onerror=e=>{recordError=e.error||Error('録画エラー');abort();resolve();};});
-        recorder.ondataavailable=e=>{if(e.data.size){chunks.push(e.data);size+=e.data.size;if(size>80*1024*1024){recordError=Error('録画容量上限（80 MiB）');abort();}}};
-        recorder.start(1000);start(0);if(!running)abort();
-        await finished;guard();if(recordError)throw recordError;if(!job.complete||!chunks.length)throw Error('録画が完了しませんでした');
-        const type=recorder.mimeType||mime,ext=type.includes('mp4')?'mp4':'webm';const blob=new Blob(chunks,{type});
-        const title=String(doc.title||'あ箱作品').replace(/[\x00-\x1f<>:"/\\|?*]/g,'_').slice(0,100)||'あ箱作品';
-        const filename=title+'_'+plan.ratio.replace(':','x')+'_realtime.'+ext;
-        const url=URL.createObjectURL(blob),link=document.createElement('a');try{link.href=url;link.download=filename;document.body.append(link);link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}
-        status.textContent='録画完了 ｜ '+filename+' ｜ '+(blob.size/1048576).toFixed(1)+' MiB';
-        diagnosticLog.textContent='リアルタイム録画 ｜ '+type+' ｜ '+total.toFixed(2)+'秒（予定）';
-      }catch(e){status.textContent='録画中止・未保存：'+String(e.message||e);}finally{
-        if(job.recorder?.state==='recording')job.recorder.stop();job.stream?.getTracks().forEach(t=>t.stop());document.removeEventListener('visibilitychange',visibility);dispose();setIcon(pauseButton,'play','選択区間から再生');chunks.length=0;cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();frame.style.cursor=oldCursor;settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';if(exportJob===job)exportJob=null;if(dialog.open)fit();
-      }
+      const token=crypto.randomUUID();
+      const popup=window.open(new URL('record-player.html',location.href).href,'_blank');
+      if(!popup){status.textContent='録画専用タブを開けません。ポップアップを許可してください。';return;}
+      const job={realtime:true,cancelled:false};exportJob=job;
+      controls.inert=editor.inert=settingsPanel.inert=true;
+      const cancel=document.createElement('button');cancel.type='button';cancel.textContent='録画中止';status.after(cancel);
+      const title=String(doc.title||'あ箱作品').replace(/[\x00-\x1f<>:"/\\|?*]/g,'_').slice(0,100)||'あ箱作品';
+      let poll=0,ready=false;
+      function finish(){clearInterval(poll);window.removeEventListener('message',receive);dialog.removeEventListener('close',cancelJob);cancel.remove();controls.inert=editor.inert=settingsPanel.inert=false;if(exportJob===job)exportJob=null;scheduleAutoDelivery();}
+      function cancelJob(){popup.close();status.textContent='録画中止';finish();}
+      function receive(e){if(e.origin!==location.origin||e.source!==popup)return;if(e.data?.type==='ahako-record-ready'&&!ready){ready=true;popup.postMessage({type:'ahako-record-init',token,doc,rows,ratio:plan.ratio,watermark:settings.watermark,fps:Number(exportFps.value),uiLanguage,filename:title+'_'+plan.ratio.replace(':','x')+'_realtime.webm'},location.origin);}else if(e.data?.type==='ahako-record-status'&&e.data.token===token){status.textContent=e.data.message;diagnosticLog.textContent=e.data.message;if(!e.data.message.startsWith('録画中 ｜'))finish();}}
+      window.addEventListener('message',receive);dialog.addEventListener('close',cancelJob,{once:true});cancel.onclick=cancelJob;poll=setInterval(()=>{if(popup.closed){status.textContent='録画専用タブを閉じました';finish();}},500);status.textContent='録画専用Playerで録画開始を押してください。';
     }
     async function exportVideo(benchmark=false){
       if(exportJob||!rows.length)return;
