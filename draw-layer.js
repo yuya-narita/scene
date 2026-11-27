@@ -371,6 +371,7 @@
     core.host.addEventListener('sceneplayer:advanceintent',state.guard,true);
     const start=performance.now();
     core._clearAutoTimer();
+    if(core._ahFixedDraw){state.fixed=true;return;}
     for(const item of items)if(readerMode(item.layer))item.reader=readerScratch(item.canvas,item.layer,()=>{if(core._ink===state&&state.busy&&!state.frame)state.frame=requestAnimationFrame(frame);});
     function frame(now){
       if(core._ink!==state)return;
@@ -438,10 +439,22 @@
     if(layer.order==='behind'&&anchor)anchor.before(canvas);else page.append(canvas);
     const state=this._pageInk[key]={canvas,signature,frame:0};
     if(fullMask(layer))screenCanvas(canvas);
-    if(readerMode(layer)){state.reader=readerScratch(canvas,layer);return;}
+    if(readerMode(layer)){if(this._ahFixedDraw){state.fixedUnsupported=true;return;}state.reader=readerScratch(canvas,layer);return;}
     const paint=painter(canvas,layer),start=performance.now();
+    if(this._ahFixedDraw){state.fixedPaint=paint;return;}
     const frame=now=>{if(this._pageInk?.[key]!==state)return;if(page.hidden){clearPage(this,key);return;}if(!paint.render(now-start))state.frame=requestAnimationFrame(frame);};
     frame(start);
+  };
+  // Export-only clock; normal Player playback is unchanged.
+  P.renderFixedDrawing=function(ms){
+    if(!this._ahFixedDraw)return;
+    const state=this._ink;
+    if(state?.fixed){for(const item of state.items){if(readerMode(item.layer))throw Error('読者操作型スクラッチはハイブリッド未対応');item.paint.render(ms);}}
+    for(const [key,page] of Object.entries(this._pageInk||{})){
+      if(this.els?.[key]?.hidden)continue;
+      if(page.fixedUnsupported)throw Error('読者操作型スクラッチはハイブリッド未対応');
+      page.fixedPaint?.render(ms);
+    }
   };
   const chrome=P.refreshDocumentChrome;
   P.refreshDocumentChrome=function(){const r=chrome.apply(this,arguments);for(const key of ['cover','ending'])this.refreshPageDrawing(key);return r;};

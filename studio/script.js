@@ -10752,7 +10752,7 @@ async function makeStoreZip(entries,onProgress=null){
     function stop(message='停止'){if(exportJob?.recorder?.state==='recording'){exportJob.complete=message==='再生完了';exportJob.recorder.stop();if(exportJob.realtime){cancelAnimationFrame(timer);running=false;status.textContent='録画仕上げ中…';return;}}dispose();setIcon(pauseButton,'play','選択区間から再生');status.textContent=message+' ｜ '+total.toFixed(2)+'秒';}
     function enter(r){
       if(r.kind==='pv'){host.style.visibility='hidden';showPV(0,r.seconds);return;}pvCard.style.display='none';host.style.visibility='visible';applySettings();
-      if(previous && (previous.kind==='ending' || previous.kind==='pv' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core.load(doc,{startAt:0});core.stopAuto();if(!exportJob||exportJob.realtime)core.unlockAudio(true);applySettings();}
+      if(previous && (previous.kind==='ending' || previous.kind==='pv' || r.kind==='cover')){core.destroy();host.replaceChildren();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});core._ahFixedDraw=!!exportJob?.hybrid;core.load(doc,{startAt:0});core.stopAuto();if(!exportJob||exportJob.realtime)core.unlockAudio(true);applySettings();}
       if(r.kind==='cover'){core.showCover();return;}
       if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}
       const contiguous=previous?.kind==='scene'&&r.index===previous.index+1;
@@ -10839,14 +10839,14 @@ async function makeStoreZip(entries,onProgress=null){
     const exportFps=document.createElement('select');exportFps.setAttribute('aria-label','書き出しfps');exportFps.add(new Option('24 fps','24'));exportFps.add(new Option('30 fps','30'));exportFps.value='30';const fpsLabel=document.createElement('label');fpsLabel.style.cssText='display:flex;align-items:center;gap:6px;flex-wrap:wrap;white-space:nowrap';fpsLabel.append(document.createTextNode('書き出し'),exportFps);settingsPanel.append(fpsLabel);
     const exportFormat=document.createElement('select'),exportQuality=document.createElement('select');exportFormat.setAttribute('aria-label','動画形式');exportQuality.setAttribute('aria-label','解像度');exportFormat.add(new Option('MP4','mp4'));exportFormat.add(new Option('WebM','webm'));for(const q of [540,720,1080])exportQuality.add(new Option(q+'p',String(q)));exportQuality.value='720';fpsLabel.append(exportFormat,exportQuality);
     const preset=document.createElement('select');preset.setAttribute('aria-label','書き出しプリセット');for(const [v,t] of [['custom','カスタム'],['light','軽量確認'],['sns','SNS標準'],['hd','高画質']])preset.add(new Option(t,v));fpsLabel.prepend(preset);
-    const exportMode=document.createElement('select');exportMode.setAttribute('aria-label','書き出し方式');exportMode.add(new Option('リアルタイム録画（推奨）','realtime'));exportMode.add(new Option('固定時間描画','fixed'));fpsLabel.prepend(exportMode);
+    const exportMode=document.createElement('select');exportMode.setAttribute('aria-label','書き出し方式');exportMode.add(new Option('リアルタイム録画（推奨）','realtime'));exportMode.add(new Option('固定時間描画','fixed'));exportMode.add(new Option('ハイブリッド描画（実験）','hybrid'));fpsLabel.prepend(exportMode);
     const realtimeNote=document.createElement('small');realtimeNote.style.cssText='width:100%;opacity:.85';settingsPanel.append(realtimeNote);
-    function updateExportMode(){const live=exportMode.value==='realtime';exportQuality.disabled=false;preset.disabled=exportFormat.disabled=live;realtimeNote.textContent=live?'録画専用Player：WebMのみの試験版。専用タブを音声付きで共有。録画中は他の操作を避けてください。解像度は取得映像から調整します。':'固定時間描画：指定解像度で生成します。特殊演出は未対応の場合があります。';}
+    function updateExportMode(){const live=exportMode.value==='realtime';exportQuality.disabled=false;preset.disabled=exportFormat.disabled=live;realtimeNote.textContent=live?'録画専用Player：WebMのみの試験版。専用タブを音声付きで共有。録画中は他の操作を避けてください。解像度は取得映像から調整します。':exportMode.value==='hybrid'?'ハイブリッド実験：手書きと映像を固定時計で同期。非表示時は一時停止。':'固定時間描画：指定解像度で生成します。特殊演出は未対応の場合があります。';}
     exportMode.onchange=()=>{updateExportMode();rememberExport();};
     const prefKey='ahako.shortVideo.export.v1';
     function rememberExport(){try{localStorage.setItem(prefKey,JSON.stringify({fps:exportFps.value,format:exportFormat.value,quality:exportQuality.value,mode:exportMode.value}));}catch{}}
-    try{const pref=JSON.parse(localStorage.getItem(prefKey)||'null');if(pref){if(['realtime','fixed'].includes(pref.mode))exportMode.value=pref.mode;if(['24','30'].includes(pref.fps))exportFps.value=pref.fps;if(['mp4','webm'].includes(pref.format))exportFormat.value=pref.format;if(['540','720','1080'].includes(pref.quality))exportQuality.value=pref.quality;}}catch{}
-    if(plan.easyPV){exportMode.value='fixed';exportFps.value='24';exportFormat.value='mp4';exportQuality.value='720';preset.value='sns';}
+    try{const pref=JSON.parse(localStorage.getItem(prefKey)||'null');if(pref){if(['realtime','fixed','hybrid'].includes(pref.mode))exportMode.value=pref.mode;if(['24','30'].includes(pref.fps))exportFps.value=pref.fps;if(['mp4','webm'].includes(pref.format))exportFormat.value=pref.format;if(['540','720','1080'].includes(pref.quality))exportQuality.value=pref.quality;}}catch{}
+    if(plan.easyPV){exportMode.value='hybrid';exportFps.value='24';exportFormat.value='mp4';exportQuality.value='720';preset.value='sns';}
     updateExportMode();
     preset.onchange=()=>{const v={light:['webm','540'],sns:['mp4','720'],hd:['mp4','1080']}[preset.value];if(v){exportFormat.value=v[0];exportQuality.value=v[1];exportFps.value='30';rememberExport();}};
     for(const c of [exportFps,exportFormat,exportQuality])c.onchange=()=>{preset.value='custom';rememberExport();};
@@ -10975,7 +10975,7 @@ async function makeStoreZip(entries,onProgress=null){
       const sampleRow=benchmark?Math.max(0,rows.indexOf(selected)):0;
       const sampleStart=sampleRow?ends[sampleRow-1]:0;
       stop();interruptAutoDelivery();
-      const job={cancelled:false};exportJob=job;
+      const job={cancelled:false,hybrid:exportMode.value==='hybrid'};exportJob=job;
       const exportName=String(doc.title||'あ箱作品').normalize('NFC').replace(/[\x00-\x1f<>:"/\\|?*]/g,'_').replace(/[. ]+$/g,'').trim().slice(0,100)||'あ箱作品';
       const filename=ext=>exportName+'_'+plan.ratio.replace(':','x')+'_'+quality+'p_'+fps+'fps.'+ext;
       function saveBlob(blob,ext){const url=URL.createObjectURL(blob),link=document.createElement('a');try{link.href=url;link.download=filename(ext);document.body.append(link);link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}}
@@ -11278,7 +11278,7 @@ async function makeStoreZip(entries,onProgress=null){
         await document.fonts.ready;await checkpoint();
         // Export clock: no live preview tick. Each frame has a unique fixed timestamp.
         cursor=sampleRow;previous=null;fit();core=new ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage});
-        core.load(doc,{startAt:0});core.stopAuto();applySettings();enter(rows[cursor]);
+        core._ahFixedDraw=job.hybrid;if(job.hybrid&&typeof core.renderFixedDrawing!=='function')throw Error('draw-layer.js の更新が必要です');core.load(doc,{startAt:0});core.stopAuto();applySettings();enter(rows[cursor]);
         let count=0;const expected=Math.ceil((benchmark?Math.min(1,total-sampleStart):total)*fps-1e-8),animationClock=new WeakMap(),videoClock=new WeakMap();
         const settle=async()=>{for(let i=0;i<2;i++){await checkpoint();await new Promise(resolve=>{let id,t;const done=()=>{cancelAnimationFrame(id);clearTimeout(t);resolve();};id=requestAnimationFrame(done);t=setTimeout(done,100);});}await checkpoint();};
         async function renderAt(t){
@@ -11291,6 +11291,7 @@ async function makeStoreZip(entries,onProgress=null){
             let base=animationClock.get(anim);if(base===undefined){base=t;animationClock.set(anim,base);}
             if(anim.playState!=='paused')anim.pause();anim.currentTime=Math.max(0,(t-base)*1000);
           }
+          if(job.hybrid)core.renderFixedDrawing(Math.max(0,t-(cursor?ends[cursor-1]:0))*1000);
           perf.animationMs+=performance.now()-phase;const videoStart=performance.now();
           const videos=Array.from(frame.querySelectorAll('video')).filter(visibleVideo);
           for(const v of videos){v.pause();v.muted=true;}
@@ -11326,7 +11327,7 @@ async function makeStoreZip(entries,onProgress=null){
           const vf=new VideoFrame(canvas,{timestamp:stamp,duration:Math.max(1,next-stamp)});
           try{encoder.encode(vf,{keyFrame:count%fps===0});}finally{vf.close();}
           while(encoder.encodeQueueSize>2){await wait(20);await checkpoint();}
-          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);progressText='固定時間描画 '+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒'+(count>=29?' ｜ 残り約 '+formatTime((activeNow()-begin)/1000/(count+1)*(expected-count-1))+'（描画）':'');showProgress();await wait(0);
+          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);progressText=(job.hybrid?'ハイブリッド描画 ':'固定時間描画 ')+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒'+(count>=29?' ｜ 残り約 '+formatTime((activeNow()-begin)/1000/(count+1)*(expected-count-1))+'（描画）':'');showProgress();await wait(0);
         }
         dispose();spriteObserver.disconnect();spriteState=null;rasterCache.clear();cache.clear();lastSVG=null;lastImage=null;overlaySVG=null;baseImage=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;await checkpoint();progressText='映像エンコード仕上げ中…';showProgress(true);await encoder.flush();await checkpoint();encoder.close();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');if(!packets[0]?.key||packets.some(p=>!p.b.length))throw Error('映像データが不完全です');
         if(benchmark){
@@ -11335,7 +11336,7 @@ async function makeStoreZip(entries,onProgress=null){
           status.style.whiteSpace='pre-wrap';status.textContent=report;progress.value=total;return;
         }
         progressText='音声合成・エンコード中…';showProgress(true);const audio=await mixExportAudio(videoSpans,checkpoint,mp4);await checkpoint();
-        if(mp4){if(!avcc||packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error("AVC frame order/configuration unsupported");const blob=muxShortMP4(packets,audio,avcc,width,height,fps,total);const size=blob.size;packets.length=0;if(audio)audio.packets.length=0;saveBlob(blob,"mp4");diagnosticLog.textContent="MP4書き出し完了 ｜ "+width+"×"+height+" ｜ "+count+"フレーム ｜ "+Math.round((activeNow()-begin)/1000)+"秒 ｜ "+(audio?"AAC音声 "+audio.events+"区間":"音声素材なし")+" ｜ "+(size/1048576).toFixed(1)+" MiB";status.textContent="書き出し完了 ｜ "+filename("mp4")+" ｜ "+total.toFixed(2)+"秒 ｜ "+(size/1048576).toFixed(1)+" MiB";return;}
+        if(mp4){if(!avcc||packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error("AVC frame order/configuration unsupported");const blob=muxShortMP4(packets,audio,avcc,width,height,fps,total);const size=blob.size;packets.length=0;if(audio)audio.packets.length=0;saveBlob(blob,"mp4");diagnosticLog.textContent=(job.hybrid?"ハイブリッド ｜ ":"")+"MP4書き出し完了 ｜ "+width+"×"+height+" ｜ "+count+"フレーム ｜ "+Math.round((activeNow()-begin)/1000)+"秒 ｜ "+(audio?"AAC音声 "+audio.events+"区間":"音声素材なし")+" ｜ "+(size/1048576).toFixed(1)+" MiB";status.textContent="書き出し完了 ｜ "+filename("mp4")+" ｜ "+total.toFixed(2)+"秒 ｜ "+(size/1048576).toFixed(1)+" MiB";return;}
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
