@@ -11160,7 +11160,13 @@ async function makeStoreZip(entries,onProgress=null){
       const reuseCanvas=!new URLSearchParams(location.search).has('pvBaseline');
       let lastLegacyComposite=null;
       let directPaint=false,directFrames=0,directError='',restoreStage=null;
-      const useDirectPaint=job.hybrid&&reuseCanvas&&typeof ctx.drawElementImage==='function'&&typeof canvas.requestPaint==='function';
+      const directApiAvailable=typeof ctx.drawElementImage==='function'&&typeof canvas.requestPaint==='function';
+      const useDirectPaint=job.hybrid&&reuseCanvas&&directApiAvailable;
+
+      function setDirectFallback(error){
+        directError=String(error.message||error);
+        console.warn('[Ahako PV] 直接描画から切り替え',directError);
+      }
 
       function detachPaintSurface(){
         directPaint=false;
@@ -11202,40 +11208,42 @@ async function makeStoreZip(entries,onProgress=null){
       }
 
       async function preparePaintSurface(){
-        if(!useDirectPaint)return;
+        if(!useDirectPaint){
+          if(job.hybrid)directError=reuseCanvas?'このページでは直接描画APIを利用できません':'比較用設定で直接描画を無効化中';
+          return;
+        }
+        progressText='直接描画を準備中…';showProgress(true);
         canvas.setAttribute('content','drawable');
         canvas.setAttribute('layoutsubtree','');
         canvas.setAttribute('data-pv-surface','');
         canvas.style.cssText='display:block;flex:none;pointer-events:none;width:'+frame.style.width+';height:'+frame.style.height;
-        const probe=document.createElement('div');
-        probe.setAttribute('drawable','');
-        probe.style.cssText='width:32px;height:32px;background:#ff0080';
-        canvas.append(probe);
         if(plan.autoRender){
-          // Keep the compact dialog clear, but leave a paintable surface on screen.
-          const properties=['clip-path','transform','transform-origin'];
-          const original=properties.map(key=>[key,stage.style.getPropertyValue(key),stage.style.getPropertyPriority(key)]);
-          restoreStage=()=>{for(const [key,value,priority] of original)stage.style.setProperty(key,value,priority);};
-          stage.style.setProperty('clip-path','none','important');
-          stage.style.setProperty('transform','scale(.015625)','important');
-          stage.style.setProperty('transform-origin','top left','important');
+          // Match the standalone prototype: keep a small, unclipped paint surface
+          // in the viewport while retaining Studio's logical layout dimensions.
+          const original=stage.style.cssText;
+          restoreStage=()=>{stage.style.cssText=original;};
+          stage.style.cssText='position:fixed!important;inset:auto 0 0 auto!important;width:640px!important;height:640px!important;min-height:0!important;flex:none!important;clip-path:none!important;transform:scale(.16)!important;transform-origin:right bottom!important;pointer-events:none!important';
         }
         frame.after(canvas);
+        frame.setAttribute('drawable','');
+        canvas.append(frame);
+        fit();
+        const originalBackground=frame.style.background;
+        frame.style.background='#ff0080';
         try{
-          await drawPlayerElement(probe);
+          // Probe the actual Player frame at its real layout size.
+          await drawPlayerElement(frame);
           const [r,g,b]=ctx.getImageData(width>>1,height>>1,1,1).data;
           if(r<230||g>20||b<100)throw Error('直接描画の画素を確認できません');
           const testFrame=new VideoFrame(canvas,{timestamp:0});
           testFrame.close();
-          frame.setAttribute('drawable','');
-          canvas.append(frame);
           directPaint=true;
           fit();
         }catch(error){
           detachPaintSurface();
           await checkpoint();
-          directError=String(error.message||error);
-        }finally{probe.remove();}
+          setDirectFallback(error);
+        }finally{frame.style.background=originalBackground;}
       }
 
       const guard=()=>{if(job.cancelled||!dialog.open )throw Error('中止しました');if(failure)throw failure;};
@@ -11513,7 +11521,7 @@ async function makeStoreZip(entries,onProgress=null){
           }catch(error){
             detachPaintSurface();
             await checkpoint();
-            directError=String(error.message||error);
+            setDirectFallback(error);
           }
         }
         const fw=frame.clientWidth,fh=frame.clientHeight;if(!fw||!fh)throw Error('描画領域がありません');
@@ -11603,7 +11611,7 @@ async function makeStoreZip(entries,onProgress=null){
             if(!directPaint||error.name!=='SecurityError')throw error;
             directFrames--;
             detachPaintSurface();
-            directError=String(error.message||error);
+            setDirectFallback(error);
             await checkpoint();
             await snapshot();
             vf=new VideoFrame(canvas,frameOptions);
@@ -11617,7 +11625,7 @@ async function makeStoreZip(entries,onProgress=null){
             while(encoder.encodeQueueSize>2){await wait(20);await checkpoint();}
             perf.queueMs+=performance.now()-queueStart;
           }
-          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);progressText=(job.hybrid?'ハイブリッド描画 ':'固定時間描画 ')+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒'+(count>=29?' ｜ 残り約 '+formatTime((activeNow()-begin)/1000/(count+1)*(expected-count-1))+'（描画）':'');showProgress();await wait(0);
+          perf.encode+=performance.now()-encStart;progress.value=Math.min(total,(count+1)/fps);progressText=(directPaint?'直接描画 ':job.hybrid?'ハイブリッド描画 ':'固定時間描画 ')+Math.round((count+1)/expected*100)+'% ｜ '+(count+1)+' / '+expected+' フレーム ｜ 経過 '+Math.round((activeNow()-begin)/1000)+'秒'+(count>=29?' ｜ 残り約 '+formatTime((activeNow()-begin)/1000/(count+1)*(expected-count-1))+'（描画）':'')+(directError?'\n切替理由 ｜ '+directError:'');showProgress();if(!directPaint||count%6===0)await wait(0);
         }
         dispose();detachPaintSurface();spriteObserver.disconnect();spriteState=null;rasterCache.clear();cache.clear();lastSVG=null;lastImage=null;lastLegacyComposite=null;overlaySVG=null;baseImage=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;await checkpoint();progressText='映像エンコード仕上げ中…';showProgress(true);const flushStart=performance.now();await encoder.flush();perf.flushMs=performance.now()-flushStart;await checkpoint();encoder.close();if(count!==expected||packets.length!==expected)throw Error('描画フレーム数が一致しません');if(!packets[0]?.key||packets.some(p=>!p.b.length))throw Error('映像データが不完全です');
         if(benchmark){
@@ -11636,7 +11644,7 @@ async function makeStoreZip(entries,onProgress=null){
             estimatedCanvasBytes:width*height*4*3,videoPacketBytes:bytesUsed,
             rasterHitRate:perf.hits+perf.misses?perf.hits/(perf.hits+perf.misses):null,
             splitFallbackReasons:Object.fromEntries(reasons),spriteFallbackReasons:Object.fromEntries(spriteReasons),...perf
-          });packets.length=0;if(audio)audio.packets.length=0;saveBlob(blob,"mp4");diagnosticLog.textContent=(directFrames?"直接描画 "+directFrames+"フレーム ｜ ":job.hybrid?"ハイブリッド ｜ ":"")+"MP4書き出し完了 ｜ "+width+"×"+height+" ｜ "+count+"フレーム ｜ "+Math.round((activeNow()-begin)/1000)+"秒 ｜ "+(audio?"AAC音声 "+audio.events+"区間":"音声素材なし")+" ｜ "+(size/1048576).toFixed(1)+" MiB";status.textContent="書き出し完了 ｜ "+filename("mp4")+" ｜ "+total.toFixed(2)+"秒 ｜ "+(size/1048576).toFixed(1)+" MiB"+(directFrames?" ｜ 直接描画 "+directFrames+"フレーム":"");if(audioWarning){status.textContent=audioWarning;diagnosticLog.textContent+="\n"+audioWarning;}return;}
+          });packets.length=0;if(audio)audio.packets.length=0;saveBlob(blob,"mp4");diagnosticLog.textContent=(directFrames?"直接描画 "+directFrames+"フレーム ｜ ":job.hybrid?"ハイブリッド ｜ ":"")+"MP4書き出し完了 ｜ "+width+"×"+height+" ｜ "+count+"フレーム ｜ "+Math.round((activeNow()-begin)/1000)+"秒 ｜ "+(audio?"AAC音声 "+audio.events+"区間":"音声素材なし")+" ｜ "+(size/1048576).toFixed(1)+" MiB";status.textContent="書き出し完了 ｜ "+filename("mp4")+" ｜ "+total.toFixed(2)+"秒 ｜ "+(size/1048576).toFixed(1)+" MiB"+(directFrames?" ｜ 直接描画 "+directFrames+"フレーム":"")+(directError?"\n切替理由 ｜ "+directError:"");if(audioWarning){status.textContent=audioWarning;diagnosticLog.textContent+="\n"+audioWarning;}return;}
         packets.sort((a,b)=>a.t-b.t);if(packets.some((p,i)=>p.t!==Math.round(i*1e6/fps)))throw Error('フレーム時間が一致しません');
         const bytes=(...v)=>new Uint8Array(v),cat=(...p)=>{const r=new Uint8Array(p.reduce((n,x)=>n+x.length,0));let k=0;for(const x of p){r.set(x,k);k+=x.length;}return r;};
         function num(n){let x=BigInt(n),r=[];do{r.unshift(Number(x&255n));x>>=8n;}while(x);return bytes(...r);}
