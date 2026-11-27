@@ -10980,12 +10980,12 @@ async function makeStoreZip(entries,onProgress=null){
       window.addEventListener('message',receive);dialog.addEventListener('close',cancelJob,{once:true});cancel.onclick=cancelJob;poll=setInterval(()=>{if(popup.closed){status.textContent='録画専用タブを閉じました';finish();}},500);status.textContent='録画専用Playerで録画開始を押してください。';
     }
     // Phase 5.3.3: lightweight promotion drafts, independent of the render surface.
-    let queuedYT=null;let promoPanel=null, promoDrafts=null, promoBusyUntil=0, promoComposing=false, promoVideo=null, promoVideoName='', promoReady=null;
+    let easyShell=null,easyView=null,easyRefresh=null,easyShow=null;let queuedYT=null;let promoPanel=null, promoDrafts=null, promoBusyUntil=0, promoComposing=false, promoVideo=null, promoVideoName='', promoReady=null;
     const promoKey=doc.studio?.identity?.workId?'ahako.promo.v1.'+doc.studio.identity.workId:'';
     function persistPromo(){if(!promoKey||!promoDrafts)return;try{localStorage.setItem(promoKey,JSON.stringify(promoDrafts));}catch{}}
     function retainPromoVideo(blob,name){if(!plan.easyPV)return;promoVideo=blob;promoVideoName=name;promoReady?.();}
     function openPromotionPrep(){
-      if(promoPanel){promoPanel.hidden=false;promoPanel.style.display='flex';return;}
+      if(promoPanel){if(!plan.autoRender){promoPanel.hidden=false;promoPanel.style.display='flex';}return;}
       const title=String(doc.title||'あ箱作品'), author=typeof doc.author==='string'?doc.author:'', description=String(doc.metadata?.description||'').trim();
       const credit='『'+title+'』'+(author?' ／ '+author:'');
       const intro=Array.from(description).slice(0,85).join('')+(Array.from(description).length>85?'…':'');
@@ -11061,6 +11061,7 @@ async function makeStoreZip(entries,onProgress=null){
       async function uploadYT(approved=null){if(!approved&&uploadButton.disabled)return;const video=promoVideo,token=ytToken,channel=ytChannelId,title=d.ytTitle.trim(),description=[d.YouTube,d.includeUrl?d.url.trim():''].filter(Boolean).join('\n\n'),madeForKids=kids.value==='yes';if(!title||Array.from(title).length>100||/[<>]/.test(title)||/[<>]/.test(description)||new TextEncoder().encode(description).length>5000){uploadStatus.textContent='タイトル（1〜100文字）・概要欄（5000バイト以内）を確認してください。山括弧は使用できません。';return;}
         if(!ytChannelId||!ytToken||Date.now()+30000>=ytExpires){beginYT(false,{video,kids:kids.value,title:d.ytTitle,description:output()});return;}
         ytConfirming=true;refreshUpload();let confirmed=!!approved;try{if(!approved)confirmed=await appConfirm('投稿先：'+ytChannelName+'\nタイトル：'+title+'\n公開範囲：非公開\n子ども向け：'+(madeForKids?'はい':'いいえ')+'\nYouTubeへアップロードしますか？');}finally{ytConfirming=false;refreshUpload();}if(!confirmed)return;
+        if(!video&&plan.autoRender&&promoVideo){if(channel===ytChannelId&&title===d.ytTitle.trim()&&description===output()&&madeForKids===(kids.value==='yes')&&d.platform==='YouTube')void uploadYT({channel,title,description,madeForKids});return;}
         if(!video&&plan.autoRender&&exportJob){queuedYT={channel,title,description,madeForKids};uploadStatus.textContent='動画完成後に自動投稿します';refreshUpload();return;}
         if(!dialog.open||ytUpload||promoVideo!==video||ytToken!==token||ytChannelId!==channel||Date.now()>=ytExpires||ytPostedBlob===video)return;
         const xhr=new XMLHttpRequest();ytUpload=xhr;refreshUpload();uploadStatus.textContent='アップロード準備中…';
@@ -11083,7 +11084,18 @@ async function makeStoreZip(entries,onProgress=null){
       const coverButton=btn('表紙画像を保存',async()=>{try{const c=await coverFile();if(c)downloadBlobFile(c.name,c.blob);else feedback.textContent='表紙画像がありません';}catch(e){feedback.textContent=String(e.message||e);}});
       const packButton=btn('宣伝パックを保存（ZIP）',async()=>{if(!promoVideo||exportJob)return;packButton.disabled=true;try{const entries=[], enc=new TextEncoder();const add=(name,value)=>entries.push({name,bytes:enc.encode(value)});const video=promoVideo;entries.push({name:promoVideoName,bytes:new Uint8Array(await video.arrayBuffer())});for(const key of ['X','YouTube','TikTok','Instagram'])add(key+'.txt',[key==='YouTube'?d.ytTitle:'',d[key],d.includeUrl?d.url.trim():''].filter(Boolean).join('\n\n'));if(d.url.trim())add('URL.txt',d.url.trim());let warning='';try{const c=await coverFile();if(c)entries.push({name:c.name,bytes:new Uint8Array(await c.blob.arrayBuffer())});}catch{warning='（表紙画像なし）';}const zip=await makeStoreZip(entries);downloadBlobFile('宣伝パック.zip',zip);feedback.textContent='宣伝パックを保存しました'+warning;}catch(e){feedback.textContent='ZIP作成失敗：'+String(e.message||e);}finally{packButton.disabled=false;}});
       downloads.append(downloadVideo,coverButton,packButton);promoReady=()=>{downloads.hidden=!promoVideo;downloads.style.display=promoVideo?'flex':'none';coverButton.disabled=!doc.cover?.src;refreshUpload();if(queuedYT&&promoVideo){const q=queuedYT;queuedYT=null;refreshUpload();if(q.channel===ytChannelId&&q.title===d.ytTitle.trim()&&q.description===[d.YouTube,d.includeUrl?d.url.trim():''].filter(Boolean).join('\n\n')&&q.madeForKids===(kids.value==='yes')&&d.platform==='YouTube'&&Date.now()+30000<ytExpires){void uploadYT(q);}else uploadStatus.textContent='投稿内容または認証が変わりました。もう一度投稿してください。';}};promoReady();
-      panel.append(heading,hint,tabs,ytLabel,textLabel,urlLabel,urlState,includeLabel,count,actions,youtubeBox,downloads,feedback);stage.append(panel);refresh();void lookupURL();const reopen=btn('宣伝準備',()=>{panel.style.display='flex';});dialog.insertBefore(reopen,stage);if(plan.autoRender){heading.textContent='投稿内容';hint.hidden=true;reopen.textContent='投稿内容に戻る';reopen.style.display='none';const back=actions.lastElementChild;back.textContent='PVを見る';back.onclick=()=>{if(exportJob)return;panel.style.display='none';reopen.style.display='';controls.style.display='flex';start(0);};reopen.onclick=()=>{if(running)stop();panel.style.display='flex';reopen.style.display='none';controls.style.display='none';};actions.children[1].hidden=true;actions.children[2].hidden=true;}
+      panel.append(heading,hint,tabs,ytLabel,textLabel,urlLabel,urlState,includeLabel,count,actions,youtubeBox,downloads,feedback);
+      if(plan.autoRender){
+        panel.style.cssText='display:none;flex-direction:column;gap:8px;min-width:0;color:#fff;text-align:left';
+        heading.textContent='SNSで宣伝する';heading.style.fontSize='15px';hint.style.display='none';count.style.display='none';
+        text.rows=4;text.style.minHeight='76px';text.style.resize='vertical';
+        const urlDetails=make('details');urlDetails.append(make('summary','作品URL・リンク設定'),urlLabel,urlState,includeLabel);urlDetails.style.cssText='font-size:12px;color:#ccc';panel.insertBefore(urlDetails,actions);
+        actions.replaceChildren(actions.firstElementChild);downloads.style.setProperty('display','none','important');
+        const back=btn('PVに戻る',()=>easyShow('pv'));back.style.background='transparent';panel.append(back);easyShell.append(panel);
+        const originalReady=promoReady;promoReady=()=>{originalReady();easyRefresh?.();};
+        refresh();void lookupURL();return;
+      }
+      stage.append(panel);refresh();void lookupURL();const reopen=btn('宣伝準備',()=>{panel.style.display='flex';});dialog.insertBefore(reopen,stage);
     }
     async function exportVideo(benchmark=false){
       if(exportJob||!rows.length)return;
@@ -11097,14 +11109,14 @@ async function makeStoreZip(entries,onProgress=null){
       const sampleStart=sampleRow?ends[sampleRow-1]:0;
       stop();interruptAutoDelivery();
       if(!benchmark){promoVideo=null;promoVideoName='';promoReady?.();}
-      const job={cancelled:false,hybrid:exportMode.value==='hybrid'};exportJob=job;
+      const job={cancelled:false,hybrid:exportMode.value==='hybrid'};exportJob=job;promoReady?.();
       const exportName=String(doc.title||'あ箱作品').normalize('NFC').replace(/[\x00-\x1f<>:"/\\|?*]/g,'_').replace(/[. ]+$/g,'').trim().slice(0,100)||'あ箱作品';
       const filename=ext=>exportName+'_'+plan.ratio.replace(':','x')+'_'+quality+'p_'+fps+'fps.'+ext;
       let audioSaveSuffix='';
       function saveBlob(blob,ext){retainPromoVideo(blob,filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1'));if(plan.autoRender)return;const url=URL.createObjectURL(blob),link=document.createElement('a');try{link.href=url;link.download=filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1');document.body.append(link);link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}}
       const formatTime=seconds=>{const n=Math.max(0,Math.ceil(seconds));return Math.floor(n/60)+'分'+String(n%60).padStart(2,'0')+'秒';};
       const oldGuide=settings.guide,oldPanel=settingsPanel.hidden;
-      const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';cancel.onclick=()=>{job.cancelled=true;};
+      const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';if(plan.autoRender)cancel.style.cssText='border:0;background:transparent;color:#bbb;padding:7px;font:inherit;order:20';cancel.onclick=()=>{job.cancelled=true;};
       const long=Math.round(quality*16/9/2)*2;const width=w===h?quality:w<h?quality:long,height=w===h?quality:w<h?long:quality;let avcc;
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});
       const cache=new Map(),packets=[],videoSpans=[],lastAudioSpan=new WeakMap();
@@ -11479,7 +11491,28 @@ async function makeStoreZip(entries,onProgress=null){
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。固定時間描画は60秒、リアルタイム録画は600秒まで。演出・音声は出力動画で確認してください。';
     function onVisibility(){if(document.hidden&&running&&!exportJob?.realtime)stop('タブ非表示のため停止');}
-    settingsPanel.append(note);dialog.append(easyBar,controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();if(plan.autoRender){easyBar.style.display='none';controls.style.display='none';const top=document.createElement('div');top.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px';const title=document.createElement('strong');title.textContent='作品のPV';const detail=document.createElement('button');detail.textContent='詳細編集';detail.onclick=()=>{if(exportJob){appAlert('動画の生成中です。完了後に編集できます。');return;}promoPanel.style.display='none';easyBar.style.display='flex';controls.style.display='flex';editor.hidden=false;editor.style.display='grid';};const close=document.createElement('button');close.textContent='閉じる';close.onclick=()=>dialog.close();top.append(title,detail,close);dialog.prepend(top);openPromotionPrep();void exportVideo();}
+    settingsPanel.append(note);dialog.append(easyBar,controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();if(plan.autoRender){
+      easyBar.style.display='none';controls.style.display='none';editor.style.display='none';settingsPanel.style.display='none';
+      dialog.style.cssText='width:min(440px,92vw)!important;height:auto!important;max-height:88dvh!important;min-height:0!important;overflow:auto!important;padding:18px!important;box-sizing:border-box;border:1px solid #555;border-radius:14px;background:#20252a;color:#fff;display:flex;flex-direction:column;gap:9px';
+      // Keep the real Player mounted at a stable size, independently of the compact UI.
+      stage.style.cssText='position:absolute!important;left:-10000px!important;top:0!important;width:640px!important;height:640px!important;min-height:0!important;flex:none!important;pointer-events:none';fit();
+      status.style.cssText='font-size:12px;color:#ccc;white-space:pre-wrap;overflow-wrap:anywhere;max-height:75px;overflow:auto;flex:none';progress.style.cssText='width:100%;height:5px;flex:none;accent-color:#386da8';
+      const make=(tag,text)=>{const e=document.createElement(tag);if(text)e.textContent=text;return e;};
+      const btn=(text,fn,primary=false)=>{const b=make('button',text);b.type='button';b.style.cssText='border:0;border-radius:7px;padding:10px;background:'+(primary?'#386da8':'#343a40')+';color:white;font:inherit;cursor:pointer';b.onclick=fn;return b;};
+      const top=make('div');top.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px';const title=make('strong','PVを制作中');top.append(title,btn('閉じる',async()=>{if(exportJob&&!await appConfirm('PVの制作を中止しますか？'))return;dialog.close();}));dialog.prepend(top);
+      easyShell=make('div');easyShell.style.cssText='display:flex;flex-direction:column;gap:10px;min-width:0';dialog.insertBefore(easyShell,stage);
+      const home=make('div');home.style.cssText='display:flex;flex-direction:column;gap:9px';easyShell.append(home);
+      const preview=make('div');preview.style.cssText='background:#111416;border-radius:8px;min-height:125px;display:grid;place-items:center;overflow:hidden';const waiting=make('span','動画を作っています…');waiting.style.cssText='color:#bbb;font-size:13px;padding:24px';preview.append(waiting);home.append(preview);
+      const info=make('small','MP4 / 720p / 24fps');info.style.color='#bbb';home.append(info);
+      const save=btn('動画を保存',()=>{if(promoVideo)downloadBlobFile(promoVideoName,promoVideo);},true);save.style.display='none';home.append(save);
+      const sns=btn('SNSで宣伝する',()=>easyShow('sns'),true);home.append(sns);
+      const footer=make('div');footer.style.cssText='display:flex;justify-content:space-between;gap:8px';const remake=btn('作り直す',async()=>{if(exportJob)return;if(promoVideo&&!await appConfirm('完成したPVを破棄して作り直しますか？'))return;dialog.close();openShortVideoPlan(false);});const detail=btn('詳細編集',async()=>{if(exportJob)return;if(promoVideo&&!await appConfirm('完成したPVを破棄して詳細編集へ進みますか？'))return;dialog.close();openShortVideoPlan(false,{...plan.pvOptions,autoRender:false});});footer.append(remake,detail);home.append(footer);
+      let videoURL='',shownBlob=null;easyView='pv';
+      easyShow=view=>{easyView=view;home.style.display=view==='pv'?'flex':'none';if(promoPanel)promoPanel.style.display=view==='sns'?'flex':'none';easyRefresh();};
+      easyRefresh=()=>{const ready=!!promoVideo;title.textContent=easyView==='sns'?'SNSで宣伝する':ready?'PVが完成しました ✓':exportJob?'PVを制作中':'作品のPV';save.style.display=ready?'':'none';remake.disabled=detail.disabled=!!exportJob;waiting.textContent=exportJob?'動画を作っています…':'動画はまだ完成していません';if(shownBlob!==promoVideo){if(videoURL)URL.revokeObjectURL(videoURL);videoURL='';shownBlob=promoVideo;preview.replaceChildren(waiting);if(ready){videoURL=URL.createObjectURL(promoVideo);const video=make('video');video.src=videoURL;video.controls=true;video.playsInline=true;video.preload='metadata';video.style.cssText='display:block;max-width:100%;width:auto;max-height:32vh;margin:auto';preview.replaceChildren(video);}}};
+      dialog.addEventListener('close',()=>{if(videoURL)URL.revokeObjectURL(videoURL);},{once:true});
+      openPromotionPrep();easyShow('pv');void exportVideo().finally(()=>easyRefresh());easyRefresh();
+    }
   }
   let shortVideoPlan=null;
   function openShortVideoPlan(advanced=false,pvOptions=null){
