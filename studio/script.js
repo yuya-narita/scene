@@ -11261,6 +11261,8 @@ async function makeStoreZip(entries,onProgress=null){
         refresh();void lookupURL();return;
       }
     }
+    const allowLongPV=!plan.autoRender&&new URLSearchParams(location.search).get('pvLong')==='1';
+
     function showCompletedPromo(){
       if(plan.autoRender||!dialog.open||!promoVideo)return;
       mountPromoShell();
@@ -11270,7 +11272,7 @@ async function makeStoreZip(entries,onProgress=null){
       if(exportJob||!rows.length)return;
       if(!benchmark&&plan.autoRender&&promoVideo){openPromotionPrep();return;}
       if(!window.VideoEncoder||!window.VideoFrame){appAlert('内部描画にはPC版Chrome/Edgeが必要です。');return;}
-      if(!benchmark&&total>60){appAlert('直接描画・固定時間描画は、終了演出4秒を含めて60秒以内です。Sceneの長さを調整してください。');return;}
+      if(!benchmark&&!allowLongPV&&total>60){appAlert('直接描画・固定時間描画は、終了演出4秒を含めて60秒以内です。Sceneの長さを調整してください。');return;}
       const mp4=mp4Test||(!benchmark&&exportFormat.value==='mp4');const quality=mp4Test?720:benchmark?540:Number(exportQuality.value);if(!benchmark&&!plan.autoRender&&!await appConfirm((mp4?'MP4 (H.264/AAC)':'WebM (VP9/Opus)')+' / '+quality+'p で書き出しますか？'))return;
       if(exportJob||!dialog.open)return;
       const fps=mp4Test?24:benchmark?30:Number(exportFps.value);if(![24,30].includes(fps))return;
@@ -11820,7 +11822,9 @@ async function makeStoreZip(entries,onProgress=null){
       }catch(e){queuedYT=null;promoReady?.();dispose();status.textContent='内部描画中止・未保存：'+String(e.message||e);}finally{dispose();if(canvas.parentElement===stage)detachPaintSurface();if(encoder&&encoder.state!=='closed')encoder.close();cancel.remove();easyBar.inert=false;controls.inert=editor.inert=settingsPanel.inert=false;settings.guide=oldGuide;applySettings();settingsPanel.hidden=oldPanel;settingsPanel.style.display=oldPanel?'none':'flex';document.removeEventListener('visibilitychange',visibility);spriteObserver.disconnect();spriteState=null;canvas.width=canvas.height=overlayCanvas.width=overlayCanvas.height=spriteCanvas.width=spriteCanvas.height=0;baseImage=null;overlaySVG=null;videoSpans.length=0;cache.clear();rasterCache.clear();lastSVG=null;lastImage=null;packets.length=0;if(exportJob===job)exportJob=null;promoReady?.();if(dialog.open){fit();if(!benchmark)showCompletedPromo();}}
     }
     rebuild(true);
-    const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。固定時間描画は60秒、リアルタイム録画は600秒まで。演出・音声は出力動画で確認してください。';
+    const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。'+
+      (allowLongPV?'長尺書き出し有効。映像容量の上限は適用されます。':'直接描画・固定時間描画は60秒まで。')+
+      'リアルタイム録画は600秒まで。演出・音声は出力動画で確認してください。';
     function onVisibility(){if(document.hidden&&running&&!exportJob?.realtime)stop('タブ非表示のため停止');}
     settingsPanel.append(note);dialog.append(easyBar,controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
     const reopenPromo=button('export','SNSで宣伝する',showCompletedPromo);
