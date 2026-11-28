@@ -11035,6 +11035,13 @@ async function makeStoreZip(entries,onProgress=null){
     const promoKey=doc.studio?.identity?.workId?'ahako.promo.v1.'+doc.studio.identity.workId:'';
     function persistPromo(){if(!promoKey||!promoDrafts)return;try{localStorage.setItem(promoKey,JSON.stringify(promoDrafts));}catch{}}
     function retainPromoVideo(blob,name){if(!plan.easyPV)return;promoVideo=blob;promoVideoName=name;if(plan.autoRender&&/\.mp4$/i.test(name))easyPVCache={key:easyCacheKey,source:plan.source,workId:doc.studio?.identity?.workId||null,title:doc.title||"あ箱作品",options:{...plan.pvOptions},rows:plan.rows.map(r=>({...r})),blob,name,total,posted:null};promoReady?.();}
+    function savePromoVideo(){
+      if(!promoVideo)return;
+      downloadBlobFile(promoVideoName,promoVideo);
+      pvDownloadRequested.add(promoVideo);
+      refreshPromoShare?.();
+    }
+    let refreshPromoShare=null;
     function openPromotionPrep(){
       if(promoPanel){if(!plan.autoRender){promoPanel.hidden=false;promoPanel.style.display='flex';}return;}
       const title=String(doc.title||'あ箱作品'), author=typeof doc.author==='string'?doc.author:'', description=String(doc.metadata?.description||'').trim();
@@ -11161,7 +11168,7 @@ async function makeStoreZip(entries,onProgress=null){
           if(error.name!=='AbortError')feedback.textContent='共有できませんでした。動画を保存して投稿先で添付してください。';
         }
       });
-      const saveShareVideo=btn('動画を保存',()=>{if(promoVideo)downloadBlobFile(promoVideoName,promoVideo);});
+      const saveShareVideo=btn('動画を保存',savePromoVideo);
       const openSNS=make('a');
       openSNS.target='_blank';openSNS.rel='noopener noreferrer';
       openSNS.style.cssText='color:#c3e1ff;align-self:center;padding:6px 8px';
@@ -11190,7 +11197,7 @@ async function makeStoreZip(entries,onProgress=null){
             }catch{update('「投稿文をコピー」からコピーしてください。');}
           }
         }
-        downloadBlobFile(promoVideoName,promoVideo);
+        if(!pvDownloadRequested.has(promoVideo))savePromoVideo();
       });
       function syncSNSLinks(){
         const href=d.platform==='X'?destinations.X+'?'+new URLSearchParams({text:output()}):destinations[d.platform];
@@ -11201,15 +11208,16 @@ async function makeStoreZip(entries,onProgress=null){
         externalShare.style.display=d.platform==='YouTube'?'none':'flex';
         if(d.platform==='YouTube')return;
         prepareSNS.hidden=!promoVideo;
-        prepareSNS.textContent='動画を保存して'+d.platform+'を開く';
+        prepareSNS.textContent=(pvDownloadRequested.has(promoVideo)?'':'動画を保存して')+d.platform+'を開く';
         shareVideo.hidden=!canShareVideo(shareFile());
         saveShareVideo.disabled=!promoVideo;
         syncSNSLinks();
         openSNS.textContent=d.platform==='Instagram'?'Instagramを開く':d.platform+'の投稿画面を開く';
       }
+      refreshPromoShare=refreshShare;
       const actions=make('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap';actions.append(btn('投稿文をコピー',()=>copy(output())),btn('YouTubeタイトルをコピー',()=>copy(d.ytTitle)),btn('URLをコピー',()=>{if(d.url.trim())copy(d.url.trim());else feedback.textContent='URLを入力してください';}),btn('映像表示に戻る',()=>{promoComposing=false;promoBusyUntil=0;panel.style.display='none';}));
       const downloads=make('div');downloads.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
-      const downloadVideo=btn('動画を再保存',()=>{if(promoVideo)downloadBlobFile(promoVideoName,promoVideo);});
+      const downloadVideo=btn('動画を再保存',savePromoVideo);
       async function coverFile(){const src=doc.cover?.src;if(!src)return null;const r=await fetch(src);if(!r.ok)throw Error('表紙取得失敗');const blob=await r.blob();const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','image/avif':'avif','image/svg+xml':'svg'})[blob.type];if(!ext)throw Error('表紙形式非対応');return {name:'cover.'+ext,blob};}
       const coverButton=btn('表紙画像を保存',async()=>{try{const c=await coverFile();if(c)downloadBlobFile(c.name,c.blob);else feedback.textContent='表紙画像がありません';}catch(e){feedback.textContent=String(e.message||e);}});
       const packButton=btn('宣伝パックを保存（ZIP）',async()=>{if(!promoVideo||exportJob)return;packButton.disabled=true;try{const entries=[], enc=new TextEncoder();const add=(name,value)=>entries.push({name,bytes:enc.encode(value)});const video=promoVideo;entries.push({name:promoVideoName,bytes:new Uint8Array(await video.arrayBuffer())});for(const key of ['X','YouTube','TikTok','Instagram'])add(key+'.txt',[key==='YouTube'?d.ytTitle:'',d[key],d.includeUrl?d.url.trim():''].filter(Boolean).join('\n\n'));if(d.url.trim())add('URL.txt',d.url.trim());let warning='';try{const c=await coverFile();if(c)entries.push({name:c.name,bytes:new Uint8Array(await c.blob.arrayBuffer())});}catch{warning='（表紙画像なし）';}const zip=await makeStoreZip(entries);downloadBlobFile('宣伝パック.zip',zip);feedback.textContent='宣伝パックを保存しました'+warning;}catch(e){feedback.textContent='ZIP作成失敗：'+String(e.message||e);}finally{packButton.disabled=false;}});
@@ -11255,7 +11263,7 @@ async function makeStoreZip(entries,onProgress=null){
       const exportName=String(doc.title||'あ箱作品').normalize('NFC').replace(/[\x00-\x1f<>:"/\\|?*]/g,'_').replace(/[. ]+$/g,'').trim().slice(0,100)||'あ箱作品';
       const filename=ext=>exportName+'_'+plan.ratio.replace(':','x')+'_'+quality+'p_'+fps+'fps.'+ext;
       let audioSaveSuffix='';
-      function saveBlob(blob,ext){retainPromoVideo(blob,filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1'));if(plan.autoRender)return;const url=URL.createObjectURL(blob),link=document.createElement('a');try{link.href=url;link.download=filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1');document.body.append(link);link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}}
+      function saveBlob(blob,ext){retainPromoVideo(blob,filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1'));if(plan.autoRender)return;const url=URL.createObjectURL(blob),link=document.createElement('a');try{link.href=url;link.download=filename(ext).replace(/\.([^.]+)$/,audioSaveSuffix+'.$1');document.body.append(link);link.click();if(promoVideo===blob){pvDownloadRequested.add(blob);refreshPromoShare?.();}}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);}}
       const formatTime=seconds=>{const n=Math.max(0,Math.ceil(seconds));return Math.floor(n/60)+'分'+String(n%60).padStart(2,'0')+'秒';};
       const oldGuide=settings.guide,oldPanel=settingsPanel.hidden;
       const cancel=document.createElement('button');cancel.type='button';cancel.textContent='書き出し中止';if(plan.autoRender)cancel.style.cssText='border:0;background:transparent;color:#bbb;padding:7px;font:inherit;order:20';cancel.onclick=()=>{job.cancelled=true;};
@@ -11807,7 +11815,7 @@ async function makeStoreZip(entries,onProgress=null){
       const home=make('div');home.style.cssText='display:flex;flex-direction:column;gap:9px';easyShell.append(home);
       const preview=make('div');preview.style.cssText='background:#111416;border-radius:8px;min-height:125px;display:grid;place-items:center;overflow:hidden';const waiting=make('span','動画を作っています…');waiting.style.cssText='color:#bbb;font-size:13px;padding:24px';preview.append(waiting);home.append(preview);
       const info=make('small','MP4 / 720p / 24fps');info.style.color='#bbb';home.append(info);
-      const save=btn('動画を保存',()=>{if(promoVideo)downloadBlobFile(promoVideoName,promoVideo);},true);save.style.display='none';home.append(save);
+      const save=btn('動画を保存',savePromoVideo,true);save.style.display='none';home.append(save);
       const sns=btn('SNSで宣伝する',()=>easyShow('sns'),true);home.append(sns);
       const footer=make('div');footer.style.cssText='display:flex;justify-content:space-between;gap:8px';const remake=btn('作り直す',async()=>{if(exportJob)return;dialog.close();openShortVideoPlan(false,null,true);});const detail=btn('詳細編集',async()=>{if(exportJob)return;dialog.close();openShortVideoPlan(false,{...plan.pvOptions,autoRender:false});});footer.append(remake,detail);home.append(footer);
       let videoURL='',shownBlob=null;easyView='pv';
@@ -11818,6 +11826,7 @@ async function makeStoreZip(entries,onProgress=null){
     }
   }
   let shortVideoPlan=null;
+  const pvDownloadRequested=new WeakSet();
   let easyPVCache=null; // One completed video per Studio session.
   async function easyPVFingerprint(doc,plan){try{const payload=JSON.stringify([doc,plan.ratio,plan.pvText,plan.rows.filter(r=>r.included),plan.renderSettings,720,24,"mp4","hybrid"]);const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(payload));return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("");}catch{return null;}}
   function openShortVideoPlan(advanced=false,pvOptions=null,forceNew=false){
