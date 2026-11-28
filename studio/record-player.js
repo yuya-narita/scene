@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id),host=$('host'),stage=$('stage'),panel=$('panel'),status=$('status'),go=$('go'),pvCard=$('pvCard');
 let data,core,stream,output,recorder,timer=0,active=false,failed=false,done=false,token,started=0;
-const report=(message)=>{try{window.opener?.postMessage({type:'ahako-record-status',token,message},location.origin);}catch{}};
+const report=(message,blob)=>{try{window.opener?.postMessage({type:'ahako-record-status',token,message,blob},location.origin);}catch{}};
 function fit(){if(!data)return;const [w,h]=data.ratio.split(':').map(Number);const width=Math.min(innerWidth,innerHeight*w/h);stage.style.width=Math.floor(width)+'px';stage.style.height=Math.floor(width*h/w)+'px';}
 function dispose(){cancelAnimationFrame(timer);try{core?.destroy();}catch{}core=null;host.replaceChildren();}
 function cleanup(){active=false;dispose();pvCard.hidden=true;output?.getTracks().forEach(t=>t.stop());output=null;stream?.getTracks().forEach(t=>t.stop());stream=null;}
@@ -34,7 +34,7 @@ const audio=stream.getAudioTracks()[0];try{await audio.applyConstraints({channel
 const chunks=[];let bytes=0;recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:q===540?3000000:q===720?4500000:8000000,audioBitsPerSecond:192000});
 recorder.ondataavailable=e=>{if(e.data.size){chunks.push(e.data);bytes+=e.data.size;if(bytes>256*1024*1024)abort('録画容量上限');}};
 recorder.onerror=e=>abort(String(e.error||'録画エラー'));
-recorder.onstop=()=>{if(failed||!done){cleanup();return;}const blob=new Blob(chunks,{type:recorder.mimeType||mime});if(!blob.size){done=false;abort('録画データが空です');return;}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=data.filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);cleanup();panel.hidden=false;status.textContent='録画完了。保存したWebMを確認してください。';report('録画完了 ｜ '+data.filename+' ｜ '+(blob.size/1048576).toFixed(1)+' MiB');};
+recorder.onstop=()=>{if(failed||!done){cleanup();return;}const blob=new Blob(chunks,{type:recorder.mimeType||mime});if(!blob.size){done=false;abort('録画データが空です');return;}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=data.filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);cleanup();panel.hidden=false;status.textContent='録画完了。保存したWebMを確認してください。';report('録画完了 ｜ '+data.filename+' ｜ '+(blob.size/1048576).toFixed(1)+' MiB',blob);};
 status.textContent='3秒後に録画開始。カーソルをブラウザの外へ移動してください。';
 await new Promise(r=>setTimeout(r,3000));if(document.hidden||failed)throw Error('録画開始できません');
 // Never expose the implicit cover between hiding the panel and entering the first row.
