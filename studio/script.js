@@ -11077,7 +11077,7 @@ async function makeStoreZip(entries,onProgress=null){
       function xLength(value){let n=0;const parts=value.normalize('NFC').split(/(https?:\/\/[^\s<>]+)/giu);for(let i=0;i<parts.length;i++){if(i%2){n+=23;continue;}for(const ch of parts[i]){const c=ch.codePointAt(0);n+=(c<=0x10ff||(c>=0x2000&&c<=0x200d)||(c>=0x2010&&c<=0x201f)||(c>=0x2032&&c<=0x2037))?1:2;}}return n;}
 
       function output(){return [d[d.platform],d.includeUrl?d.url.trim():''].filter(Boolean).join('\n\n');}
-      let refreshReadOnly=()=>{};function refreshCount(){persistPromo();refreshReadOnly();const n=d.platform==='X'?xLength(output()):Array.from(output()).length;count.textContent=d.platform==='X'?`${n} / 280（X換算・目安）${n>280?' · 通常投稿の上限超過':''}`:n+'文字（目安）';count.style.color=d.platform==='X'&&n>280?'#ffb080':'#bbb';}
+      let refreshReadOnly=()=>{};function refreshCount(){persistPromo();refreshReadOnly();if(d.platform==='X')syncXLinks();const n=d.platform==='X'?xLength(output()):Array.from(output()).length;count.textContent=d.platform==='X'?`${n} / 280（X換算・目安）${n>280?' · 通常投稿の上限超過':''}`:n+'文字（目安）';count.style.color=d.platform==='X'&&n>280?'#ffb080':'#bbb';}
       text.oninput=()=>{d[d.platform]=text.value;refreshCount();};url.addEventListener('input',refreshCount);
       // Phase 5.4.0b: GIS token flow; credentials are never persisted.
       const youtubeBox=make('div');youtubeBox.style.cssText='display:none;flex-direction:column;gap:7px;border-top:1px solid #444;padding-top:10px';
@@ -11165,17 +11165,29 @@ async function makeStoreZip(entries,onProgress=null){
       const openSNS=make('a');
       openSNS.target='_blank';openSNS.rel='noopener noreferrer';
       openSNS.style.cssText='color:#c3e1ff;align-self:center;padding:6px 8px';
-      openSNS.addEventListener('click',()=>{
-        if(d.platform==='X')openSNS.href='https://x.com/intent/post?'+new URLSearchParams({text:output()});
+      const prepareX=make('a','動画を保存してXを開く');
+      prepareX.target='_blank';prepareX.rel='noopener noreferrer';
+      prepareX.style.cssText='background:#386da8;color:#fff;border-radius:6px;padding:8px 10px;text-decoration:none;font-weight:600;flex-basis:100%;text-align:center';
+      prepareX.href='https://x.com/intent/post';
+      prepareX.addEventListener('click',event=>{
+        if(d.platform!=='X'||!promoVideo){event.preventDefault();return;}
+        prepareX.href='https://x.com/intent/post?'+new URLSearchParams({text:output()});
+        downloadBlobFile(promoVideoName,promoVideo);
+        feedback.textContent='Xの投稿画面で、保存した動画を添付してください。';
       });
+      function syncXLinks(){
+        const href='https://x.com/intent/post?'+new URLSearchParams({text:output()});
+        prepareX.href=href;openSNS.href=href;
+      }
       const destinations={X:'https://x.com/intent/post',TikTok:'https://www.tiktok.com/upload',Instagram:'https://www.instagram.com/'};
-      externalShare.append(shareVideo,saveShareVideo,btn('投稿文をコピー',()=>copy(output())),openSNS);
+      externalShare.append(prepareX,shareVideo,saveShareVideo,btn('投稿文をコピー',()=>copy(output())),openSNS);
       function refreshShare(){
         externalShare.style.display=d.platform==='YouTube'?'none':'flex';
         if(d.platform==='YouTube')return;
+        prepareX.hidden=d.platform!=='X'||!promoVideo;
         shareVideo.hidden=!canShareVideo(shareFile());
         saveShareVideo.disabled=!promoVideo;
-        openSNS.href=destinations[d.platform];
+        if(d.platform==='X')syncXLinks();else openSNS.href=destinations[d.platform];
         openSNS.textContent=d.platform==='Instagram'?'Instagramを開く':d.platform+'の投稿画面を開く';
       }
       const actions=make('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap';actions.append(btn('投稿文をコピー',()=>copy(output())),btn('YouTubeタイトルをコピー',()=>copy(d.ytTitle)),btn('URLをコピー',()=>{if(d.url.trim())copy(d.url.trim());else feedback.textContent='URLを入力してください';}),btn('映像表示に戻る',()=>{promoComposing=false;promoBusyUntil=0;panel.style.display='none';}));
