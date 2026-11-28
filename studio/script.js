@@ -11261,6 +11261,7 @@ async function makeStoreZip(entries,onProgress=null){
         refresh();void lookupURL();return;
       }
     }
+    const pvVideoLimit=80*1024*1024;
     const allowLongPV=!plan.autoRender&&new URLSearchParams(location.search).get('pvLong')==='1';
 
     function showCompletedPromo(){
@@ -11703,8 +11704,16 @@ async function makeStoreZip(entries,onProgress=null){
       }
       try{
         showProgress(true);settings.guide=false;applySettings();settingsPanel.hidden=true;settingsPanel.style.display='none';controls.inert=editor.inert=settingsPanel.inert=true;dialog.insertBefore(cancel,stage);fit();if(!benchmark&&plan.autoRender)easyBar.inert=true;
-        const bitrate=quality===1080?8000000:quality===720?4000000:1800000;const config=mp4?{codec:'avc1.420028',width,height,bitrate,framerate:fps,avc:{format:'avc'},latencyMode:'realtime'}:{codec:'vp09.00.40.08',width,height,bitrate,framerate:fps};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error(mp4?'H.264非対応：WebMを選択してください':'VP9エンコーダー非対応');if(mp4&&!mp4Test&&(!window.AudioEncoder||!(await AudioEncoder.isConfigSupported({codec:'mp4a.40.2',sampleRate:48000,numberOfChannels:2,bitrate:128000,aac:{format:'aac'}})).supported))throw Error('AAC非対応：WebMを選択してください');
-        encoder=new VideoEncoder({output:(c,m)=>{if(mp4&&m?.decoderConfig?.description){const d=m.decoderConfig.description;const next=new Uint8Array(d.buffer||d,d.byteOffset||0,d.byteLength).slice();if(avcc&&(avcc.length!==next.length||avcc.some((v,i)=>v!==next[i])))failure=Error("AVC configuration changed");avcc=next;}const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>80*1024*1024)failure=Error('映像容量上限（80 MiB）：解像度を下げるか区間を短くしてください');},error:e=>failure=e});encoder.configure(config);
+        const presetBitrate=quality===1080?8000000:quality===720?4000000:1800000;
+        // Leave room for the encoder's actual output to exceed its bitrate target.
+        const longBudget=allowLongPV&&!benchmark&&total>60;
+        const bitrate=longBudget?Math.min(presetBitrate,Math.floor(pvVideoLimit*.8*8/total)):presetBitrate;
+        if(longBudget&&bitrate<presetBitrate){
+          progressText='尺に合わせて映像を圧縮しています（目標 '+(bitrate/1e6).toFixed(2)+' Mbps）';
+          showProgress(true);
+        }
+        const config=mp4?{codec:'avc1.420028',width,height,bitrate,framerate:fps,avc:{format:'avc'},latencyMode:'realtime'}:{codec:'vp09.00.40.08',width,height,bitrate,framerate:fps};if(!(await VideoEncoder.isConfigSupported(config)).supported)throw Error(mp4?'H.264非対応：WebMを選択してください':'VP9エンコーダー非対応');if(mp4&&!mp4Test&&(!window.AudioEncoder||!(await AudioEncoder.isConfigSupported({codec:'mp4a.40.2',sampleRate:48000,numberOfChannels:2,bitrate:128000,aac:{format:'aac'}})).supported))throw Error('AAC非対応：WebMを選択してください');
+        encoder=new VideoEncoder({output:(c,m)=>{if(mp4&&m?.decoderConfig?.description){const d=m.decoderConfig.description;const next=new Uint8Array(d.buffer||d,d.byteOffset||0,d.byteLength).slice();if(avcc&&(avcc.length!==next.length||avcc.some((v,i)=>v!==next[i])))failure=Error("AVC configuration changed");avcc=next;}const b=new Uint8Array(c.byteLength);c.copyTo(b);bytesUsed+=b.length;packets.push({t:c.timestamp,key:c.type==='key',b});if(bytesUsed>pvVideoLimit)failure=Error('映像容量上限（80 MiB）：解像度を下げるか区間を短くしてください');},error:e=>failure=e});encoder.configure(config);
         await document.fonts.ready;await checkpoint();
         await preparePaintSurface();await checkpoint();
         // Export clock: no live preview tick. Each frame has a unique fixed timestamp.
@@ -11823,7 +11832,7 @@ async function makeStoreZip(entries,onProgress=null){
     }
     rebuild(true);
     const note=document.createElement('p');note.className='sv-preview-note';note.textContent='安全ガイドは確認専用です。区間停止後は区間先頭から再生します。'+
-      (allowLongPV?'長尺書き出し有効。映像容量の上限は適用されます。':'直接描画・固定時間描画は60秒まで。')+
+      (allowLongPV?'長尺書き出し有効。尺に合わせて映像の圧縮率を自動調整します。':'直接描画・固定時間描画は60秒まで。')+
       'リアルタイム録画は600秒まで。演出・音声は出力動画で確認してください。';
     function onVisibility(){if(document.hidden&&running&&!exportJob?.realtime)stop('タブ非表示のため停止');}
     settingsPanel.append(note);dialog.append(easyBar,controls,settingsPanel,status,progress,stage,editor);document.body.append(dialog);dialog.addEventListener('close',()=>{observer.disconnect();document.removeEventListener('visibilitychange',onVisibility);if(exportJob){exportJob.cancelled=true;stop('書き出し中止');exportJob.stream?.getTracks().forEach(t=>t.stop());}dispose();dialog.remove();scheduleAutoDelivery();},{once:true});document.addEventListener('visibilitychange',onVisibility);dialog.showModal();fit();
