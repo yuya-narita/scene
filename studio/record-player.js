@@ -1,13 +1,18 @@
 (()=>{'use strict';
-const $=id=>document.getElementById(id),host=$('host'),stage=$('stage'),panel=$('panel'),status=$('status'),go=$('go');
+const $=id=>document.getElementById(id),host=$('host'),stage=$('stage'),panel=$('panel'),status=$('status'),go=$('go'),pvCard=$('pvCard');
 let data,core,stream,output,recorder,timer=0,active=false,failed=false,done=false,token,started=0;
 const report=(message)=>{try{window.opener?.postMessage({type:'ahako-record-status',token,message},location.origin);}catch{}};
 function fit(){if(!data)return;const [w,h]=data.ratio.split(':').map(Number);const width=Math.min(innerWidth,innerHeight*w/h);stage.style.width=Math.floor(width)+'px';stage.style.height=Math.floor(width*h/w)+'px';}
 function dispose(){cancelAnimationFrame(timer);try{core?.destroy();}catch{}core=null;host.replaceChildren();}
-function cleanup(){active=false;dispose();output?.getTracks().forEach(t=>t.stop());output=null;stream?.getTracks().forEach(t=>t.stop());stream=null;}
+function cleanup(){active=false;dispose();pvCard.hidden=true;output?.getTracks().forEach(t=>t.stop());output=null;stream?.getTracks().forEach(t=>t.stop());stream=null;}
 function abort(message){if(done||failed)return;failed=true;cancelAnimationFrame(timer);if(recorder?.state==='recording')recorder.stop();cleanup();panel.hidden=false;status.textContent=message;report(message);}
 function init(){dispose();core=new window.ScenePlayerCore(host,{allowPrevious:false,keyboard:false,swipe:false,endOnNextAction:true,uiLanguage:data.uiLanguage});core.load(data.doc,{startAt:data.rows[0]?.index??0});core.stopAuto();}
-function enter(r,previous){if(previous&&(previous.kind==='ending'||r.kind==='cover')){init();core.unlockAudio(true);}if(r.kind==='cover'){core.showCover();return;}if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}if(previous?.kind==='scene'&&r.index===previous.index+1){core._finishVisibleEntranceEffects();core._clearPresentationTimers();core.index=r.index;core.maxVisitedIndex=Math.max(core.maxVisitedIndex,r.index);core._audioRenderMode='advance';core._render();}else{core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.goTo(r.index);core._queueInitialOneShots(data.doc.scenes[r.index]);}}
+function paintEnding(seconds,duration){
+  const width=stage.clientWidth,height=stage.clientHeight;
+  if(pvCard.width!==width||pvCard.height!==height){pvCard.width=width;pvCard.height=height;}
+  window.ahakoPaintPVEnding(pvCard.getContext('2d'),width,height,seconds,duration,data.pvText);
+}
+function enter(r,previous){if(r.kind==='pv'){dispose();pvCard.hidden=false;paintEnding(0,r.seconds);return;}if(previous&&(previous.kind==='ending'||r.kind==='cover')){init();core.unlockAudio(true);}if(r.kind==='cover'){core.showCover();return;}if(r.kind==='ending'){core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.finish();return;}if(previous?.kind==='scene'&&r.index===previous.index+1){core._finishVisibleEntranceEffects();core._clearPresentationTimers();core.index=r.index;core.maxVisitedIndex=Math.max(core.maxVisitedIndex,r.index);core._audioRenderMode='advance';core._render();}else{core.els.cover.hidden=true;core.host.classList.remove('sp-cover-open');core.goTo(r.index);core._queueInitialOneShots(data.doc.scenes[r.index]);}}
 window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window.opener||e.data?.type!=='ahako-record-init'||data)return;data=e.data;token=data.token;try{fit();$('mark').hidden=!data.watermark;init();navigator.mediaDevices?.setCaptureHandleConfig?.({handle:token,permittedOrigins:[location.origin]});status.textContent='録画開始を押し、この録画専用Playerのタブを音声付きで共有してください。録画中はこのタブを表示したままにしてください。';go.disabled=false;}catch(err){abort(String(err));}});
 window.addEventListener('resize',()=>{if(active)abort('録画中に画面サイズが変更されました');else fit();});
 window.addEventListener('pagehide',()=>{if(!done)abort('録画画面を閉じました');});
@@ -35,7 +40,7 @@ await new Promise(r=>setTimeout(r,3000));if(document.hidden||failed)throw Error(
 // Never expose the implicit cover between hiding the panel and entering the first row.
 host.style.visibility='hidden';panel.hidden=true;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));if(document.hidden||failed)throw Error('録画開始できません');
 let cursor=0;const ends=[];data.rows.reduce((n,r)=>(ends.push(n+r.seconds),n+r.seconds),0);const total=ends.at(-1);active=true;core.unlockAudio(true);recorder.start(1000);enter(data.rows[0],null);host.style.visibility='visible';started=performance.now();report('録画中 ｜ '+total.toFixed(2)+'秒 ｜ '+(cropped?'領域取得':'タブ全体')+' ｜ '+(audio.getSettings().channelCount||'?')+'ch');
-function tick(){if(!active||failed)return;try{const elapsed=(performance.now()-started)/1000;if(elapsed>=total){done=true;active=false;recorder.stop();return;}let i=cursor;while(i<data.rows.length-1&&elapsed>=ends[i])i++;if(i!==cursor){const prev=i===cursor+1?data.rows[cursor]:null;cursor=i;enter(data.rows[i],prev);}timer=requestAnimationFrame(tick);}catch(e){abort(String(e));}}timer=requestAnimationFrame(tick);
+function tick(){if(!active||failed)return;try{const elapsed=(performance.now()-started)/1000;if(elapsed>=total){done=true;active=false;recorder.stop();return;}let i=cursor;while(i<data.rows.length-1&&elapsed>=ends[i])i++;if(i!==cursor){const prev=i===cursor+1?data.rows[cursor]:null;cursor=i;enter(data.rows[i],prev);}const row=data.rows[cursor];if(row.kind==='pv')paintEnding(elapsed-(ends[cursor-1]||0),row.seconds);timer=requestAnimationFrame(tick);}catch(e){abort(String(e));}}timer=requestAnimationFrame(tick);
 }catch(e){abort(String(e.message||e));}};
 window.opener?.postMessage({type:'ahako-record-ready'},location.origin);
 })();
